@@ -1,0 +1,370 @@
+# Local Supabase for Richelieu: Postgres, Auth, PostgREST, Realtime, Studio and the Kong gateway.
+#
+#   docker compose up -d
+#
+# API (supabase-js):  http://localhost:54321
+# Postgres:           postgres://postgres:postgres@localhost:54322/postgres
+# Studio:             http://localhost:54323
+#
+# Every value has a local default and can be overridden from `.env`. The keys below are signed with the
+# default JWT_SECRET: change all three together before exposing this anywhere.
+
+name: richelieu
+
+x-keys:
+  anon: &anon ${SUPABASE_ANON_KEY:-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJpY2hlbGlldSIsInJvbGUiOiJhbm9uIiwiaWF0IjoxNzYyODE5MjAwLCJleHAiOjQxMDI0NDQ4MDB9.A7UFTz_dhd_vLCC895znt_r5pOuYCjzOnRSvk-oR-VI}
+  service: &service ${SUPABASE_SERVICE_ROLE_KEY:-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJpY2hlbGlldSIsInJvbGUiOiJzZXJ2aWNlX3JvbGUiLCJpYXQiOjE3NjI4MTkyMDAsImV4cCI6NDEwMjQ0NDgwMH0.XC6fU0Bn6yXm28zVgFvQ__a8I8TkQIpidY-HfJQb-PY}
+  jwt-secret: &jwt-secret ${SUPABASE_JWT_SECRET:-super-secret-jwt-token-with-at-least-32-characters-long}
+  db-password: &db-password ${POSTGRES_PASSWORD:-postgres}
+  public-url: &public-url ${SUPABASE_PUBLIC_URL:-http://localhost:54321}
+
+services:
+  db:
+    image: supabase/postgres:17.6.1.136
+    restart: unless-stopped
+    command: ["postgres", "-c", "config_file=/etc/postgresql/postgresql.conf", "-c", "log_min_messages=fatal"]
+    ports:
+      - 127.0.0.1:${POSTGRES_PORT:-54322}:5432
+    environment:
+      POSTGRES_HOST: /var/run/postgresql
+      PGPORT: 5432
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: postgres
+      PGDATABASE: postgres
+      POSTGRES_PASSWORD: *db-password
+      PGPASSWORD: *db-password
+      JWT_EXP: ${JWT_EXPIRY:-3600}
+    configs:
+      - source: db-realtime
+        target: /docker-entrypoint-initdb.d/migrations/99-realtime.sql
+      - source: db-roles
+        target: /docker-entrypoint-initdb.d/init-scripts/99-roles.sql
+      - source: db-jwt
+        target: /docker-entrypoint-initdb.d/init-scripts/99-jwt.sql
+    volumes:
+      - db-data:/var/lib/postgresql/data
+      - db-config:/etc/postgresql-custom
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres", "-h", "localhost"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  auth:
+    image: supabase/gotrue:v2.197.0
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      GOTRUE_API_HOST: 0.0.0.0
+      GOTRUE_API_PORT: 9999
+      API_EXTERNAL_URL: ${API_EXTERNAL_URL:-http://localhost:54321/auth/v1}
+      GOTRUE_DB_DRIVER: postgres
+      GOTRUE_DB_DATABASE_URL: postgres://supabase_auth_admin:${POSTGRES_PASSWORD:-postgres}@db:5432/postgres
+      GOTRUE_SITE_URL: ${SITE_URL:-http://localhost:3000}
+      GOTRUE_URI_ALLOW_LIST: ${ADDITIONAL_REDIRECT_URLS:-http://localhost:3000/**}
+      GOTRUE_DISABLE_SIGNUP: ${DISABLE_SIGNUP:-false}
+      GOTRUE_JWT_ADMIN_ROLES: service_role
+      GOTRUE_JWT_AUD: authenticated
+      GOTRUE_JWT_DEFAULT_GROUP_NAME: authenticated
+      GOTRUE_JWT_EXP: ${JWT_EXPIRY:-3600}
+      GOTRUE_JWT_SECRET: *jwt-secret
+      GOTRUE_JWT_ISSUER: ${API_EXTERNAL_URL:-http://localhost:54321/auth/v1}
+      GOTRUE_EXTERNAL_EMAIL_ENABLED: "true"
+      GOTRUE_EXTERNAL_ANONYMOUS_USERS_ENABLED: "false"
+      # No mail server locally: new accounts are confirmed at sign-up.
+      GOTRUE_MAILER_AUTOCONFIRM: ${ENABLE_EMAIL_AUTOCONFIRM:-true}
+      GOTRUE_EXTERNAL_PHONE_ENABLED: "false"
+      GOTRUE_MAILER_URLPATHS_INVITE: /auth/v1/verify
+      GOTRUE_MAILER_URLPATHS_CONFIRMATION: /auth/v1/verify
+      GOTRUE_MAILER_URLPATHS_RECOVERY: /auth/v1/verify
+      GOTRUE_MAILER_URLPATHS_EMAIL_CHANGE: /auth/v1/verify
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9999/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 3
+
+  rest:
+    image: postgrest/postgrest:v14.18
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGRST_DB_URI: postgres://authenticator:${POSTGRES_PASSWORD:-postgres}@db:5432/postgres
+      PGRST_DB_SCHEMAS: public,graphql_public
+      PGRST_DB_MAX_ROWS: 1000
+      PGRST_DB_EXTRA_SEARCH_PATH: public
+      PGRST_DB_ANON_ROLE: anon
+      PGRST_JWT_SECRET: *jwt-secret
+      PGRST_DB_USE_LEGACY_GUCS: "false"
+      PGRST_APP_SETTINGS_JWT_EXP: ${JWT_EXPIRY:-3600}
+      PGRST_ADMIN_SERVER_PORT: 3001
+      PGRST_ADMIN_SERVER_HOST: localhost
+    healthcheck:
+      test: ["CMD", "postgrest", "--ready"]
+      interval: 5s
+      timeout: 5s
+      retries: 3
+
+  realtime:
+    image: supabase/realtime:v2.148.3
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      default:
+        # Realtime reads its tenant from the host's first label: Kong reaches it as `realtime-dev`.
+        aliases:
+          - realtime-dev.supabase-realtime
+    environment:
+      PORT: 4000
+      ANON_KEY: *anon
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_USER: supabase_admin
+      DB_PASSWORD: *db-password
+      DB_NAME: postgres
+      DB_AFTER_CONNECT_QUERY: SET search_path TO _realtime
+      DB_ENC_KEY: supabaserealtime
+      API_JWT_SECRET: *jwt-secret
+      METRICS_JWT_SECRET: *jwt-secret
+      SECRET_KEY_BASE: ${SECRET_KEY_BASE:-UpNVntn3cDxHJpq99YMc1T1AQgQpc8kfYTuRgBiYa15BLrx8etQoXz3gZv1/u2oq}
+      ERL_AFLAGS: -proto_dist inet_tcp
+      DNS_NODES: "''"
+      RLIMIT_NOFILE: "10000"
+      APP_NAME: realtime
+      SEED_SELF_HOST: "true"
+      RUN_JANITOR: "true"
+      DISABLE_HEALTHCHECK_LOGGING: "true"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sSfL --head -o /dev/null -H \"Authorization: Bearer $$ANON_KEY\" http://localhost:4000/api/tenants/realtime-dev/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  meta:
+    image: supabase/postgres-meta:v0.100.0
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PG_META_PORT: 8080
+      PG_META_DB_HOST: db
+      PG_META_DB_PORT: 5432
+      PG_META_DB_NAME: postgres
+      PG_META_DB_USER: postgres
+      PG_META_DB_PASSWORD: *db-password
+      CRYPTO_KEY: &crypto-key ${PG_META_CRYPTO_KEY:-local-pg-meta-crypto-key-32-chars-min}
+
+  studio:
+    image: supabase/studio:2026.11.02-sha-a05e7ec
+    restart: unless-stopped
+    depends_on:
+      meta:
+        condition: service_started
+    ports:
+      - 127.0.0.1:${STUDIO_PORT:-54323}:3000
+    environment:
+      HOSTNAME: 0.0.0.0
+      STUDIO_PG_META_URL: http://meta:8080
+      POSTGRES_HOST: db
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: postgres
+      POSTGRES_PASSWORD: *db-password
+      POSTGRES_USER_READ_WRITE: postgres
+      PG_META_CRYPTO_KEY: *crypto-key
+      PGRST_DB_SCHEMAS: public,graphql_public
+      PGRST_DB_MAX_ROWS: 1000
+      PGRST_DB_EXTRA_SEARCH_PATH: public
+      DEFAULT_ORGANIZATION_NAME: Richelieu
+      DEFAULT_PROJECT_NAME: richelieu.ai
+      SUPABASE_URL: http://kong:8000
+      SUPABASE_PUBLIC_URL: *public-url
+      SUPABASE_ANON_KEY: *anon
+      SUPABASE_SERVICE_KEY: *service
+      AUTH_JWT_SECRET: *jwt-secret
+      ENABLED_FEATURES_LOGS_ALL: "false"
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://localhost:3000/api/platform/profile').then((r) => {if (r.status !== 200) throw new Error(r.status)})\""]
+      interval: 5s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+  kong:
+    image: kong/kong:3.9.3
+    restart: unless-stopped
+    depends_on:
+      auth:
+        condition: service_started
+      rest:
+        condition: service_started
+      realtime:
+        condition: service_started
+    ports:
+      - 127.0.0.1:${SUPABASE_API_PORT:-54321}:8000
+    configs:
+      - source: kong
+        target: /home/kong/kong.yml
+    environment:
+      KONG_DATABASE: "off"
+      KONG_DECLARATIVE_CONFIG: /home/kong/kong.yml
+      KONG_DNS_ORDER: LAST,A,CNAME
+      KONG_DNS_NOT_FOUND_TTL: 1
+      KONG_DNS_VALID_TTL: 5
+      KONG_PLUGINS: request-transformer,cors,key-auth,acl,request-termination
+      KONG_NGINX_PROXY_PROXY_BUFFER_SIZE: 160k
+      KONG_NGINX_PROXY_PROXY_BUFFERS: 64 160k
+    healthcheck:
+      test: ["CMD", "kong", "health"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  db-data:
+  db-config:
+
+configs:
+  db-realtime:
+    content: |
+      \set pguser `echo "$$POSTGRES_USER"`
+      create schema if not exists _realtime;
+      alter schema _realtime owner to :pguser;
+
+  db-roles:
+    content: |
+      \set pgpass `echo "$$POSTGRES_PASSWORD"`
+      alter user authenticator with password :'pgpass';
+      alter user pgbouncer with password :'pgpass';
+      alter user supabase_auth_admin with password :'pgpass';
+      alter user supabase_storage_admin with password :'pgpass';
+
+  db-jwt:
+    content: |
+      \set jwt_exp `echo "$$JWT_EXP"`
+      alter database postgres set "app.settings.jwt_exp" to :'jwt_exp';
+
+  # Supabase's own gateway routes, trimmed to the services above. `$$(...)` is a Kong template, not Compose.
+  kong:
+    content: |
+      _format_version: "2.1"
+      _transform: true
+
+      consumers:
+        - username: anon
+          keyauth_credentials:
+            - key: ${SUPABASE_ANON_KEY:-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJpY2hlbGlldSIsInJvbGUiOiJhbm9uIiwiaWF0IjoxNzYyODE5MjAwLCJleHAiOjQxMDI0NDQ4MDB9.A7UFTz_dhd_vLCC895znt_r5pOuYCjzOnRSvk-oR-VI}
+        - username: service_role
+          keyauth_credentials:
+            - key: ${SUPABASE_SERVICE_ROLE_KEY:-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJpY2hlbGlldSIsInJvbGUiOiJzZXJ2aWNlX3JvbGUiLCJpYXQiOjE3NjI4MTkyMDAsImV4cCI6NDEwMjQ0NDgwMH0.XC6fU0Bn6yXm28zVgFvQ__a8I8TkQIpidY-HfJQb-PY}
+
+      acls:
+        - consumer: anon
+          group: anon
+        - consumer: service_role
+          group: admin
+
+      services:
+        - name: auth-v1-open
+          url: http://auth:9999/verify
+          routes: [{ name: auth-v1-open, strip_path: true, paths: [/auth/v1/verify] }]
+          plugins: [{ name: cors }]
+        - name: auth-v1-open-callback
+          url: http://auth:9999/callback
+          routes: [{ name: auth-v1-open-callback, strip_path: true, paths: [/auth/v1/callback] }]
+          plugins: [{ name: cors }]
+        - name: auth-v1-open-authorize
+          url: http://auth:9999/authorize
+          routes: [{ name: auth-v1-open-authorize, strip_path: true, paths: [/auth/v1/authorize] }]
+          plugins: [{ name: cors }]
+        - name: auth-v1-open-jwks
+          url: http://auth:9999/.well-known/jwks.json
+          routes: [{ name: auth-v1-open-jwks, strip_path: true, paths: [/auth/v1/.well-known/jwks.json] }]
+          plugins: [{ name: cors }]
+
+        - name: auth-v1
+          url: http://auth:9999/
+          routes: [{ name: auth-v1-all, strip_path: true, paths: [/auth/v1/] }]
+          plugins:
+            - name: cors
+            - name: key-auth
+              config: { hide_credentials: false }
+            - name: request-transformer
+              config:
+                add: { headers: ["Authorization: $$((headers.authorization ~= nil and headers.authorization) or headers.apikey)"] }
+                replace: { headers: ["Authorization: $$((headers.authorization ~= nil and headers.authorization) or headers.apikey)"] }
+            - name: acl
+              config: { hide_groups_header: true, allow: [admin, anon] }
+
+        - name: rest-v1
+          url: http://rest:3000/
+          routes: [{ name: rest-v1-all, strip_path: true, paths: [/rest/v1/] }]
+          plugins:
+            - name: cors
+            - name: key-auth
+              config: { hide_credentials: true }
+            - name: request-transformer
+              config:
+                add: { headers: ["Authorization: $$((headers.authorization ~= nil and headers.authorization) or headers.apikey)"] }
+                replace: { headers: ["Authorization: $$((headers.authorization ~= nil and headers.authorization) or headers.apikey)"] }
+            - name: acl
+              config: { hide_groups_header: true, allow: [admin, anon] }
+
+        - name: graphql-v1
+          url: http://rest:3000/rpc/graphql
+          routes: [{ name: graphql-v1-all, strip_path: true, paths: [/graphql/v1] }]
+          plugins:
+            - name: cors
+            - name: key-auth
+              config: { hide_credentials: true }
+            - name: request-transformer
+              config:
+                add: { headers: ["Content-Profile: graphql_public"] }
+            - name: acl
+              config: { hide_groups_header: true, allow: [admin, anon] }
+
+        - name: realtime-v1-ws
+          url: http://realtime-dev.supabase-realtime:4000/socket
+          protocol: ws
+          routes: [{ name: realtime-v1-ws, strip_path: true, paths: [/realtime/v1/] }]
+          plugins:
+            - name: cors
+            - name: key-auth
+              config: { hide_credentials: false }
+            - name: request-transformer
+              config:
+                add: { headers: ["x-api-key:$$(query_params.apikey)"] }
+            - name: acl
+              config: { hide_groups_header: true, allow: [admin, anon] }
+        - name: realtime-v1-rest-tenants
+          url: http://realtime-dev.supabase-realtime:4000/api/tenants
+          routes: [{ name: realtime-v1-rest-tenants, strip_path: true, paths: [/realtime/v1/api/tenants] }]
+          plugins:
+            - name: request-termination
+              config: { status_code: 403, message: Access is forbidden. }
+        - name: realtime-v1-rest
+          url: http://realtime-dev.supabase-realtime:4000/api
+          protocol: http
+          routes: [{ name: realtime-v1-rest, strip_path: true, paths: [/realtime/v1/api] }]
+          plugins:
+            - name: cors
+            - name: key-auth
+              config: { hide_credentials: false }
+            - name: acl
+              config: { hide_groups_header: true, allow: [admin, anon] }
+
+        - name: meta
+          url: http://meta:8080/
+          routes: [{ name: meta-all, strip_path: true, paths: [/pg/] }]
+          plugins:
+            - name: key-auth
+              config: { hide_credentials: false }
+            - name: acl
+              config: { hide_groups_header: true, allow: [admin] }
