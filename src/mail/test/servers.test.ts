@@ -141,6 +141,7 @@ beforeAll(async () => {
 afterAll(async () => {
   await queue?.stop();
   for (const server of servers) server.close();
+  await sql`DELETE FROM mail.outbound WHERE mail_from LIKE ${`%@${local}`}`;
   await sql`DELETE FROM public.mail_domains WHERE name IN (${local}, ${remote})`;
   await sql`DELETE FROM auth.users WHERE email IN (${`mail-${stamp}@example.com`}, ${`remote-${stamp}@example.com`})`;
   await sql.close();
