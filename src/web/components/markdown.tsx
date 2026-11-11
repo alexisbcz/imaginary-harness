@@ -4,8 +4,7 @@ import {
   type ComponentProps,
   type ReactElement,
 } from "react";
-import ReactMarkdown, { type Components } from "react-markdown";
-import remarkGfm from "remark-gfm";
+import { Streamdown, type Components } from "streamdown";
 import { File, PatchDiff, type SupportedLanguages } from "@pierre/diffs/react";
 import { cn } from "cn";
 
@@ -137,17 +136,25 @@ const components: Components = {
   td: (props) => <td className="border-b px-2 py-1" {...props} />,
 };
 
-/** An assistant answer: GitHub-flavored Markdown, code through Pierre's diffs. */
+/**
+ * An assistant answer: GitHub-flavored Markdown, code through Pierre's diffs. Streamdown repairs the syntax a
+ * streaming answer leaves half-written (an open fence, a half table), so it renders cleanly while it arrives.
+ */
 export const Markdown = memo(function Markdown({
   children,
+  streaming = false,
 }: {
   children: string;
+  streaming?: boolean;
 }) {
   return (
-    <div className="min-w-0 leading-relaxed">
-      <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
-        {children}
-      </ReactMarkdown>
-    </div>
+    <Streamdown
+      className="min-w-0 leading-relaxed"
+      components={components}
+      isAnimating={streaming}
+      caret={streaming ? "block" : undefined}
+    >
+      {children}
+    </Streamdown>
   );
 });

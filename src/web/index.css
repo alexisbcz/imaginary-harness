@@ -2,6 +2,17 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/figtree";
+@source "../../node_modules/streamdown/dist/*.js";
+
+/* The light sweeping across <Shimmer> text. */
+@keyframes shimmer {
+  from {
+    background-position: 100% center;
+  }
+  to {
+    background-position: 0% center;
+  }
+}
 
 @custom-variant dark (&:is(.dark *));
 

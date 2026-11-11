@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router";
 
+import { Shimmer } from "@/components/ai-elements/shimmer";
 import { Composer } from "@/components/composer";
 import { Markdown } from "@/components/markdown";
 import { useWorkspaceFiles, Workspace } from "@/components/workspace";
@@ -19,7 +20,6 @@ import {
   MessageScrollerProvider,
   MessageScrollerViewport,
 } from "@/components/ui/message-scroller";
-import { Spinner } from "@/components/ui/spinner";
 import { sendMessage, type ChatMessage } from "@/lib/chat";
 import { createClient } from "@/lib/supabase/client";
 
@@ -109,9 +109,11 @@ function ChatBubble({ message }: { message: ChatMessage }) {
         <Bubble variant="ghost" className="w-full">
           <BubbleContent className="w-full">
             {message.content ? (
-              <Markdown>{message.content}</Markdown>
+              <Markdown streaming={message.status === "streaming"}>
+                {message.content}
+              </Markdown>
             ) : (
-              <Spinner className="text-muted-foreground" />
+              <Shimmer>Thinking…</Shimmer>
             )}
           </BubbleContent>
         </Bubble>
@@ -145,7 +147,7 @@ export function Chat() {
               ))}
               {waiting && (
                 <MessageScrollerItem>
-                  <Spinner className="text-muted-foreground" />
+                  <Shimmer>Thinking…</Shimmer>
                 </MessageScrollerItem>
               )}
             </MessageScrollerContent>
