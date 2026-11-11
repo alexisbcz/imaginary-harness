@@ -3,6 +3,7 @@ import {
   createHighlighterCore,
   type GrammarState,
   type HighlighterCore,
+  type ThemeRegistration,
 } from "shiki/core"
 import { createJavaScriptRegexEngine } from "shiki/engine/javascript"
 
@@ -40,8 +41,9 @@ let highlighter: Promise<HighlighterCore> | undefined
 function getHighlighter() {
   highlighter ??= createHighlighterCore({
     themes: [
-      import("shiki/themes/github-light.mjs"),
-      import("shiki/themes/github-dark.mjs"),
+      // Pierre's themes, the ones @pierre/diffs renders with.
+      import("@pierre/theme/pierre-light").then((theme) => theme.default as ThemeRegistration),
+      import("@pierre/theme/pierre-dark").then((theme) => theme.default as ThemeRegistration),
     ],
     langs: [],
     engine: createJavaScriptRegexEngine({ forgiving: true }),
@@ -86,7 +88,7 @@ export async function loadHighlighter(language: string) {
       const tokenize = (text: string) =>
         shiki.codeToTokens(text, {
           lang,
-          themes: { light: "github-light", dark: "github-dark" },
+          themes: { light: "pierre-light", dark: "pierre-dark" },
           defaultColor: false,
           grammarState: state,
         }).tokens
