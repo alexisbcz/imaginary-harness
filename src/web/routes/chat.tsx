@@ -2,6 +2,7 @@ import { useEffect, useState } from "react"
 import { useParams } from "react-router"
 
 import { Composer } from "@/components/composer"
+import { Markdown } from "@/components/markdown"
 import { Bubble, BubbleContent } from "@/components/ui/bubble"
 import { Message, MessageContent } from "@/components/ui/message"
 import {
@@ -88,9 +89,9 @@ function ChatBubble({ message }: { message: ChatMessage }) {
   return (
     <Message>
       <MessageContent>
-        <Bubble variant="ghost">
-          <BubbleContent className="whitespace-pre-wrap">
-            {message.content || <Spinner className="text-muted-foreground" />}
+        <Bubble variant="ghost" className="w-full">
+          <BubbleContent className="w-full">
+            {message.content ? <Markdown>{message.content}</Markdown> : <Spinner className="text-muted-foreground" />}
           </BubbleContent>
         </Bubble>
       </MessageContent>
