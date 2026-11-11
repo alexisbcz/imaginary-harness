@@ -3,6 +3,8 @@ import { useParams } from "react-router"
 
 import { Composer } from "@/components/composer"
 import { Markdown } from "@/components/markdown"
+import { useWorkspaceFiles, Workspace } from "@/components/workspace"
+import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable"
 import { Bubble, BubbleContent } from "@/components/ui/bubble"
 import { Message, MessageContent } from "@/components/ui/message"
 import {
@@ -106,8 +108,10 @@ export function Chat() {
   // Waiting for the agent to pick the message up: the reply row does not exist yet.
   const waiting = last?.role === "user" && last.status === "pending"
 
-  return (
-    <div className="flex min-h-0 flex-1 flex-col">
+  const files = useWorkspaceFiles(threadId)
+
+  const conversation = (
+    <div className="flex h-full min-h-0 flex-1 flex-col">
       <MessageScrollerProvider>
         <MessageScroller className="flex-1">
           <MessageScrollerViewport>
@@ -131,5 +135,18 @@ export function Chat() {
         <Composer autoFocus onSend={(content) => sendMessage(threadId, content)} />
       </div>
     </div>
+  )
+
+  if (files.length === 0) return conversation
+  return (
+    <ResizablePanelGroup orientation="horizontal" className="min-h-0 flex-1">
+      <ResizablePanel defaultSize="55" minSize="30">
+        {conversation}
+      </ResizablePanel>
+      <ResizableHandle />
+      <ResizablePanel defaultSize="45" minSize="25">
+        <Workspace files={files} />
+      </ResizablePanel>
+    </ResizablePanelGroup>
   )
 }
