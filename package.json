@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "bun --hot src/main.ts",
     "start": "NODE_ENV=production bun src/main.ts",
-    "test": "bun test"
+    "test": "bun test",
+    "forge:org": "bun src/forge/cli.ts"
   },
   "devDependencies": {
     "@types/bun": "latest",
