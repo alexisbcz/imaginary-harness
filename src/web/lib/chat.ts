@@ -20,6 +20,9 @@ export type ChatMessage = {
 export async function sendMessage(threadId: string, content: string) {
   const { error } = await createClient().from("messages").insert({ thread_id: threadId, content })
   if (error) throw error
+  // Deployed, the agent is a function: wake it now rather than at the next cron tick. It answers whatever is
+  // pending, so the request carries nothing.
+  void fetch("/api/agent", { method: "POST", keepalive: true }).catch(() => {})
 }
 
 /** Creates a thread titled after its first message, then sends that message. */
