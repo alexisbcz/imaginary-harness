@@ -1,0 +1,15 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "bunVersion": "1.4.x",
+  "buildCommand": "bun run build",
+  "outputDirectory": "dist",
+  "functions": {
+    "api/forge.ts": { "maxDuration": 60 },
+    "api/agent.ts": { "maxDuration": 300 }
+  },
+  "rewrites": [
+    { "source": "/forge/:path*", "destination": "/api/forge?__path=:path*" },
+    { "source": "/((?!api/|forge/).*)", "destination": "/index.html" }
+  ],
+  "crons": [{ "path": "/api/agent", "schedule": "* * * * *" }]
+}
