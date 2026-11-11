@@ -6,14 +6,18 @@ import { exportPKCS8, exportSPKI, generateKeyPair } from "jose";
 import { migrate } from "../../db/migrate.ts";
 import { createForge } from "../index.ts";
 
-export const DATABASE_URL = Bun.env.DATABASE_URL ?? "postgres://postgres:postgres@localhost:54322/postgres";
+export const DATABASE_URL =
+  Bun.env.DATABASE_URL ??
+  "postgres://postgres:postgres@localhost:54322/postgres";
 
 export async function setupForge() {
   const sql = new Bun.SQL(DATABASE_URL);
   await migrate(sql);
   const forge = createForge({ sql, basePath: "/forge" });
   const org = `test-${process.pid}-${Math.random().toString(36).slice(2, 8)}`;
-  const { publicKey, privateKey } = await generateKeyPair("ES256", { extractable: true });
+  const { publicKey, privateKey } = await generateKeyPair("ES256", {
+    extractable: true,
+  });
   await forge.repos.createOrg(org, await exportSPKI(publicKey));
   const key = await exportPKCS8(privateKey);
 
@@ -26,7 +30,8 @@ export async function setupForge() {
     apiBaseUrl: `${origin}/forge`,
     storageBaseUrl: `localhost:${server.port}/forge/git`,
   });
-  const remote = async (repo: { getRemoteURL(): Promise<string> }) => (await repo.getRemoteURL()).replace(/^https:/, "http:");
+  const remote = async (repo: { getRemoteURL(): Promise<string> }) =>
+    (await repo.getRemoteURL()).replace(/^https:/, "http:");
 
   return {
     sql,
@@ -46,13 +51,35 @@ export async function setupForge() {
 
 /** Runs git in `cwd` without any user configuration, failing loudly. */
 export async function git(cwd: string, ...args: string[]) {
-  const proc = Bun.spawn(["git", "-c", "user.name=Tester", "-c", "user.email=tester@example.com", "-c", "init.defaultBranch=main", ...args], {
-    cwd,
-    stdout: "pipe",
-    stderr: "pipe",
-    env: { ...process.env, GIT_TERMINAL_PROMPT: "0", GIT_CONFIG_NOSYSTEM: "1", HOME: cwd },
-  });
-  const [stdout, stderr, code] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text(), proc.exited]);
-  if (code !== 0) throw new Error(`git ${args.join(" ")} failed (${code}):\n${stderr}`);
+  const proc = Bun.spawn(
+    [
+      "git",
+      "-c",
+      "user.name=Tester",
+      "-c",
+      "user.email=tester@example.com",
+      "-c",
+      "init.defaultBranch=main",
+      ...args,
+    ],
+    {
+      cwd,
+      stdout: "pipe",
+      stderr: "pipe",
+      env: {
+        ...process.env,
+        GIT_TERMINAL_PROMPT: "0",
+        GIT_CONFIG_NOSYSTEM: "1",
+        HOME: cwd,
+      },
+    },
+  );
+  const [stdout, stderr, code] = await Promise.all([
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+    proc.exited,
+  ]);
+  if (code !== 0)
+    throw new Error(`git ${args.join(" ")} failed (${code}):\n${stderr}`);
   return stdout.trim();
 }

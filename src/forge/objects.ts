@@ -19,7 +19,10 @@ export const isOid = (value: string) => /^[0-9a-f]{40}$/.test(value);
 
 /** The object ID git gives `data` of `type`: SHA-1 of `"<type> <size>\0<data>"`. */
 export function hashObject(type: ObjectType, data: Uint8Array): string {
-  return createHash("sha1").update(`${type} ${data.byteLength}\0`).update(data).digest("hex");
+  return createHash("sha1")
+    .update(`${type} ${data.byteLength}\0`)
+    .update(data)
+    .digest("hex");
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -32,9 +35,12 @@ export interface TreeEntry {
   readonly oid: string;
 }
 
-export const isTreeMode = (mode: string) => mode === "40000" || mode === "040000";
+export const isTreeMode = (mode: string) =>
+  mode === "40000" || mode === "040000";
 
-export function entryType(mode: string): "blob" | "tree" | "symlink" | "submodule" {
+export function entryType(
+  mode: string,
+): "blob" | "tree" | "symlink" | "submodule" {
   if (isTreeMode(mode)) return "tree";
   if (mode === "120000") return "symlink";
   if (mode === "160000") return "submodule";
@@ -55,7 +61,10 @@ export function encodeTree(entries: readonly TreeEntry[]): Uint8Array {
   const parts: Uint8Array[] = [];
   for (const entry of sorted) {
     const mode = isTreeMode(entry.mode) ? "40000" : entry.mode;
-    parts.push(encoder.encode(`${mode} ${entry.name}\0`), Buffer.from(entry.oid, "hex"));
+    parts.push(
+      encoder.encode(`${mode} ${entry.name}\0`),
+      Buffer.from(entry.oid, "hex"),
+    );
   }
   return Buffer.concat(parts);
 }
@@ -97,32 +106,60 @@ export interface Commit {
   readonly extraHeaders?: readonly [string, string][];
 }
 
-export function signatureNow(name: string, email: string, date = new Date()): Signature {
-  return { name, email, timestamp: Math.floor(date.getTime() / 1000), timezone: "+0000" };
+export function signatureNow(
+  name: string,
+  email: string,
+  date = new Date(),
+): Signature {
+  return {
+    name,
+    email,
+    timestamp: Math.floor(date.getTime() / 1000),
+    timezone: "+0000",
+  };
 }
 
-const formatSignature = (s: Signature) => `${s.name} <${s.email}> ${s.timestamp} ${s.timezone}`;
+const formatSignature = (s: Signature) =>
+  `${s.name} <${s.email}> ${s.timestamp} ${s.timezone}`;
 
 function parseSignature(value: string): Signature {
   const match = /^(.*) <(.*)> (-?\d+) ([+-]\d{4})$/.exec(value);
-  if (!match) return { name: value, email: "", timestamp: 0, timezone: "+0000" };
-  return { name: match[1]!, email: match[2]!, timestamp: Number(match[3]), timezone: match[4]! };
+  if (!match)
+    return { name: value, email: "", timestamp: 0, timezone: "+0000" };
+  return {
+    name: match[1]!,
+    email: match[2]!,
+    timestamp: Number(match[3]),
+    timezone: match[4]!,
+  };
 }
 
 /** An ISO-8601 date with the signature's own offset, as code.storage reports commit dates. */
 export function signatureDate(s: Signature): string {
   const sign = s.timezone.startsWith("-") ? -1 : 1;
-  const offsetMinutes = sign * (Number(s.timezone.slice(1, 3)) * 60 + Number(s.timezone.slice(3, 5)));
-  const local = new Date((s.timestamp + offsetMinutes * 60) * 1000).toISOString().replace(/\.\d{3}Z$/, "");
-  return offsetMinutes === 0 ? `${local}Z` : `${local}${s.timezone.slice(0, 3)}:${s.timezone.slice(3)}`;
+  const offsetMinutes =
+    sign *
+    (Number(s.timezone.slice(1, 3)) * 60 + Number(s.timezone.slice(3, 5)));
+  const local = new Date((s.timestamp + offsetMinutes * 60) * 1000)
+    .toISOString()
+    .replace(/\.\d{3}Z$/, "");
+  return offsetMinutes === 0
+    ? `${local}Z`
+    : `${local}${s.timezone.slice(0, 3)}:${s.timezone.slice(3)}`;
 }
 
 export function encodeCommit(commit: Commit): Uint8Array {
   const lines = [`tree ${commit.tree}`];
   for (const parent of commit.parents) lines.push(`parent ${parent}`);
-  lines.push(`author ${formatSignature(commit.author)}`, `committer ${formatSignature(commit.committer)}`);
-  for (const [key, value] of commit.extraHeaders ?? []) lines.push(`${key} ${value.replace(/\n/g, "\n ")}`);
-  const message = commit.message.endsWith("\n") ? commit.message : `${commit.message}\n`;
+  lines.push(
+    `author ${formatSignature(commit.author)}`,
+    `committer ${formatSignature(commit.committer)}`,
+  );
+  for (const [key, value] of commit.extraHeaders ?? [])
+    lines.push(`${key} ${value.replace(/\n/g, "\n ")}`);
+  const message = commit.message.endsWith("\n")
+    ? commit.message
+    : `${commit.message}\n`;
   return encoder.encode(`${lines.join("\n")}\n\n${message}`);
 }
 
@@ -158,7 +195,14 @@ export function decodeCommit(data: Uint8Array): Commit {
     else extraHeaders.push([key, value]);
   }
   author ??= parseSignature("");
-  return { tree, parents, author, committer: committer ?? author, message, extraHeaders };
+  return {
+    tree,
+    parents,
+    author,
+    committer: committer ?? author,
+    message,
+    extraHeaders,
+  };
 }
 
 export interface Tag {
@@ -170,7 +214,11 @@ export interface Tag {
 export function decodeTag(data: Uint8Array): Tag {
   const { headers } = parseHeaders(decoder.decode(data));
   const get = (key: string) => headers.find(([k]) => k === key)?.[1] ?? "";
-  return { object: get("object"), type: get("type") as ObjectType, tag: get("tag") };
+  return {
+    object: get("object"),
+    type: get("type") as ObjectType,
+    tag: get("tag"),
+  };
 }
 
 /** A commit's message without its trailing newline, as APIs report it. */

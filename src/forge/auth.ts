@@ -32,7 +32,10 @@ function importKey(pem: string) {
 }
 
 /** Verifies `token` against its issuer's keys. */
-export async function verifyToken(repos: RepoStore, token: string): Promise<Claims> {
+export async function verifyToken(
+  repos: RepoStore,
+  token: string,
+): Promise<Claims> {
   let issuer: string | undefined;
   try {
     issuer = decodeJwt(token).iss;
@@ -44,9 +47,15 @@ export async function verifyToken(repos: RepoStore, token: string): Promise<Clai
   if (keys === undefined) throw new Unauthorized("Unknown organization");
   for (const pem of keys) {
     try {
-      const { payload } = await jwtVerify(token, await importKey(pem), { algorithms: ["ES256"], issuer });
-      const scopes = Array.isArray(payload.scopes) ? payload.scopes.map(String) : [];
-      if (typeof payload.repo !== "string" || payload.repo === "") throw new Unauthorized("Token has no repository");
+      const { payload } = await jwtVerify(token, await importKey(pem), {
+        algorithms: ["ES256"],
+        issuer,
+      });
+      const scopes = Array.isArray(payload.scopes)
+        ? payload.scopes.map(String)
+        : [];
+      if (typeof payload.repo !== "string" || payload.repo === "")
+        throw new Unauthorized("Token has no repository");
       return { org: issuer, repo: payload.repo, scopes };
     } catch (error) {
       if (error instanceof Unauthorized) throw error;

@@ -20,10 +20,15 @@ const server = Bun.serve({
     "/api/agent": () => new Response(null, { status: 202 }),
     "/*": index,
   },
-  development: Bun.env.NODE_ENV !== "production" && { hmr: true, console: true },
+  development: Bun.env.NODE_ENV !== "production" && {
+    hmr: true,
+    console: true,
+  },
 });
 console.log(`[web] ${server.url}`);
-console.log(`[forge] ${config.publicUrl}${FORGE_PATH}/api/v1 and ${config.publicUrl}${FORGE_PATH}/git/<repo>.git`);
+console.log(
+  `[forge] ${config.publicUrl}${FORGE_PATH}/api/v1 and ${config.publicUrl}${FORGE_PATH}/git/<repo>.git`,
+);
 
 let stopping = false;
 async function shutdown() {

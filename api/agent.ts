@@ -15,7 +15,10 @@ export default {
     try {
       opened = await openAgent(sql, storage, { lockTimeoutMs: 2_000 });
     } catch (error) {
-      if (error instanceof Error && error.message.includes("Another process holds")) {
+      if (
+        error instanceof Error &&
+        error.message.includes("Another process holds")
+      ) {
         return Response.json({ status: "busy" }, { status: 202 }); // a run is underway and will pick the message up
       }
       throw error;

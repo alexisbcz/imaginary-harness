@@ -15,7 +15,11 @@ export async function migrate(sql: SQL): Promise<string[]> {
     await tx`CREATE TABLE IF NOT EXISTS supabase_migrations.schema_migrations (
       version text NOT NULL PRIMARY KEY, statements text[], name text
     )`;
-    const done = new Set((await tx`SELECT version FROM supabase_migrations.schema_migrations`).map((r: { version: string }) => r.version));
+    const done = new Set(
+      (await tx`SELECT version FROM supabase_migrations.schema_migrations`).map(
+        (r: { version: string }) => r.version,
+      ),
+    );
     for (const file of files) {
       const [, version, name] = file.match(/^(\d+)_(.+)\.sql$/) ?? [];
       if (version === undefined || done.has(version)) continue;

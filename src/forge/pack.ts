@@ -4,8 +4,18 @@ import { createHash } from "node:crypto";
 import { deflateSync, inflateSync } from "node:zlib";
 import { hashObject, type GitObject, type ObjectType } from "./objects.ts";
 
-const TYPE_CODES: Record<ObjectType, number> = { commit: 1, tree: 2, blob: 3, tag: 4 };
-const CODE_TYPES: Record<number, ObjectType> = { 1: "commit", 2: "tree", 3: "blob", 4: "tag" };
+const TYPE_CODES: Record<ObjectType, number> = {
+  commit: 1,
+  tree: 2,
+  blob: 3,
+  tag: 4,
+};
+const CODE_TYPES: Record<number, ObjectType> = {
+  1: "commit",
+  2: "tree",
+  3: "blob",
+  4: "tag",
+};
 const OFS_DELTA = 6;
 const REF_DELTA = 7;
 
@@ -35,8 +45,10 @@ export function applyDelta(base: Uint8Array, delta: Uint8Array): Uint8Array {
     if (op & 0x80) {
       let offset = 0;
       let size = 0;
-      for (let i = 0; i < 4; i++) if (op & (1 << i)) offset |= delta[pos++]! << (8 * i);
-      for (let i = 0; i < 3; i++) if (op & (0x10 << i)) size |= delta[pos++]! << (8 * i);
+      for (let i = 0; i < 4; i++)
+        if (op & (1 << i)) offset |= delta[pos++]! << (8 * i);
+      for (let i = 0; i < 3; i++)
+        if (op & (0x10 << i)) size |= delta[pos++]! << (8 * i);
       if (size === 0) size = 0x10000;
       out.set(base.subarray(offset >>> 0, (offset >>> 0) + size), outPos);
       outPos += size;
@@ -61,14 +73,25 @@ export async function readPack(
   external: (oids: string[]) => Promise<Map<string, GitObject>>,
 ): Promise<Map<string, GitObject>> {
   const buf = Buffer.from(pack.buffer, pack.byteOffset, pack.byteLength);
-  if (buf.length < 32 || buf.toString("latin1", 0, 4) !== "PACK") throw new Error("Not a packfile");
+  if (buf.length < 32 || buf.toString("latin1", 0, 4) !== "PACK")
+    throw new Error("Not a packfile");
   const version = buf.readUInt32BE(4);
-  if (version !== 2 && version !== 3) throw new Error(`Unsupported pack version ${version}`);
+  if (version !== 2 && version !== 3)
+    throw new Error(`Unsupported pack version ${version}`);
   const count = buf.readUInt32BE(8);
-  const checksum = createHash("sha1").update(buf.subarray(0, buf.length - 20)).digest();
-  if (!checksum.equals(buf.subarray(buf.length - 20))) throw new Error("Pack checksum mismatch");
+  const checksum = createHash("sha1")
+    .update(buf.subarray(0, buf.length - 20))
+    .digest();
+  if (!checksum.equals(buf.subarray(buf.length - 20)))
+    throw new Error("Pack checksum mismatch");
 
-  type Raw = { offset: number; code: number; data: Uint8Array; baseOffset?: number; baseOid?: string };
+  type Raw = {
+    offset: number;
+    code: number;
+    data: Uint8Array;
+    baseOffset?: number;
+    baseOid?: string;
+  };
   const raws: Raw[] = [];
   let pos = 12;
   for (let i = 0; i < count; i++) {
@@ -91,7 +114,9 @@ export async function readPack(
     } else if (!(code in CODE_TYPES)) {
       throw new Error(`Unknown pack object type ${code}`);
     }
-    const inflated = inflateSync(buf.subarray(pos), { info: true } as never) as unknown as {
+    const inflated = inflateSync(buf.subarray(pos), {
+      info: true,
+    } as never) as unknown as {
       buffer: Buffer;
       engine: { bytesWritten: number };
     };
@@ -106,25 +131,36 @@ export async function readPack(
     byOffset.set(raw.offset, object);
     byOid.set(hashObject(object.type, object.data), object);
   };
-  for (const raw of raws) if (raw.code in CODE_TYPES) add(raw, { type: CODE_TYPES[raw.code]!, data: raw.data });
+  for (const raw of raws)
+    if (raw.code in CODE_TYPES)
+      add(raw, { type: CODE_TYPES[raw.code]!, data: raw.data });
 
   // Resolve deltas until none is left: a delta's base can itself be a delta, anywhere in the pack.
   let pending = raws.filter((raw) => !(raw.code in CODE_TYPES));
   while (pending.length > 0) {
-    const missing = pending.filter((r) => r.baseOid !== undefined && !byOid.has(r.baseOid)).map((r) => r.baseOid!);
-    if (missing.length > 0) for (const [oid, object] of await external(missing)) byOid.set(oid, object);
+    const missing = pending
+      .filter((r) => r.baseOid !== undefined && !byOid.has(r.baseOid))
+      .map((r) => r.baseOid!);
+    if (missing.length > 0)
+      for (const [oid, object] of await external(missing))
+        byOid.set(oid, object);
     const next: Raw[] = [];
     for (const raw of pending) {
-      const base = raw.baseOffset !== undefined ? byOffset.get(raw.baseOffset) : byOid.get(raw.baseOid!);
+      const base =
+        raw.baseOffset !== undefined
+          ? byOffset.get(raw.baseOffset)
+          : byOid.get(raw.baseOid!);
       if (base === undefined) next.push(raw);
       else add(raw, { type: base.type, data: applyDelta(base.data, raw.data) });
     }
-    if (next.length === pending.length) throw new Error("Pack has deltas whose base is missing");
+    if (next.length === pending.length)
+      throw new Error("Pack has deltas whose base is missing");
     pending = next;
   }
   // Only the pack's own objects: bases read from storage stay out.
   const own = new Map<string, GitObject>();
-  for (const object of byOffset.values()) own.set(hashObject(object.type, object.data), object);
+  for (const object of byOffset.values())
+    own.set(hashObject(object.type, object.data), object);
   return own;
 }
 
@@ -172,15 +208,29 @@ export function pktLine(payload: string | Uint8Array): Uint8Array {
 export function sideband(band: 1 | 2 | 3, data: Uint8Array): Uint8Array[] {
   const packets: Uint8Array[] = [];
   const max = 65515;
-  for (let offset = 0; offset < data.byteLength || offset === 0; offset += max) {
-    packets.push(pktLine(Buffer.concat([Buffer.from([band]), data.subarray(offset, offset + max)])));
+  for (
+    let offset = 0;
+    offset < data.byteLength || offset === 0;
+    offset += max
+  ) {
+    packets.push(
+      pktLine(
+        Buffer.concat([
+          Buffer.from([band]),
+          data.subarray(offset, offset + max),
+        ]),
+      ),
+    );
     if (data.byteLength === 0) break;
   }
   return packets;
 }
 
 /** Reads pkt-lines from the start of `buf` up to a flush (or the end); returns them and where they stopped. */
-export function readPktLines(buf: Uint8Array, start = 0): { lines: string[]; end: number } {
+export function readPktLines(
+  buf: Uint8Array,
+  start = 0,
+): { lines: string[]; end: number } {
   const lines: string[] = [];
   const decoder = new TextDecoder();
   let pos = start;
@@ -192,7 +242,9 @@ export function readPktLines(buf: Uint8Array, start = 0): { lines: string[]; end
       pos += 4; // delim (0001) or response-end (0002)
       continue;
     }
-    lines.push(decoder.decode(buf.subarray(pos + 4, pos + length)).replace(/\n$/, ""));
+    lines.push(
+      decoder.decode(buf.subarray(pos + 4, pos + length)).replace(/\n$/, ""),
+    );
     pos += length;
   }
   return { lines, end: pos };

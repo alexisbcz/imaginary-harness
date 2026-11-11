@@ -2,8 +2,22 @@
 
 import { gunzipSync } from "node:zlib";
 import { requireScope, type Claims } from "./auth.ts";
-import { decodeCommit, decodeTag, decodeTree, isTreeMode, ZERO_OID, type GitObject } from "./objects.ts";
-import { FLUSH, pktLine, readPack, readPktLines, sideband, writePack } from "./pack.ts";
+import {
+  decodeCommit,
+  decodeTag,
+  decodeTree,
+  isTreeMode,
+  ZERO_OID,
+  type GitObject,
+} from "./objects.ts";
+import {
+  FLUSH,
+  pktLine,
+  readPack,
+  readPktLines,
+  sideband,
+  writePack,
+} from "./pack.ts";
 import { ObjectStore, type RepoStore } from "./store.ts";
 import type { SQL } from "bun";
 
@@ -25,39 +39,74 @@ export interface GitTarget {
 const concat = (parts: Uint8Array[]) => Buffer.concat(parts);
 
 function respond(body: Uint8Array, contentType: string) {
-  return new Response(body as Uint8Array<ArrayBuffer>, { headers: { "content-type": contentType, "cache-control": "no-cache" } });
+  return new Response(body as Uint8Array<ArrayBuffer>, {
+    headers: { "content-type": contentType, "cache-control": "no-cache" },
+  });
 }
 
-async function advertisedRefs(ctx: GitContext, target: GitTarget, store: ObjectStore) {
+async function advertisedRefs(
+  ctx: GitContext,
+  target: GitTarget,
+  store: ObjectStore,
+) {
   const repo = await ctx.repos.requireRepo(target.claims.org, target.repo);
-  const refs = (await ctx.repos.refs(target.claims.org, target.repo, target.ephemeral)).filter((r) => !r.name.startsWith("refs/notes/") || !target.ephemeral);
+  const refs = (
+    await ctx.repos.refs(target.claims.org, target.repo, target.ephemeral)
+  ).filter((r) => !r.name.startsWith("refs/notes/") || !target.ephemeral);
   const headRef = `refs/heads/${repo.defaultBranch}`;
   const head = refs.find((r) => r.name === headRef);
   const lines: { oid: string; name: string }[] = [];
   if (head) lines.push({ oid: head.oid, name: "HEAD" });
-  const objects = await store.readMany(refs.filter((r) => r.name.startsWith("refs/tags/")).map((r) => r.oid));
+  const objects = await store.readMany(
+    refs.filter((r) => r.name.startsWith("refs/tags/")).map((r) => r.oid),
+  );
   for (const ref of refs) {
     lines.push({ oid: ref.oid, name: ref.name });
     const object = objects.get(ref.oid);
-    if (object?.type === "tag") lines.push({ oid: (await store.peel(ref.oid)).oid, name: `${ref.name}^{}` });
+    if (object?.type === "tag")
+      lines.push({
+        oid: (await store.peel(ref.oid)).oid,
+        name: `${ref.name}^{}`,
+      });
   }
   return { lines, headRef, head };
 }
 
 /** `GET /info/refs?service=…`: the refs and capabilities. */
-export async function infoRefs(ctx: GitContext, target: GitTarget, service: string) {
+export async function infoRefs(
+  ctx: GitContext,
+  target: GitTarget,
+  service: string,
+) {
   if (service !== "git-upload-pack" && service !== "git-receive-pack") {
-    return new Response("Dumb HTTP is not supported; use a git client with smart HTTP", { status: 403 });
+    return new Response(
+      "Dumb HTTP is not supported; use a git client with smart HTTP",
+      { status: 403 },
+    );
   }
-  requireScope(target.claims, service === "git-upload-pack" ? "git:read" : "git:write");
+  requireScope(
+    target.claims,
+    service === "git-upload-pack" ? "git:read" : "git:write",
+  );
   const store = new ObjectStore(ctx.sql, target.claims.org);
   const { lines, headRef, head } = await advertisedRefs(ctx, target, store);
-  const caps = service === "git-upload-pack" ? `${UPLOAD_CAPS}${head ? ` symref=HEAD:${headRef}` : ""}` : RECEIVE_CAPS;
+  const caps =
+    service === "git-upload-pack"
+      ? `${UPLOAD_CAPS}${head ? ` symref=HEAD:${headRef}` : ""}`
+      : RECEIVE_CAPS;
   const out: Uint8Array[] = [pktLine(`# service=${service}\n`), FLUSH];
   if (lines.length === 0) {
     out.push(pktLine(`${ZERO_OID} capabilities^{}\0${caps}\n`));
   } else {
-    lines.forEach((line, i) => out.push(pktLine(i === 0 ? `${line.oid} ${line.name}\0${caps}\n` : `${line.oid} ${line.name}\n`)));
+    lines.forEach((line, i) =>
+      out.push(
+        pktLine(
+          i === 0
+            ? `${line.oid} ${line.name}\0${caps}\n`
+            : `${line.oid} ${line.name}\n`,
+        ),
+      ),
+    );
   }
   out.push(FLUSH);
   return respond(concat(out), `application/x-${service}-advertisement`);
@@ -65,11 +114,17 @@ export async function infoRefs(ctx: GitContext, target: GitTarget, service: stri
 
 async function requestBody(request: Request) {
   const raw = new Uint8Array(await request.arrayBuffer());
-  return request.headers.get("content-encoding") === "gzip" ? new Uint8Array(gunzipSync(raw)) : raw;
+  return request.headers.get("content-encoding") === "gzip"
+    ? new Uint8Array(gunzipSync(raw))
+    : raw;
 }
 
 /** Objects reachable from `wants`, minus what the client has (reachable from `haves`). */
-async function objectsToSend(store: ObjectStore, wants: string[], haves: string[]): Promise<GitObject[]> {
+async function objectsToSend(
+  store: ObjectStore,
+  wants: string[],
+  haves: string[],
+): Promise<GitObject[]> {
   // Commits the client lacks; the commits it has stop the walk.
   const known = new Set<string>();
   for await (const { oid } of store.walk(haves)) known.add(oid);
@@ -97,19 +152,23 @@ async function objectsToSend(store: ObjectStore, wants: string[], haves: string[
   const commitObjects = await store.readMany(commits.map((c) => c.oid));
   for (const { oid } of commits) {
     out.set(oid, commitObjects.get(oid)!);
-    for (const parent of decodeCommit(commitObjects.get(oid)!.data).parents) if (known.has(parent)) boundary.add(parent);
+    for (const parent of decodeCommit(commitObjects.get(oid)!.data).parents)
+      if (known.has(parent)) boundary.add(parent);
   }
   for (const oid of boundary) {
     const tree = (await store.commit(oid)).tree;
     uninteresting.add(tree);
-    for (const entry of (await store.flatten(tree)).values()) uninteresting.add(entry.oid);
+    for (const entry of (await store.flatten(tree)).values())
+      uninteresting.add(entry.oid);
     // Subtrees too, so unchanged directories are skipped whole.
     let level = [tree];
     while (level.length > 0) {
       const objects = await store.readMany(level);
       const next: string[] = [];
       for (const oid2 of level) {
-        for (const entry of decodeTree(objects.get(oid2)?.data ?? new Uint8Array())) {
+        for (const entry of decodeTree(
+          objects.get(oid2)?.data ?? new Uint8Array(),
+        )) {
           if (isTreeMode(entry.mode) && !uninteresting.has(`t:${entry.oid}`)) {
             uninteresting.add(entry.oid);
             uninteresting.add(`t:${entry.oid}`);
@@ -121,7 +180,9 @@ async function objectsToSend(store: ObjectStore, wants: string[], haves: string[
     }
   }
   // Walk the new commits' trees level by level, skipping what the client has.
-  let level = [...new Set(commits.map((c) => c.tree))].filter((t) => !uninteresting.has(t));
+  let level = [...new Set(commits.map((c) => c.tree))].filter(
+    (t) => !uninteresting.has(t),
+  );
   const seen = new Set<string>(level);
   while (level.length > 0) {
     const trees = await store.readMany(level);
@@ -132,7 +193,12 @@ async function objectsToSend(store: ObjectStore, wants: string[], haves: string[
       if (tree === undefined) throw new Error(`Tree ${oid} not found`);
       out.set(oid, tree);
       for (const entry of decodeTree(tree.data)) {
-        if (entry.mode === "160000" || uninteresting.has(entry.oid) || seen.has(entry.oid)) continue;
+        if (
+          entry.mode === "160000" ||
+          uninteresting.has(entry.oid) ||
+          seen.has(entry.oid)
+        )
+          continue;
         seen.add(entry.oid);
         if (isTreeMode(entry.mode)) next.push(entry.oid);
         else blobs.push(entry.oid);
@@ -150,7 +216,11 @@ async function objectsToSend(store: ObjectStore, wants: string[], haves: string[
 }
 
 /** `POST /git-upload-pack`: negotiation, then the pack (fetch and clone). */
-export async function uploadPack(ctx: GitContext, target: GitTarget, request: Request) {
+export async function uploadPack(
+  ctx: GitContext,
+  target: GitTarget,
+  request: Request,
+) {
   requireScope(target.claims, "git:read");
   const store = new ObjectStore(ctx.sql, target.claims.org);
   const body = await requestBody(request);
@@ -165,7 +235,8 @@ export async function uploadPack(ctx: GitContext, target: GitTarget, request: Re
       if (line.startsWith("want ")) {
         const [, oid, ...caps] = line.split(" ");
         wants.push(oid!);
-        if (caps.includes("side-band-64k") || caps.includes("side-band")) sideBand = true;
+        if (caps.includes("side-band-64k") || caps.includes("side-band"))
+          sideBand = true;
       } else if (line.startsWith("have ")) haves.push(line.slice(5, 45));
       else if (line === "done") done = true;
     }
@@ -173,15 +244,29 @@ export async function uploadPack(ctx: GitContext, target: GitTarget, request: Re
     pos = end;
   }
   // Wants must be refs' targets or reachable from them; the forge shares objects across an organization.
-  const refs = await ctx.repos.refs(target.claims.org, target.repo, target.ephemeral);
+  const refs = await ctx.repos.refs(
+    target.claims.org,
+    target.repo,
+    target.ephemeral,
+  );
   const tips = new Set(refs.map((r) => r.oid));
   for (const want of wants) {
     if (tips.has(want)) continue;
     let reachable = false;
-    for await (const { oid } of store.walk([...tips])) if (oid === want) { reachable = true; break; }
-    if (!reachable) return respond(concat([pktLine(`ERR upload-pack: not our ref ${want}\n`)]), "application/x-git-upload-pack-result");
+    for await (const { oid } of store.walk([...tips]))
+      if (oid === want) {
+        reachable = true;
+        break;
+      }
+    if (!reachable)
+      return respond(
+        concat([pktLine(`ERR upload-pack: not our ref ${want}\n`)]),
+        "application/x-git-upload-pack-result",
+      );
   }
-  const common = [...(await store.exists(haves))].filter((oid) => haves.includes(oid));
+  const common = [...(await store.exists(haves))].filter((oid) =>
+    haves.includes(oid),
+  );
   const out: Uint8Array[] = [];
   if (!done) {
     // A negotiation round: say which haves are common; the client sends more, then "done".
@@ -189,7 +274,9 @@ export async function uploadPack(ctx: GitContext, target: GitTarget, request: Re
     out.push(pktLine("NAK\n"));
     return respond(concat(out), "application/x-git-upload-pack-result");
   }
-  out.push(pktLine(common.length > 0 ? `ACK ${common[common.length - 1]}\n` : "NAK\n"));
+  out.push(
+    pktLine(common.length > 0 ? `ACK ${common[common.length - 1]}\n` : "NAK\n"),
+  );
   const pack = writePack(await objectsToSend(store, wants, common));
   if (sideBand) {
     out.push(...sideband(1, pack), FLUSH);
@@ -202,7 +289,11 @@ export async function uploadPack(ctx: GitContext, target: GitTarget, request: Re
 const VALID_REF = /^refs\/(heads|tags|notes)\/[^\0\s~^:?*[\\]+$/;
 
 /** `POST /git-receive-pack`: ref updates and their pack (push). */
-export async function receivePack(ctx: GitContext, target: GitTarget, request: Request) {
+export async function receivePack(
+  ctx: GitContext,
+  target: GitTarget,
+  request: Request,
+) {
   requireScope(target.claims, "git:write");
   const { org } = target.claims;
   await ctx.repos.requireRepo(org, target.repo);
@@ -224,8 +315,11 @@ export async function receivePack(ctx: GitContext, target: GitTarget, request: R
   let unpack = "ok";
   try {
     if (end < body.byteLength) {
-      const objects = await readPack(body.subarray(end), (oids) => store.readMany(oids));
-      for (const object of objects.values()) store.write(object.type, object.data);
+      const objects = await readPack(body.subarray(end), (oids) =>
+        store.readMany(oids),
+      );
+      for (const object of objects.values())
+        store.write(object.type, object.data);
       await store.flush();
     }
   } catch (error) {
@@ -235,8 +329,13 @@ export async function receivePack(ctx: GitContext, target: GitTarget, request: R
   const results = new Map<string, string | undefined>();
   if (unpack === "ok") {
     for (const command of commands) {
-      if (!VALID_REF.test(command.name)) results.set(command.name, "invalid ref name");
-      else if (command.newOid !== ZERO_OID && (await store.read(command.newOid)) === undefined) results.set(command.name, "missing object");
+      if (!VALID_REF.test(command.name))
+        results.set(command.name, "invalid ref name");
+      else if (
+        command.newOid !== ZERO_OID &&
+        (await store.read(command.newOid)) === undefined
+      )
+        results.set(command.name, "missing object");
     }
     const apply = async (tx: Pick<SQL, "unsafe">) => {
       for (const command of commands) {
@@ -256,12 +355,14 @@ export async function receivePack(ctx: GitContext, target: GitTarget, request: R
     };
     if (atomic) {
       if ([...results.values()].some(Boolean)) {
-        for (const c of commands) if (!results.get(c.name)) results.set(c.name, "atomic push failed");
+        for (const c of commands)
+          if (!results.get(c.name)) results.set(c.name, "atomic push failed");
       } else {
         try {
           await ctx.sql.begin(apply);
         } catch {
-          for (const c of commands) if (!results.get(c.name)) results.set(c.name, "atomic push failed");
+          for (const c of commands)
+            if (!results.get(c.name)) results.set(c.name, "atomic push failed");
         }
       }
     } else {
@@ -270,10 +371,15 @@ export async function receivePack(ctx: GitContext, target: GitTarget, request: R
   }
   report.push(`unpack ${unpack}\n`);
   for (const command of commands) {
-    const error = unpack === "ok" ? results.get(command.name) : "unpacker error";
-    report.push(error ? `ng ${command.name} ${error}\n` : `ok ${command.name}\n`);
+    const error =
+      unpack === "ok" ? results.get(command.name) : "unpacker error";
+    report.push(
+      error ? `ng ${command.name} ${error}\n` : `ok ${command.name}\n`,
+    );
   }
   const out = [...report.map((line) => pktLine(line)), FLUSH];
-  const reply = caps.includes("side-band-64k") ? concat([...sideband(1, concat(out)), FLUSH]) : concat(out);
+  const reply = caps.includes("side-band-64k")
+    ? concat([...sideband(1, concat(out)), FLUSH])
+    : concat(out);
   return respond(reply, "application/x-git-receive-pack-result");
 }

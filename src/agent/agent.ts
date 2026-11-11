@@ -13,7 +13,12 @@ import {
 } from "@earendil-works/pi-durable";
 import { config } from "../config.ts";
 
-type MessageRow = { id: string; thread_id: string; user_id: string; content: string };
+type MessageRow = {
+  id: string;
+  thread_id: string;
+  user_id: string;
+  content: string;
+};
 
 /** How often a streamed answer is written to its row at most. */
 const STREAM_INTERVAL_MS = 150;
@@ -28,7 +33,9 @@ function textOf(message: unknown): string {
   if (typeof content === "string") return content;
   if (!Array.isArray(content)) return "";
   return content
-    .flatMap((part: { type?: string; text?: string }) => (part.type === "text" && part.text ? [part.text] : []))
+    .flatMap((part: { type?: string; text?: string }) =>
+      part.type === "text" && part.text ? [part.text] : [],
+    )
     .join("");
 }
 
@@ -56,12 +63,18 @@ export class Agent {
       .channel("agent")
       .on(
         "postgres_changes",
-        { event: "INSERT", schema: "public", table: "messages", filter: "role=eq.user" },
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "messages",
+          filter: "role=eq.user",
+        },
         (payload) => this.enqueue(payload.new as MessageRow),
       )
       .subscribe((status, error) => {
         if (status === "SUBSCRIBED") void this.sweep();
-        else if (error) console.error(`[agent] realtime ${status}:`, error.message);
+        else if (error)
+          console.error(`[agent] realtime ${status}:`, error.message);
       });
     this.sweeper = setInterval(() => void this.sweep(), SWEEP_INTERVAL_MS);
   }
@@ -81,7 +94,10 @@ export class Agent {
     while (Date.now() < deadline) {
       await this.sweep();
       if (this.threads.size === 0) return;
-      await Promise.race([Promise.allSettled([...this.threads.values()]), Bun.sleep(Math.max(0, deadline - Date.now()))]);
+      await Promise.race([
+        Promise.allSettled([...this.threads.values()]),
+        Bun.sleep(Math.max(0, deadline - Date.now())),
+      ]);
     }
   }
 
@@ -101,13 +117,15 @@ export class Agent {
       .catch((error) => console.error(`[agent] message ${message.id}:`, error))
       .finally(() => {
         this.seen.delete(message.id);
-        if (this.threads.get(message.thread_id) === next) this.threads.delete(message.thread_id);
+        if (this.threads.get(message.thread_id) === next)
+          this.threads.delete(message.thread_id);
       });
     this.threads.set(message.thread_id, next);
   }
 
   private async answer(message: MessageRow) {
-    const [current] = await this.sql`SELECT status FROM public.messages WHERE id = ${message.id}`;
+    const [current] = await this
+      .sql`SELECT status FROM public.messages WHERE id = ${message.id}`;
     if (current?.status !== "pending") return;
 
     const conversation = await this.conversationOf(message.thread_id);
@@ -127,14 +145,18 @@ export class Agent {
     const settled = await submission.wait(this.context).finally(stopStreaming);
 
     if (settled.status === "done" && settled.type === "input") {
-      const answer = await conversation.commit((tx) => tx.entry(AssistantEntry, settled.answer), this.context);
+      const answer = await conversation.commit(
+        (tx) => tx.entry(AssistantEntry, settled.answer),
+        this.context,
+      );
       const text = textOf(answer?.model?.[0]);
       await this.sql.begin(async (tx) => {
         await tx`UPDATE public.messages SET content = ${text}, status = 'done' WHERE id = ${replyId}`;
         await tx`UPDATE public.messages SET status = 'done' WHERE id = ${message.id}`;
       });
     } else {
-      const reason = "reason" in settled ? String(settled.reason) : settled.status;
+      const reason =
+        "reason" in settled ? String(settled.reason) : settled.status;
       await this.sql.begin(async (tx) => {
         await tx`UPDATE public.messages SET status = 'failed', error = ${reason} WHERE id = ${replyId}`;
         await tx`UPDATE public.messages SET status = 'failed', error = ${reason} WHERE id = ${message.id}`;
@@ -148,19 +170,29 @@ export class Agent {
       SELECT conversation_id FROM public.threads WHERE id = ${threadId}`;
     if (thread === undefined) throw new Error(`Unknown thread ${threadId}`);
     if (thread.conversation_id !== null) {
-      const existing = await this.harness.conversation(Number(thread.conversation_id) as ConversationId, this.context);
+      const existing = await this.harness.conversation(
+        Number(thread.conversation_id) as ConversationId,
+        this.context,
+      );
       if (existing !== undefined) return existing;
     }
     const conversation = await this.harness.createConversation(
-      { ownership: { kind: "ownerless" }, agent: { model: config.model, instructions: INSTRUCTIONS } },
+      {
+        ownership: { kind: "ownerless" },
+        agent: { model: config.model, instructions: INSTRUCTIONS },
+      },
       this.context,
     );
-    await this.sql`UPDATE public.threads SET conversation_id = ${conversation.id} WHERE id = ${threadId}`;
+    await this
+      .sql`UPDATE public.threads SET conversation_id = ${conversation.id} WHERE id = ${threadId}`;
     return conversation;
   }
 
   /** Writes the running generation's partial answer to the reply row, throttled. Returns the stop function. */
-  private async stream(conversation: Conversation, replyId: string): Promise<() => Promise<void>> {
+  private async stream(
+    conversation: Conversation,
+    replyId: string,
+  ): Promise<() => Promise<void>> {
     let latest = "";
     let written = "";
     let writing = Promise.resolve();
@@ -170,7 +202,8 @@ export class Agent {
       written = text;
       writing = writing
         .then(async () => {
-          await this.sql`UPDATE public.messages SET content = ${text} WHERE id = ${replyId} AND status = 'streaming'`;
+          await this
+            .sql`UPDATE public.messages SET content = ${text} WHERE id = ${replyId} AND status = 'streaming'`;
         })
         .catch((error) => console.error("[agent] stream:", error));
     };
@@ -178,7 +211,8 @@ export class Agent {
     const watch = await conversation.watch(this.context, { min: 1, max: 2 });
     watch.start(async (call) => {
       if (call.kind !== "value") return;
-      const live = call.value.docs["pi.live"] as (JsonObject & { generation?: { message?: unknown } }) | undefined;
+      const live = call.value.docs["pi.live"] as
+        (JsonObject & { generation?: { message?: unknown } }) | undefined;
       const text = textOf(live?.generation?.message);
       if (text) latest = text;
     });

@@ -1,8 +1,13 @@
-import { useState } from "react"
-import { IconArrow } from "@pierre/icons"
+import { useState } from "react";
+import { IconArrow } from "@pierre/icons";
 
-import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupTextarea } from "@/components/ui/input-group"
-import { Spinner } from "@/components/ui/spinner"
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupTextarea,
+} from "@/components/ui/input-group";
+import { Spinner } from "@/components/ui/spinner";
 
 /** The message box: Enter sends, Shift+Enter adds a line. */
 export function Composer({
@@ -10,27 +15,29 @@ export function Composer({
   disabled = false,
   autoFocus = false,
 }: {
-  onSend: (content: string) => Promise<void>
-  disabled?: boolean
-  autoFocus?: boolean
+  onSend: (content: string) => Promise<void>;
+  disabled?: boolean;
+  autoFocus?: boolean;
 }) {
-  const [value, setValue] = useState("")
-  const [sending, setSending] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const content = value.trim()
-  const canSend = content.length > 0 && !sending && !disabled
+  const [value, setValue] = useState("");
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const content = value.trim();
+  const canSend = content.length > 0 && !sending && !disabled;
 
   async function send() {
-    if (!canSend) return
-    setSending(true)
-    setError(null)
+    if (!canSend) return;
+    setSending(true);
+    setError(null);
     try {
-      await onSend(content)
-      setValue("")
+      await onSend(content);
+      setValue("");
     } catch (error) {
-      setError(error instanceof Error ? error.message : "Could not send the message")
+      setError(
+        error instanceof Error ? error.message : "Could not send the message",
+      );
     } finally {
-      setSending(false)
+      setSending(false);
     }
   }
 
@@ -38,8 +45,8 @@ export function Composer({
     <form
       className="flex flex-col gap-2"
       onSubmit={(event) => {
-        event.preventDefault()
-        void send()
+        event.preventDefault();
+        void send();
       }}
     >
       <InputGroup>
@@ -51,19 +58,29 @@ export function Composer({
           className="max-h-60 min-h-16 text-base md:text-sm"
           onChange={(event) => setValue(event.target.value)}
           onKeyDown={(event) => {
-            if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
-              event.preventDefault()
-              void send()
+            if (
+              event.key === "Enter" &&
+              !event.shiftKey &&
+              !event.nativeEvent.isComposing
+            ) {
+              event.preventDefault();
+              void send();
             }
           }}
         />
         <InputGroupAddon align="block-end" className="justify-end">
-          <InputGroupButton type="submit" variant="default" size="icon-sm" disabled={!canSend} aria-label="Send">
+          <InputGroupButton
+            type="submit"
+            variant="default"
+            size="icon-sm"
+            disabled={!canSend}
+            aria-label="Send"
+          >
             {sending ? <Spinner /> : <IconArrow className="rotate-90" />}
           </InputGroupButton>
         </InputGroupAddon>
       </InputGroup>
       {error && <p className="text-sm text-destructive">{error}</p>}
     </form>
-  )
+  );
 }

@@ -39,15 +39,19 @@ How it fits together:
 import { GitStorage } from "@pierre/storage";
 
 const store = new GitStorage({
-  name: "richelieu",                              // the organization
-  key: process.env.FORGE_PRIVATE_KEY!,            // from `bun run forge:org`
+  name: "richelieu", // the organization
+  key: process.env.FORGE_PRIVATE_KEY!, // from `bun run forge:org`
   apiBaseUrl: "https://your-app.vercel.app/forge",
   storageBaseUrl: "your-app.vercel.app/forge/git",
 });
 
 const repo = await store.createRepo({ id: "my-repo" });
 await repo
-  .createCommit({ targetBranch: "main", commitMessage: "Initial commit", author: { name: "Ada", email: "ada@example.com" } })
+  .createCommit({
+    targetBranch: "main",
+    commitMessage: "Initial commit",
+    author: { name: "Ada", email: "ada@example.com" },
+  })
   .addFileFromString("README.md", "# Hello\n")
   .send();
 
@@ -82,14 +86,14 @@ conflict.
    as functions on the Bun runtime, and runs the agent every minute with a cron.
 4. Set the environment variables:
 
-   | Variable | Value |
-   | --- | --- |
-   | `DATABASE_URL` | Supabase's session pooler URL (port 5432). The transaction pooler drops the agent's session lock. |
-   | `BUN_PUBLIC_SUPABASE_URL` | `https://<project>.supabase.co` |
-   | `BUN_PUBLIC_SUPABASE_ANON_KEY` | The project's anon (publishable) key |
-   | `ANTHROPIC_API_KEY` | For the agent |
-   | `FORGE_ORG` and `FORGE_PRIVATE_KEY` | From step 2 |
-   | `PUBLIC_URL` | Optional; the app's URL, for git remote URLs. Defaults to the production domain. |
+   | Variable                            | Value                                                                                             |
+   | ----------------------------------- | ------------------------------------------------------------------------------------------------- |
+   | `DATABASE_URL`                      | Supabase's session pooler URL (port 5432). The transaction pooler drops the agent's session lock. |
+   | `BUN_PUBLIC_SUPABASE_URL`           | `https://<project>.supabase.co`                                                                   |
+   | `BUN_PUBLIC_SUPABASE_ANON_KEY`      | The project's anon (publishable) key                                                              |
+   | `ANTHROPIC_API_KEY`                 | For the agent                                                                                     |
+   | `FORGE_ORG` and `FORGE_PRIVATE_KEY` | From step 2                                                                                       |
+   | `PUBLIC_URL`                        | Optional; the app's URL, for git remote URLs. Defaults to the production domain.                  |
 
 5. In Supabase Auth, set the site URL to the Vercel domain.
 

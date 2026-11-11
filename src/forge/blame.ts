@@ -22,9 +22,15 @@ export interface BlameLine {
 }
 
 /** Maps each line of `newer` that is unchanged in `older` to its 0-based line there. */
-function unchangedLines(older: string, newer: string, count: number): (number | undefined)[] {
+function unchangedLines(
+  older: string,
+  newer: string,
+  count: number,
+): (number | undefined)[] {
   const map: (number | undefined)[] = new Array(count);
-  const patch = structuredPatch("", "", older, newer, undefined, undefined, { context: 0 });
+  const patch = structuredPatch("", "", older, newer, undefined, undefined, {
+    context: 0,
+  });
   let oldLine = 0;
   let newLine = 0;
   for (const hunk of patch.hunks) {
@@ -37,7 +43,12 @@ function unchangedLines(older: string, newer: string, count: number): (number | 
   return map;
 }
 
-export async function blame(store: ObjectStore, head: string, path: string, maxCommits = 2000): Promise<BlameLine[]> {
+export async function blame(
+  store: ObjectStore,
+  head: string,
+  path: string,
+  maxCommits = 2000,
+): Promise<BlameLine[]> {
   const contentAt = async (commit: Commit) => {
     const entry = await store.entryAt(commit.tree, path);
     if (entry === undefined || entry.mode === "40000") return undefined;
@@ -47,14 +58,23 @@ export async function blame(store: ObjectStore, head: string, path: string, maxC
   let commit = await store.commit(oid);
   let text = await contentAt(commit);
   if (text === undefined) throw new Error(`No file at ${path}`);
-  const countLines = (value: string) => (value === "" ? 0 : value.split("\n").length - (value.endsWith("\n") ? 1 : 0));
+  const countLines = (value: string) =>
+    value === ""
+      ? 0
+      : value.split("\n").length - (value.endsWith("\n") ? 1 : 0);
   const lineCount = countLines(text);
   const result: BlameLine[] = new Array(lineCount);
   // Lines still to attribute: their position in the current commit's version → their final line number.
   let pending = new Map<number, number>();
   for (let i = 0; i < lineCount; i++) pending.set(i, i);
 
-  const attribute = (to: string, c: Commit, current: number, final: number, previous?: string) => {
+  const attribute = (
+    to: string,
+    c: Commit,
+    current: number,
+    final: number,
+    previous?: string,
+  ) => {
     result[final] = {
       line_number: final + 1,
       commit_sha: to,
@@ -73,17 +93,22 @@ export async function blame(store: ObjectStore, head: string, path: string, maxC
 
   for (let steps = 0; pending.size > 0; steps++) {
     const parentOid = commit.parents[0];
-    const parent = parentOid && steps < maxCommits ? await store.commit(parentOid) : undefined;
+    const parent =
+      parentOid && steps < maxCommits
+        ? await store.commit(parentOid)
+        : undefined;
     const parentText = parent ? await contentAt(parent) : undefined;
     if (parent === undefined || parentText === undefined) {
-      for (const [current, final] of pending) attribute(oid, commit, current, final);
+      for (const [current, final] of pending)
+        attribute(oid, commit, current, final);
       break;
     }
     const map = unchangedLines(parentText, text!, countLines(text!));
     const next = new Map<number, number>();
     for (const [current, final] of pending) {
       const older = map[current];
-      if (older === undefined) attribute(oid, commit, current, final, parentOid);
+      if (older === undefined)
+        attribute(oid, commit, current, final, parentOid);
       else next.set(older, final);
     }
     pending = next;

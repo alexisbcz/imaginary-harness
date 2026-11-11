@@ -10,16 +10,30 @@ import { PostgresStorage } from "../pi/postgres-storage.ts";
 import { Agent } from "./agent.ts";
 import { createWorkspace } from "./workspace.ts";
 
-export async function openAgent(sql: SQL, storage: GitStorage | undefined, options: { lockTimeoutMs?: number } = {}) {
+export async function openAgent(
+  sql: SQL,
+  storage: GitStorage | undefined,
+  options: { lockTimeoutMs?: number } = {},
+) {
   const context = BACKGROUND_CONTEXT;
   const models = createModels();
   models.setProvider(anthropicProvider());
   const registry = createRegistry();
   if (storage) registry.install(createWorkspace(sql, storage));
-  else console.warn("[agent] FORGE_PRIVATE_KEY is not set: the workspace tools are off (bun run forge:org <name> --write-env)");
+  else
+    console.warn(
+      "[agent] FORGE_PRIVATE_KEY is not set: the workspace tools are off (bun run forge:org <name> --write-env)",
+    );
   const harness = await Harness.open(
-    await PostgresStorage.open(sql, { schema: "pi", lockTimeoutMs: options.lockTimeoutMs }),
-    { models, registry, onReport: (report) => console.error(`[pi] ${report.kind}:`, report.error) },
+    await PostgresStorage.open(sql, {
+      schema: "pi",
+      lockTimeoutMs: options.lockTimeoutMs,
+    }),
+    {
+      models,
+      registry,
+      onReport: (report) => console.error(`[pi] ${report.kind}:`, report.error),
+    },
     context,
   );
   const agent = new Agent(sql, harness, context);

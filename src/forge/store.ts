@@ -84,7 +84,10 @@ export class ObjectStore {
         [this.org, chunk.join(",")],
       );
       for (const row of rows) {
-        const object = { type: row.type as ObjectType, data: new Uint8Array(inflateSync(row.data)) };
+        const object = {
+          type: row.type as ObjectType,
+          data: new Uint8Array(inflateSync(row.data)),
+        };
         this.cache.set(row.oid, object);
         found.set(row.oid, object);
       }
@@ -96,10 +99,14 @@ export class ObjectStore {
     return (await this.readMany([oid])).get(oid);
   }
 
-  async readType<T extends ObjectType>(oid: string, type: T): Promise<Uint8Array> {
+  async readType<T extends ObjectType>(
+    oid: string,
+    type: T,
+  ): Promise<Uint8Array> {
     const object = await this.read(oid);
     if (object === undefined) throw new NotFound(`Object ${oid} not found`);
-    if (object.type !== type) throw new BadRequest(`Object ${oid} is a ${object.type}, not a ${type}`);
+    if (object.type !== type)
+      throw new BadRequest(`Object ${oid} is a ${object.type}, not a ${type}`);
     return object.data;
   }
 
@@ -167,18 +174,27 @@ export class ObjectStore {
     let current = oid;
     for (let depth = 0; depth < 10; depth++) {
       const object = await this.read(current);
-      if (object === undefined) throw new NotFound(`Object ${current} not found`);
+      if (object === undefined)
+        throw new NotFound(`Object ${current} not found`);
       if (object.type !== "tag") return { oid: current, type: object.type };
-      current = /^object ([0-9a-f]{40})/.exec(new TextDecoder().decode(object.data))![1]!;
+      current = /^object ([0-9a-f]{40})/.exec(
+        new TextDecoder().decode(object.data),
+      )![1]!;
     }
     throw new BadRequest("Tag chain too deep");
   }
 
   /** Every file below `treeOid`, path → entry, recursively. */
-  async flatten(treeOid: string, prefix = "", into = new Map<string, TreeEntry>()): Promise<Map<string, TreeEntry>> {
+  async flatten(
+    treeOid: string,
+    prefix = "",
+    into = new Map<string, TreeEntry>(),
+  ): Promise<Map<string, TreeEntry>> {
     let level: { prefix: string; oid: string }[] = [{ prefix, oid: treeOid }];
     while (level.length > 0) {
-      const objects = await this.readMany(level.map((t) => t.oid).filter((oid) => oid !== EMPTY_TREE_OID));
+      const objects = await this.readMany(
+        level.map((t) => t.oid).filter((oid) => oid !== EMPTY_TREE_OID),
+      );
       const next: { prefix: string; oid: string }[] = [];
       for (const { prefix: base, oid } of level) {
         if (oid === EMPTY_TREE_OID) continue;
@@ -186,7 +202,8 @@ export class ObjectStore {
         if (object === undefined) throw new NotFound(`Tree ${oid} not found`);
         for (const entry of decodeTree(object.data)) {
           const path = base ? `${base}/${entry.name}` : entry.name;
-          if (isTreeMode(entry.mode)) next.push({ prefix: path, oid: entry.oid });
+          if (isTreeMode(entry.mode))
+            next.push({ prefix: path, oid: entry.oid });
           else into.set(path, { ...entry, name: path });
         }
       }
@@ -212,18 +229,37 @@ export class ObjectStore {
    * Writes a new tree: `base` with `changes` applied, path → blob entry to upsert, or null to delete. Empty
    * directories disappear, as in git. Returns the root tree's ID.
    */
-  async applyChanges(baseTree: string | undefined, changes: Map<string, { mode: string; oid: string } | null>) {
-    type Dir = { entries: Map<string, TreeEntry>; dirs: Map<string, Dir>; oid?: string; loaded: boolean };
+  async applyChanges(
+    baseTree: string | undefined,
+    changes: Map<string, { mode: string; oid: string } | null>,
+  ) {
+    type Dir = {
+      entries: Map<string, TreeEntry>;
+      dirs: Map<string, Dir>;
+      oid?: string;
+      loaded: boolean;
+    };
     const load = async (dir: Dir) => {
       if (dir.loaded) return;
       dir.loaded = true;
       if (dir.oid === undefined) return;
       for (const entry of await this.tree(dir.oid)) {
-        if (isTreeMode(entry.mode)) dir.dirs.set(entry.name, { entries: new Map(), dirs: new Map(), oid: entry.oid, loaded: false });
+        if (isTreeMode(entry.mode))
+          dir.dirs.set(entry.name, {
+            entries: new Map(),
+            dirs: new Map(),
+            oid: entry.oid,
+            loaded: false,
+          });
         else dir.entries.set(entry.name, entry);
       }
     };
-    const root: Dir = { entries: new Map(), dirs: new Map(), oid: baseTree, loaded: false };
+    const root: Dir = {
+      entries: new Map(),
+      dirs: new Map(),
+      oid: baseTree,
+      loaded: false,
+    };
     const touched = new Set<Dir>();
     for (const [path, change] of changes) {
       const parts = path.split("/");
@@ -263,9 +299,12 @@ export class ObjectStore {
       const entries: TreeEntry[] = [...dir.entries.values()];
       for (const [name, child] of dir.dirs) {
         const oid = write(child);
-        if (oid !== undefined && oid !== EMPTY_TREE_OID) entries.push({ mode: "40000", name, oid });
+        if (oid !== undefined && oid !== EMPTY_TREE_OID)
+          entries.push({ mode: "40000", name, oid });
       }
-      return entries.length === 0 ? EMPTY_TREE_OID : this.write("tree", encodeTree(entries));
+      return entries.length === 0
+        ? EMPTY_TREE_OID
+        : this.write("tree", encodeTree(entries));
     };
     const oid = write(root) ?? EMPTY_TREE_OID;
     if (oid === EMPTY_TREE_OID) this.write("tree", encodeTree([]));
@@ -277,7 +316,10 @@ export class ObjectStore {
   }
 
   /** Commits reachable from `heads`, newest first by committer date, parents after children. */
-  async *walk(heads: readonly string[], stopAt: ReadonlySet<string> = new Set()) {
+  async *walk(
+    heads: readonly string[],
+    stopAt: ReadonlySet<string> = new Set(),
+  ) {
     const seen = new Set<string>(stopAt);
     const queue: { oid: string; commit: Commit }[] = [];
     const push = async (oids: string[]) => {
@@ -286,9 +328,12 @@ export class ObjectStore {
       const objects = await this.readMany(fresh);
       for (const oid of fresh) {
         const object = objects.get(oid);
-        if (object?.type === "commit") queue.push({ oid, commit: decodeCommit(object.data) });
+        if (object?.type === "commit")
+          queue.push({ oid, commit: decodeCommit(object.data) });
       }
-      queue.sort((a, b) => b.commit.committer.timestamp - a.commit.committer.timestamp);
+      queue.sort(
+        (a, b) => b.commit.committer.timestamp - a.commit.committer.timestamp,
+      );
     };
     await push([...heads]);
     while (queue.length > 0) {
@@ -302,13 +347,15 @@ export class ObjectStore {
   async mergeBase(a: string, b: string): Promise<string | undefined> {
     const ancestorsOfA = new Set<string>();
     for await (const { oid } of this.walk([a])) ancestorsOfA.add(oid);
-    for await (const { oid } of this.walk([b])) if (ancestorsOfA.has(oid)) return oid;
+    for await (const { oid } of this.walk([b]))
+      if (ancestorsOfA.has(oid)) return oid;
     return undefined;
   }
 
   async isAncestor(ancestor: string, descendant: string): Promise<boolean> {
     if (ancestor === descendant) return true;
-    for await (const { oid } of this.walk([descendant])) if (oid === ancestor) return true;
+    for await (const { oid } of this.walk([descendant]))
+      if (oid === ancestor) return true;
     return false;
   }
 }
@@ -322,7 +369,8 @@ export class RepoStore {
   constructor(private readonly sql: SQL) {}
 
   async orgKeys(org: string): Promise<string[] | undefined> {
-    const [row] = await this.sql`SELECT public_keys FROM forge.orgs WHERE name = ${org}`;
+    const [row] = await this
+      .sql`SELECT public_keys FROM forge.orgs WHERE name = ${org}`;
     if (row === undefined) return undefined;
     // Bun returns text[] as an array.
     return row.public_keys as string[];
@@ -337,7 +385,8 @@ export class RepoStore {
   }
 
   async repo(org: string, id: string): Promise<RepoRecord | undefined> {
-    const [row] = await this.sql`SELECT * FROM forge.repos WHERE org = ${org} AND id = ${id}`;
+    const [row] = await this
+      .sql`SELECT * FROM forge.repos WHERE org = ${org} AND id = ${id}`;
     return row === undefined ? undefined : toRepo(row);
   }
 
@@ -347,7 +396,12 @@ export class RepoStore {
     return repo;
   }
 
-  async createRepo(org: string, id: string, defaultBranch: string, baseRepo: RepoRecord["baseRepo"]) {
+  async createRepo(
+    org: string,
+    id: string,
+    defaultBranch: string,
+    baseRepo: RepoRecord["baseRepo"],
+  ) {
     const rows = await this.sql`
       INSERT INTO forge.repos (org, id, default_branch, base_repo)
       VALUES (${org}, ${id}, ${defaultBranch}, ${baseRepo === null ? null : JSON.stringify(baseRepo)}::jsonb)
@@ -357,29 +411,53 @@ export class RepoStore {
   }
 
   async deleteRepo(org: string, id: string) {
-    const rows = await this.sql`DELETE FROM forge.repos WHERE org = ${org} AND id = ${id} RETURNING id`;
+    const rows = await this
+      .sql`DELETE FROM forge.repos WHERE org = ${org} AND id = ${id} RETURNING id`;
     return rows.length > 0;
   }
 
-  async listRepos(org: string, options: { q?: string; limit: number; cursor?: string }) {
+  async listRepos(
+    org: string,
+    options: { q?: string; limit: number; cursor?: string },
+  ) {
     const offset = Number(options.cursor ?? 0) || 0;
     const rows = await this.sql.unsafe(
       `SELECT * FROM forge.repos WHERE org = $1 AND ($2::text IS NULL OR id ILIKE '%' || $2 || '%')
         ORDER BY created_at DESC, id OFFSET $3 LIMIT $4`,
       [org, options.q ?? null, offset, options.limit + 1],
     );
-    return { repos: rows.slice(0, options.limit).map(toRepo), next: rows.length > options.limit ? String(offset + options.limit) : undefined };
+    return {
+      repos: rows.slice(0, options.limit).map(toRepo),
+      next:
+        rows.length > options.limit
+          ? String(offset + options.limit)
+          : undefined,
+    };
   }
 
-  async refs(org: string, repo: string, ephemeral: boolean, prefix = "refs/"): Promise<RefRecord[]> {
+  async refs(
+    org: string,
+    repo: string,
+    ephemeral: boolean,
+    prefix = "refs/",
+  ): Promise<RefRecord[]> {
     const rows = await this.sql`
       SELECT name, oid, created_at FROM forge.refs
       WHERE org = ${org} AND repo = ${repo} AND ephemeral = ${ephemeral} AND starts_with(name, ${prefix})
       ORDER BY name`;
-    return rows.map((r: Record<string, unknown>) => ({ name: r.name as string, oid: r.oid as string, createdAt: new Date(r.created_at as string).toISOString() }));
+    return rows.map((r: Record<string, unknown>) => ({
+      name: r.name as string,
+      oid: r.oid as string,
+      createdAt: new Date(r.created_at as string).toISOString(),
+    }));
   }
 
-  async ref(org: string, repo: string, ephemeral: boolean, name: string): Promise<string | undefined> {
+  async ref(
+    org: string,
+    repo: string,
+    ephemeral: boolean,
+    name: string,
+  ): Promise<string | undefined> {
     const [row] = await this.sql`
       SELECT oid FROM forge.refs WHERE org = ${org} AND repo = ${repo} AND ephemeral = ${ephemeral} AND name = ${name}`;
     return row?.oid;
@@ -420,9 +498,15 @@ export class RepoStore {
   }
 
   /** Copies every non-ephemeral ref of a repository to a fork (objects are shared by the organization). */
-  async copyRefs(org: string, from: string, to: string, only?: { name: string; oid: string }) {
+  async copyRefs(
+    org: string,
+    from: string,
+    to: string,
+    only?: { name: string; oid: string },
+  ) {
     if (only) {
-      await this.sql`INSERT INTO forge.refs (org, repo, name, oid) VALUES (${org}, ${to}, ${only.name}, ${only.oid})`;
+      await this
+        .sql`INSERT INTO forge.refs (org, repo, name, oid) VALUES (${org}, ${to}, ${only.name}, ${only.oid})`;
       return;
     }
     await this.sql`
@@ -435,8 +519,17 @@ export class RepoStore {
 export function contentTypeOf(path: string) {
   const ext = path.split(".").pop()?.toLowerCase() ?? "";
   const types: Record<string, string> = {
-    png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp", svg: "image/svg+xml",
-    pdf: "application/pdf", json: "application/json", html: "text/html", css: "text/css", js: "text/javascript",
+    png: "image/png",
+    jpg: "image/jpeg",
+    jpeg: "image/jpeg",
+    gif: "image/gif",
+    webp: "image/webp",
+    svg: "image/svg+xml",
+    pdf: "application/pdf",
+    json: "application/json",
+    html: "text/html",
+    css: "text/css",
+    js: "text/javascript",
   };
   return types[ext] ?? "application/octet-stream";
 }

@@ -16,13 +16,19 @@ let migrated: Promise<unknown> | undefined;
  */
 export async function sharedServices() {
   shared ??= createServices();
-  migrated ??= import("../db/migrate.ts").then(({ migrate }) => migrate(shared!.sql));
+  migrated ??= import("../db/migrate.ts").then(({ migrate }) =>
+    migrate(shared!.sql),
+  );
   await migrated;
   return shared;
 }
 
 export function createServices(sql: Bun.SQL = new Bun.SQL(config.databaseUrl)) {
-  const forge = createForge({ sql, basePath: FORGE_PATH, publicOrigin: config.publicUrl });
+  const forge = createForge({
+    sql,
+    basePath: FORGE_PATH,
+    publicOrigin: config.publicUrl,
+  });
   const host = new URL(config.publicUrl).host;
   const storage = config.forgePrivateKey
     ? new GitStorage({
@@ -30,7 +36,8 @@ export function createServices(sql: Bun.SQL = new Bun.SQL(config.databaseUrl)) {
         key: config.forgePrivateKey,
         apiBaseUrl: `${config.publicUrl}${FORGE_PATH}`,
         storageBaseUrl: `${host}${FORGE_PATH}/git`,
-        fetch: ((input: RequestInfo | URL, init?: RequestInit) => forge.fetch(new Request(input, init))) as typeof fetch,
+        fetch: ((input: RequestInfo | URL, init?: RequestInit) =>
+          forge.fetch(new Request(input, init))) as typeof fetch,
       })
     : undefined;
   return { sql, forge, storage };

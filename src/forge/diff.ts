@@ -29,13 +29,24 @@ const MAX_PATCH_BYTES = 1024 * 1024;
 const decoder = new TextDecoder("utf-8", { fatal: false });
 const isBinary = (data: Uint8Array) => data.subarray(0, 8000).includes(0);
 
-function filePatch(path: string, state: "A" | "M" | "D", before: TreeEntry | undefined, after: TreeEntry | undefined, oldText: string, newText: string) {
+function filePatch(
+  path: string,
+  state: "A" | "M" | "D",
+  before: TreeEntry | undefined,
+  after: TreeEntry | undefined,
+  oldText: string,
+  newText: string,
+) {
   const header = [`diff --git a/${path} b/${path}`];
   if (state === "A") header.push(`new file mode ${after!.mode}`);
   if (state === "D") header.push(`deleted file mode ${before!.mode}`);
-  if (state === "M" && before!.mode !== after!.mode) header.push(`old mode ${before!.mode}`, `new mode ${after!.mode}`);
-  const short = (oid: string | undefined) => (oid ?? "0".repeat(40)).slice(0, 7);
-  header.push(`index ${short(before?.oid)}..${short(after?.oid)}${state === "M" && before!.mode === after!.mode ? ` ${after!.mode}` : ""}`);
+  if (state === "M" && before!.mode !== after!.mode)
+    header.push(`old mode ${before!.mode}`, `new mode ${after!.mode}`);
+  const short = (oid: string | undefined) =>
+    (oid ?? "0".repeat(40)).slice(0, 7);
+  header.push(
+    `index ${short(before?.oid)}..${short(after?.oid)}${state === "M" && before!.mode === after!.mode ? ` ${after!.mode}` : ""}`,
+  );
   const patch = structuredPatch(
     state === "A" ? "/dev/null" : `a/${path}`,
     state === "D" ? "/dev/null" : `b/${path}`,
@@ -54,38 +65,73 @@ function filePatch(path: string, state: "A" | "M" | "D", before: TreeEntry | und
     }
   }
   // formatPatch writes an "Index:" and "===" preamble; git's format starts at the --- line.
-  const body = patch.hunks.length === 0 ? "" : formatPatch(patch).replace(/^(?:Index:.*\n)?(?:=+\n)?/, "");
+  const body =
+    patch.hunks.length === 0
+      ? ""
+      : formatPatch(patch).replace(/^(?:Index:.*\n)?(?:=+\n)?/, "");
   return { raw: `${header.join("\n")}\n${body}`, additions, deletions };
 }
 
 /** The changes from tree `from` (undefined: empty) to tree `to`, restricted to `paths` when given. */
-export async function diffTrees(store: ObjectStore, from: string | undefined, to: string, paths?: readonly string[]) {
+export async function diffTrees(
+  store: ObjectStore,
+  from: string | undefined,
+  to: string,
+  paths?: readonly string[],
+) {
   const [before, after] = await Promise.all([
     from === undefined ? new Map<string, TreeEntry>() : store.flatten(from),
     store.flatten(to),
   ]);
-  const inScope = (path: string) => !paths || paths.length === 0 || paths.some((p) => path === p || path.startsWith(`${p.replace(/\/$/, "")}/`));
-  const changes: { path: string; state: "A" | "M" | "D"; before?: TreeEntry; after?: TreeEntry }[] = [];
+  const inScope = (path: string) =>
+    !paths ||
+    paths.length === 0 ||
+    paths.some(
+      (p) => path === p || path.startsWith(`${p.replace(/\/$/, "")}/`),
+    );
+  const changes: {
+    path: string;
+    state: "A" | "M" | "D";
+    before?: TreeEntry;
+    after?: TreeEntry;
+  }[] = [];
   for (const [path, entry] of after) {
     if (!inScope(path)) continue;
     const old = before.get(path);
     if (old === undefined) changes.push({ path, state: "A", after: entry });
-    else if (old.oid !== entry.oid || old.mode !== entry.mode) changes.push({ path, state: "M", before: old, after: entry });
+    else if (old.oid !== entry.oid || old.mode !== entry.mode)
+      changes.push({ path, state: "M", before: old, after: entry });
   }
-  for (const [path, entry] of before) if (inScope(path) && !after.has(path)) changes.push({ path, state: "D", before: entry });
+  for (const [path, entry] of before)
+    if (inScope(path) && !after.has(path))
+      changes.push({ path, state: "D", before: entry });
   changes.sort((a, b) => (a.path < b.path ? -1 : 1));
 
-  const blobs = await store.readMany(changes.flatMap((c) => [c.before?.oid, c.after?.oid]).filter((o): o is string => !!o));
+  const blobs = await store.readMany(
+    changes
+      .flatMap((c) => [c.before?.oid, c.after?.oid])
+      .filter((o): o is string => !!o),
+  );
   const files: FileDiffRaw[] = [];
   const filtered: FilteredFileRaw[] = [];
   const stats = { files: 0, additions: 0, deletions: 0, changes: 0 };
   for (const change of changes) {
-    const oldData = change.before ? blobs.get(change.before.oid)?.data ?? new Uint8Array() : new Uint8Array();
-    const newData = change.after ? blobs.get(change.after.oid)?.data ?? new Uint8Array() : new Uint8Array();
+    const oldData = change.before
+      ? (blobs.get(change.before.oid)?.data ?? new Uint8Array())
+      : new Uint8Array();
+    const newData = change.after
+      ? (blobs.get(change.after.oid)?.data ?? new Uint8Array())
+      : new Uint8Array();
     const bytes = Math.max(oldData.byteLength, newData.byteLength);
     stats.files++;
     if (bytes > MAX_PATCH_BYTES) {
-      filtered.push({ path: change.path, state: change.state, old_path: null, bytes, is_eof: true });
+      filtered.push({
+        path: change.path,
+        state: change.state,
+        old_path: null,
+        bytes,
+        is_eof: true,
+      });
       continue;
     }
     let result: { raw: string; additions: number; deletions: number };
@@ -96,7 +142,14 @@ export async function diffTrees(store: ObjectStore, from: string | undefined, to
         deletions: 0,
       };
     } else {
-      result = filePatch(change.path, change.state, change.before, change.after, decoder.decode(oldData), decoder.decode(newData));
+      result = filePatch(
+        change.path,
+        change.state,
+        change.before,
+        change.after,
+        decoder.decode(oldData),
+        decoder.decode(newData),
+      );
     }
     stats.additions += result.additions;
     stats.deletions += result.deletions;

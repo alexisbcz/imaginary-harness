@@ -1,12 +1,16 @@
-import { useEffect, useState } from "react"
-import { useParams } from "react-router"
+import { useEffect, useState } from "react";
+import { useParams } from "react-router";
 
-import { Composer } from "@/components/composer"
-import { Markdown } from "@/components/markdown"
-import { useWorkspaceFiles, Workspace } from "@/components/workspace"
-import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable"
-import { Bubble, BubbleContent } from "@/components/ui/bubble"
-import { Message, MessageContent } from "@/components/ui/message"
+import { Composer } from "@/components/composer";
+import { Markdown } from "@/components/markdown";
+import { useWorkspaceFiles, Workspace } from "@/components/workspace";
+import {
+  ResizableHandle,
+  ResizablePanel,
+  ResizablePanelGroup,
+} from "@/components/ui/resizable";
+import { Bubble, BubbleContent } from "@/components/ui/bubble";
+import { Message, MessageContent } from "@/components/ui/message";
 import {
   MessageScroller,
   MessageScrollerButton,
@@ -14,55 +18,64 @@ import {
   MessageScrollerItem,
   MessageScrollerProvider,
   MessageScrollerViewport,
-} from "@/components/ui/message-scroller"
-import { Spinner } from "@/components/ui/spinner"
-import { sendMessage, type ChatMessage } from "@/lib/chat"
-import { createClient } from "@/lib/supabase/client"
+} from "@/components/ui/message-scroller";
+import { Spinner } from "@/components/ui/spinner";
+import { sendMessage, type ChatMessage } from "@/lib/chat";
+import { createClient } from "@/lib/supabase/client";
 
-const supabase = createClient()
+const supabase = createClient();
 
 /** A thread's messages, the agent's streamed answers included, kept current through Realtime. */
 function useMessages(threadId: string) {
-  const [messages, setMessages] = useState<ChatMessage[] | null>(null)
+  const [messages, setMessages] = useState<ChatMessage[] | null>(null);
 
   useEffect(() => {
-    let active = true
-    setMessages(null)
+    let active = true;
+    setMessages(null);
     const upsert = (message: ChatMessage) =>
       setMessages((current) => {
-        const list = current ?? []
-        const index = list.findIndex((item) => item.id === message.id)
-        if (index === -1) return [...list, message].sort((a, b) => a.created_at.localeCompare(b.created_at))
-        return list.map((item, i) => (i === index ? message : item))
-      })
+        const list = current ?? [];
+        const index = list.findIndex((item) => item.id === message.id);
+        if (index === -1)
+          return [...list, message].sort((a, b) =>
+            a.created_at.localeCompare(b.created_at),
+          );
+        return list.map((item, i) => (i === index ? message : item));
+      });
     const load = async () => {
       const { data } = await supabase
         .from("messages")
         .select("id, thread_id, role, content, status, error, created_at")
         .eq("thread_id", threadId)
-        .order("created_at")
-      if (active && data) setMessages(data)
-    }
+        .order("created_at");
+      if (active && data) setMessages(data);
+    };
     const channel = supabase
       .channel(`thread:${threadId}`)
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "messages", filter: `thread_id=eq.${threadId}` },
+        {
+          event: "*",
+          schema: "public",
+          table: "messages",
+          filter: `thread_id=eq.${threadId}`,
+        },
         (payload) => {
-          if (payload.eventType !== "DELETE") upsert(payload.new as ChatMessage)
-        }
+          if (payload.eventType !== "DELETE")
+            upsert(payload.new as ChatMessage);
+        },
       )
       .subscribe((status) => {
-        if (status === "SUBSCRIBED") void load()
-      })
-    void load()
+        if (status === "SUBSCRIBED") void load();
+      });
+    void load();
     return () => {
-      active = false
-      void supabase.removeChannel(channel)
-    }
-  }, [threadId])
+      active = false;
+      void supabase.removeChannel(channel);
+    };
+  }, [threadId]);
 
-  return messages
+  return messages;
 }
 
 function ChatBubble({ message }: { message: ChatMessage }) {
@@ -71,11 +84,13 @@ function ChatBubble({ message }: { message: ChatMessage }) {
       <Message align="end">
         <MessageContent>
           <Bubble variant="secondary">
-            <BubbleContent className="whitespace-pre-wrap">{message.content}</BubbleContent>
+            <BubbleContent className="whitespace-pre-wrap">
+              {message.content}
+            </BubbleContent>
           </Bubble>
         </MessageContent>
       </Message>
-    )
+    );
   }
   if (message.status === "failed") {
     return (
@@ -86,29 +101,33 @@ function ChatBubble({ message }: { message: ChatMessage }) {
           </Bubble>
         </MessageContent>
       </Message>
-    )
+    );
   }
   return (
     <Message>
       <MessageContent>
         <Bubble variant="ghost" className="w-full">
           <BubbleContent className="w-full">
-            {message.content ? <Markdown>{message.content}</Markdown> : <Spinner className="text-muted-foreground" />}
+            {message.content ? (
+              <Markdown>{message.content}</Markdown>
+            ) : (
+              <Spinner className="text-muted-foreground" />
+            )}
           </BubbleContent>
         </Bubble>
       </MessageContent>
     </Message>
-  )
+  );
 }
 
 export function Chat() {
-  const { threadId } = useParams() as { threadId: string }
-  const messages = useMessages(threadId)
-  const last = messages?.at(-1)
+  const { threadId } = useParams() as { threadId: string };
+  const messages = useMessages(threadId);
+  const last = messages?.at(-1);
   // Waiting for the agent to pick the message up: the reply row does not exist yet.
-  const waiting = last?.role === "user" && last.status === "pending"
+  const waiting = last?.role === "user" && last.status === "pending";
 
-  const files = useWorkspaceFiles(threadId)
+  const files = useWorkspaceFiles(threadId);
 
   const conversation = (
     <div className="flex h-full min-h-0 flex-1 flex-col">
@@ -117,7 +136,10 @@ export function Chat() {
           <MessageScrollerViewport>
             <MessageScrollerContent className="mx-auto w-full max-w-2xl gap-6 px-4 py-6">
               {messages?.map((message, index) => (
-                <MessageScrollerItem key={message.id} scrollAnchor={index === messages.length - 1}>
+                <MessageScrollerItem
+                  key={message.id}
+                  scrollAnchor={index === messages.length - 1}
+                >
                   <ChatBubble message={message} />
                 </MessageScrollerItem>
               ))}
@@ -132,12 +154,15 @@ export function Chat() {
         </MessageScroller>
       </MessageScrollerProvider>
       <div className="mx-auto w-full max-w-2xl px-4 pb-4">
-        <Composer autoFocus onSend={(content) => sendMessage(threadId, content)} />
+        <Composer
+          autoFocus
+          onSend={(content) => sendMessage(threadId, content)}
+        />
       </div>
     </div>
-  )
+  );
 
-  if (files.length === 0) return conversation
+  if (files.length === 0) return conversation;
   return (
     <ResizablePanelGroup orientation="horizontal" className="min-h-0 flex-1">
       <ResizablePanel defaultSize="55" minSize="30">
@@ -148,5 +173,5 @@ export function Chat() {
         <Workspace files={files} />
       </ResizablePanel>
     </ResizablePanelGroup>
-  )
+  );
 }
