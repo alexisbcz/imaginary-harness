@@ -4,7 +4,9 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "start": "bun src/main.ts"
+    "dev": "bun --hot src/main.ts",
+    "start": "NODE_ENV=production bun src/main.ts",
+    "test": "bun test"
   },
   "devDependencies": {
     "@types/bun": "latest",
