@@ -18,6 +18,10 @@ How it fits together:
 - The app signs users in with the Supabase UI auth forms and writes to `threads` and `messages`, guarded by RLS.
 - The agent follows new user messages through Realtime. It answers each one with Pi Durable and streams the
   answer back into `messages`, and the app follows it there through Realtime.
+- The agent has a file workspace per thread, stored in `public.files`. The app shows it with
+  [Pierre](https://pierre.computer)'s libraries: `@pierre/trees` for the tree and `@pierre/diffs` for files and
+  their latest change. Code blocks in answers also render through `@pierre/diffs`, with `@pierre/theme` and
+  `@pierre/icons` throughout.
 - `src/pi/postgres-storage.ts` is Pi Durable's storage on Postgres. It passes the package's storage conformance
   suite (`bun test`, with Supabase running). A crash mid-answer resumes on restart.
 - Migrations live in `supabase/migrations` and are applied at startup.
