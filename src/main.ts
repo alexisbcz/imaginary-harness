@@ -3,6 +3,7 @@ import { createModels } from "@earendil-works/pi-ai/models";
 import { anthropicProvider } from "@earendil-works/pi-ai/providers/anthropic";
 import { createRegistry, Harness } from "@earendil-works/pi-durable";
 import { Agent } from "./agent/agent.ts";
+import { createWorkspace } from "./agent/workspace.ts";
 import { config } from "./config.ts";
 import { migrate } from "./db/migrate.ts";
 import { PostgresStorage } from "./pi/postgres-storage.ts";
@@ -16,11 +17,14 @@ for (const file of await migrate(sql)) console.log(`[db] applied ${file}`);
 const models = createModels();
 models.setProvider(anthropicProvider());
 
+const registry = createRegistry();
+registry.install(createWorkspace(sql));
+
 const harness = await Harness.open(
   await PostgresStorage.open(sql, { schema: "pi" }),
   {
     models,
-    registry: createRegistry(),
+    registry,
     onReport: (report) => console.error(`[pi] ${report.kind}:`, report.error),
   },
   context,
