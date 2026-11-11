@@ -9,7 +9,8 @@
     "test": "bun test",
     "forge:org": "bun src/forge/cli.ts",
     "build": "bun scripts/build.ts",
-    "preview": "bun scripts/preview.ts"
+    "preview": "bun scripts/preview.ts",
+    "mail": "bun src/mail/cli.ts"
   },
   "devDependencies": {
     "@types/bun": "latest",
