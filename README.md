@@ -1,8 +1,18 @@
 <p align="center">
-  <img src=".github/assets/banner.png" alt="Richelieu. Describe an app, and Richelieu builds it while you watch, with a live preview, every change in git, and a Postgres database of its own." width="100%">
+  <img src=".github/assets/logo.png" width="88" alt="Richelieu" />
 </p>
 
-# richelieu.ai
+<h2 align="center">Describe an app. Richelieu builds it while you watch.</h2>
+
+<p align="center">
+  <a href="#everything-you-need">Features</a> · <a href="#development">Development</a> · <a href="#the-app-builder">The app builder</a>
+</p>
+
+<p align="center">
+  <img src=".github/assets/banner.png" alt="Richelieu. Describe an app, and Richelieu builds it while you watch, with a live preview, every change in git, and a Postgres database of its own." width="100%" />
+</p>
+
+<br />
 
 A Pi Durable agent on Supabase, with its own git forge. Supabase runs locally from `compose.yml`. Everything the app
 keeps lives in that one Postgres: the agent's durable state (`pi` schema), the forge's repositories (`forge`
@@ -10,6 +20,63 @@ schema), and the app's threads and messages (`public`). The web app talks to Sup
 Realtime.
 
 ![A project in Richelieu, in dark mode: the conversation with the agent on the left, and the recipe book it built running in the live preview on the right.](.github/assets/dashboard-dark.png)
+
+<br />
+
+## Everything you need
+
+<table align="center">
+  <tr>
+    <td width="50%">
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset=".github/assets/features/preview-dark.webp" />
+        <source media="(prefers-color-scheme: light)" srcset=".github/assets/features/preview-light.webp" />
+        <img src=".github/assets/features/preview-light.webp" alt="Watch it run: every change lands in a live preview of the app, running in its own dev server" />
+      </picture>
+    </td>
+    <td width="50%">
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset=".github/assets/features/code-dark.webp" />
+        <source media="(prefers-color-scheme: light)" srcset=".github/assets/features/code-light.webp" />
+        <img src=".github/assets/features/code-light.webp" alt="Change the code by hand: every file the agent writes is yours to edit, and each save is a commit" />
+      </picture>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset=".github/assets/features/history-dark.webp" />
+        <source media="(prefers-color-scheme: light)" srcset=".github/assets/features/history-light.webp" />
+        <img src=".github/assets/features/history-light.webp" alt="Go back to any version: each change is a commit with its diff, and any version can be restored" />
+      </picture>
+    </td>
+    <td width="50%">
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset=".github/assets/features/database-dark.webp" />
+        <source media="(prefers-color-scheme: light)" srcset=".github/assets/features/database-light.webp" />
+        <img src=".github/assets/features/database-light.webp" alt="Find any row: each app gets its own Postgres, searched, filtered and sorted like a spreadsheet" />
+      </picture>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset=".github/assets/features/sql-dark.webp" />
+        <source media="(prefers-color-scheme: light)" srcset=".github/assets/features/sql-light.webp" />
+        <img src=".github/assets/features/sql-light.webp" alt="Ask it in SQL: queries run as the app's own role, with its tables and columns completed" />
+      </picture>
+    </td>
+    <td width="50%">
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset=".github/assets/features/command-dark.webp" />
+        <source media="(prefers-color-scheme: light)" srcset=".github/assets/features/command-light.webp" />
+        <img src=".github/assets/features/command-light.webp" alt="A keystroke away: ⌘K opens a project, starts a new one or changes the theme" />
+      </picture>
+    </td>
+  </tr>
+</table>
+
+<br />
 
 ## Development
 
