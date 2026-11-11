@@ -3,7 +3,7 @@
 // per `commit()` call with one seq per batch. Records are stored as JSON text, losslessly (lone surrogates and
 // `\u0000` survive, which `jsonb` refuses); cast `record::jsonb` to query them.
 
-import type { SQL } from "bun";
+import type { ReservedSQL, SQL } from "bun";
 import type { Context } from "@earendil-works/chord/context";
 import { apply } from "@earendil-works/chord/delta";
 import type { JsonValue } from "@earendil-works/chord/json";
@@ -50,6 +50,29 @@ type Scope = DocumentRecord["scope"];
 export interface PostgresStorageOptions {
   /** The Postgres schema holding Durable's tables, created if missing. Default `pi`. */
   readonly schema?: string;
+  /** How long `open` waits for another process to release the schema. Default 30 s. */
+  readonly lockTimeoutMs?: number;
+}
+
+/**
+ * Takes the schema's writer lock, a session advisory lock, on a connection of its own: Durable allows one writer
+ * per storage, and two processes interleaving commits corrupt documents. Commits go through this connection, so
+ * losing it (and the lock with it) fails them instead of letting them through unguarded.
+ */
+async function lockWriter(sql: SQL, schema: string, timeoutMs: number): Promise<ReservedSQL> {
+  const writer = await sql.reserve();
+  const deadline = Date.now() + timeoutMs;
+  try {
+    while (true) {
+      const [row] = await writer.unsafe(`SELECT pg_try_advisory_lock(hashtext($1)) AS locked`, [`pi-durable-writer:${schema}`]);
+      if (row?.locked) return writer;
+      if (Date.now() >= deadline) throw new Error(`Another process holds the Pi Durable storage in schema ${schema}`);
+      await Bun.sleep(250);
+    }
+  } catch (error) {
+    writer.release();
+    throw error;
+  }
 }
 
 const idOf = <I>(value: unknown) => Number(value) as I;
@@ -676,6 +699,7 @@ export class PostgresStorage implements Storage {
 
   private constructor(
     private readonly sql: SQL,
+    private readonly writer: ReservedSQL,
     private readonly s: string,
     private nextId: number,
     private readonly ownsConnection: boolean,
@@ -687,15 +711,23 @@ export class PostgresStorage implements Storage {
     if (!SCHEMA_NAME.test(schema)) throw new Error(`Invalid Postgres schema name: ${schema}`);
     const owns = typeof sql === "string";
     const db = typeof sql === "string" ? new Bun.SQL(sql) : sql;
+    let writer: ReservedSQL | undefined;
     try {
+      writer = await lockWriter(db, schema, options.lockTimeoutMs ?? 30_000);
       await migrate(db, schema);
       const [metadata] = await db.unsafe(`SELECT next_id FROM ${schema}.metadata WHERE singleton = 1`);
       if (metadata === undefined) throw new Error("Durable Postgres metadata is missing");
-      return new PostgresStorage(db, schema, Number(metadata.next_id), owns);
+      return new PostgresStorage(db, writer, schema, Number(metadata.next_id), owns);
     } catch (error) {
+      if (writer !== undefined) await PostgresStorage.unlock(writer, schema);
       if (owns) await db.close().catch(() => {});
       throw error;
     }
+  }
+
+  private static async unlock(writer: ReservedSQL, schema: string) {
+    await writer.unsafe(`SELECT pg_advisory_unlock(hashtext($1))`, [`pi-durable-writer:${schema}`]).catch(() => {});
+    writer.release();
   }
 
   commit(
@@ -716,7 +748,7 @@ export class PostgresStorage implements Storage {
     const seqs: Seq[] = [];
     let refused: { error: unknown } | undefined;
     let candidateNextId = this.nextId;
-    await this.sql.begin(async (tx) => {
+    await this.writer.begin(async (tx) => {
       const [metadata] = await tx.unsafe(`SELECT next_id, next_seq FROM ${this.s}.metadata WHERE singleton = 1 FOR UPDATE`);
       if (metadata === undefined) throw new Error("Durable Postgres metadata is missing");
       let next = Number(metadata.next_seq);
@@ -1057,6 +1089,7 @@ export class PostgresStorage implements Storage {
         this.readsDrained = resolve;
       });
     }
+    await PostgresStorage.unlock(this.writer, this.s);
     if (this.ownsConnection) await this.sql.close();
   }
 

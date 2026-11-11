@@ -23,3 +23,18 @@ registerStorageConformance({ describe, expect, it } as never, "PostgresStorage",
     await storage.close(BACKGROUND_CONTEXT);
   }
 });
+
+it("lets one process write a schema at a time", async () => {
+  const schema = `pi_test_${process.pid}_lock`;
+  const first = await PostgresStorage.open(sql, { schema });
+  const other = new Bun.SQL(url, { max: 2 });
+  try {
+    await expect(PostgresStorage.open(other, { schema, lockTimeoutMs: 300 })).rejects.toThrow(/Another process holds/);
+    await first.close(BACKGROUND_CONTEXT);
+    const second = await PostgresStorage.open(other, { schema, lockTimeoutMs: 1_000 });
+    await second.close(BACKGROUND_CONTEXT);
+  } finally {
+    await first.close(BACKGROUND_CONTEXT);
+    await other.close();
+  }
+});
