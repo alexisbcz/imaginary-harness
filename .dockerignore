@@ -1,0 +1,4 @@
+# The preview image needs only the app template's package.json and its runtime.
+*
+!templates/app/package.json
+!docker/app

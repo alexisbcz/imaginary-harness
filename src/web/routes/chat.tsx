@@ -1,15 +1,20 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useParams } from "react-router";
+import { IconCodeComments } from "@pierre/icons";
 
 import { Shimmer } from "@/components/ai-elements/shimmer";
-import { Composer } from "@/components/composer";
+import { CodePanel } from "@/components/code-panel";
+import { Composer, type PickedElement } from "@/components/composer";
+import { HistoryPanel } from "@/components/history-panel";
 import { Markdown } from "@/components/markdown";
-import { useWorkspaceFiles, Workspace } from "@/components/workspace";
+import { PreviewPanel } from "@/components/preview-panel";
+import { Steps } from "@/components/steps";
+import { useWorkspaceFiles } from "@/components/workspace";
 import {
-  ResizableHandle,
-  ResizablePanel,
-  ResizablePanelGroup,
-} from "@/components/ui/resizable";
+  Attachment,
+  AttachmentGroup,
+  AttachmentMedia,
+} from "@/components/ui/attachment";
 import { Bubble, BubbleContent } from "@/components/ui/bubble";
 import { Message, MessageContent } from "@/components/ui/message";
 import {
@@ -20,7 +25,18 @@ import {
   MessageScrollerProvider,
   MessageScrollerViewport,
 } from "@/components/ui/message-scroller";
-import { sendMessage, type ChatMessage } from "@/lib/chat";
+import {
+  ResizableHandle,
+  ResizablePanel,
+  ResizablePanelGroup,
+} from "@/components/ui/resizable";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  attachmentUrl,
+  MESSAGE_COLUMNS,
+  sendMessage,
+  type ChatMessage,
+} from "@/lib/chat";
 import { createClient } from "@/lib/supabase/client";
 
 const supabase = createClient();
@@ -45,10 +61,10 @@ function useMessages(threadId: string) {
     const load = async () => {
       const { data } = await supabase
         .from("messages")
-        .select("id, thread_id, role, content, status, error, created_at")
+        .select(MESSAGE_COLUMNS)
         .eq("thread_id", threadId)
         .order("created_at");
-      if (active && data) setMessages(data);
+      if (active && data) setMessages(data as ChatMessage[]);
     };
     const channel = supabase
       .channel(`thread:${threadId}`)
@@ -78,58 +94,109 @@ function useMessages(threadId: string) {
   return messages;
 }
 
+/** The images a message carries, fetched once. */
+function MessageImages({ ids }: { ids: string[] }) {
+  const [urls, setUrls] = useState<string[]>([]);
+  useEffect(() => {
+    let active = true;
+    const created: string[] = [];
+    Promise.all(ids.map((id) => attachmentUrl(id).catch(() => null))).then(
+      (results) => {
+        for (const url of results) if (url) created.push(url);
+        if (active) setUrls(created);
+      },
+    );
+    return () => {
+      active = false;
+      created.forEach((url) => URL.revokeObjectURL(url));
+    };
+  }, [ids]);
+  if (urls.length === 0) return null;
+  return (
+    <AttachmentGroup className="justify-end">
+      {urls.map((url) => (
+        <Attachment key={url} orientation="vertical" size="sm">
+          <AttachmentMedia variant="image">
+            <img src={url} alt="" />
+          </AttachmentMedia>
+        </Attachment>
+      ))}
+    </AttachmentGroup>
+  );
+}
+
 function ChatBubble({ message }: { message: ChatMessage }) {
   if (message.role === "user") {
     return (
       <Message align="end">
-        <MessageContent>
-          <Bubble variant="secondary">
-            <BubbleContent className="whitespace-pre-wrap">
-              {message.content}
-            </BubbleContent>
-          </Bubble>
+        <MessageContent className="items-end gap-2">
+          {message.attachments.length > 0 && (
+            <MessageImages ids={message.attachments} />
+          )}
+          {message.content && (
+            <Bubble variant="secondary">
+              <BubbleContent className="whitespace-pre-wrap">
+                {message.content}
+              </BubbleContent>
+            </Bubble>
+          )}
+          {message.mode === "chat" && (
+            <span className="flex items-center gap-1 text-xs text-muted-foreground">
+              <IconCodeComments className="size-3.5" /> Chat only
+            </span>
+          )}
         </MessageContent>
       </Message>
     );
   }
-  if (message.status === "failed") {
-    return (
-      <Message>
-        <MessageContent>
+  const live = message.status === "streaming";
+  return (
+    <Message>
+      <MessageContent className="w-full gap-3">
+        <Steps steps={message.steps} live={live} />
+        {message.status === "failed" ? (
           <Bubble variant="destructive">
             <BubbleContent>{message.error ?? "No answer"}</BubbleContent>
           </Bubble>
-        </MessageContent>
-      </Message>
-    );
-  }
-  return (
-    <Message>
-      <MessageContent>
-        <Bubble variant="ghost" className="w-full">
-          <BubbleContent className="w-full">
-            {message.content ? (
-              <Markdown streaming={message.status === "streaming"}>
-                {message.content}
-              </Markdown>
-            ) : (
-              <Shimmer>Thinking…</Shimmer>
-            )}
-          </BubbleContent>
-        </Bubble>
+        ) : message.content ? (
+          <Bubble variant="ghost" className="w-full">
+            <BubbleContent className="w-full">
+              <Markdown streaming={live}>{message.content}</Markdown>
+            </BubbleContent>
+          </Bubble>
+        ) : (
+          live &&
+          !message.steps.some((step) => step.status === "running") && (
+            <Shimmer>Thinking…</Shimmer>
+          )
+        )}
       </MessageContent>
     </Message>
   );
 }
 
+/** A project: the conversation that builds it, and the app itself, live, with its code and its history. */
 export function Chat() {
   const { threadId } = useParams() as { threadId: string };
   const messages = useMessages(threadId);
+  const files = useWorkspaceFiles(threadId);
+  const [picked, setPicked] = useState<PickedElement | null>(null);
+  const [tab, setTab] = useState("preview");
+
   const last = messages?.at(-1);
   // Waiting for the agent to pick the message up: the reply row does not exist yet.
   const waiting = last?.role === "user" && last.status === "pending";
+  const busy = waiting || last?.status === "streaming";
+  const revision = files.reduce(
+    (latest, file) => (file.updated_at > latest ? file.updated_at : latest),
+    "",
+  );
 
-  const files = useWorkspaceFiles(threadId);
+  useEffect(() => setPicked(null), [threadId]);
+
+  const onPicked = useCallback((element: PickedElement) => {
+    setPicked(element);
+  }, []);
 
   const conversation = (
     <div className="flex h-full min-h-0 flex-1 flex-col">
@@ -158,21 +225,61 @@ export function Chat() {
       <div className="mx-auto w-full max-w-2xl px-4 pb-4">
         <Composer
           autoFocus
-          onSend={(content) => sendMessage(threadId, content)}
+          placeholder="Ask for a change…"
+          picked={picked}
+          onClearPicked={() => setPicked(null)}
+          onSend={(message) => sendMessage(threadId, message)}
         />
       </div>
     </div>
   );
 
-  if (files.length === 0) return conversation;
   return (
     <ResizablePanelGroup orientation="horizontal" className="min-h-0 flex-1">
-      <ResizablePanel defaultSize="55" minSize="30">
+      <ResizablePanel defaultSize="36" minSize="25">
         {conversation}
       </ResizablePanel>
       <ResizableHandle />
-      <ResizablePanel defaultSize="45" minSize="25">
-        <Workspace files={files} />
+      <ResizablePanel defaultSize="64" minSize="30">
+        <Tabs
+          value={tab}
+          onValueChange={(value) => setTab(String(value))}
+          className="flex h-full min-h-0 flex-col gap-0"
+        >
+          <div className="flex h-11 shrink-0 items-center border-b px-2">
+            <TabsList>
+              <TabsTrigger value="preview">Preview</TabsTrigger>
+              <TabsTrigger value="code">Code</TabsTrigger>
+              <TabsTrigger value="history">History</TabsTrigger>
+            </TabsList>
+          </div>
+          {/* The preview stays mounted, so switching tabs does not reload the app. */}
+          <TabsContent
+            value="preview"
+            keepMounted
+            className="min-h-0 flex-1 data-[hidden]:hidden"
+          >
+            <PreviewPanel
+              threadId={threadId}
+              hasFiles={files.length > 0}
+              busy={busy}
+              onPicked={onPicked}
+              onFix={(errors) =>
+                void sendMessage(threadId, {
+                  content: `The preview shows ${errors.length === 1 ? "an error" : "errors"}. Find the cause and fix ${errors.length === 1 ? "it" : "them"}:\n\n${errors
+                    .map((error) => `- ${error.message}`)
+                    .join("\n")}`,
+                })
+              }
+            />
+          </TabsContent>
+          <TabsContent value="code" className="min-h-0 flex-1">
+            <CodePanel threadId={threadId} files={files} />
+          </TabsContent>
+          <TabsContent value="history" className="min-h-0 flex-1">
+            <HistoryPanel threadId={threadId} revision={revision} />
+          </TabsContent>
+        </Tabs>
       </ResizablePanel>
     </ResizablePanelGroup>
   );

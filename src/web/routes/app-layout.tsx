@@ -31,7 +31,7 @@ import { createClient } from "@/lib/supabase/client";
 
 const supabase = createClient();
 
-/** The signed-in user's threads, newest first, kept current through Realtime. */
+/** The signed-in user's projects, newest first, kept current through Realtime. */
 function useThreads() {
   const [threads, setThreads] = useState<Thread[] | null>(null);
 
@@ -89,14 +89,14 @@ export function AppLayout() {
                 className="font-medium"
               >
                 <IconPencilSquircle />
-                New chat
+                New project
               </SidebarMenuButton>
             </SidebarMenuItem>
           </SidebarMenu>
         </SidebarHeader>
         <SidebarContent>
           <SidebarGroup>
-            <SidebarGroupLabel>Chats</SidebarGroupLabel>
+            <SidebarGroupLabel>Projects</SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
                 {threads === null &&
@@ -115,7 +115,7 @@ export function AppLayout() {
                     </SidebarMenuButton>
                     <SidebarMenuAction
                       showOnHover
-                      aria-label="Delete chat"
+                      aria-label="Delete project"
                       onClick={() => void remove(thread.id)}
                     >
                       <IconTrash />

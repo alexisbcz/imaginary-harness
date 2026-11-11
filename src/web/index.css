@@ -1,4 +1,5 @@
-@import "tailwindcss";
+/* Classes come from the web app only, not from the generated apps' template or the preview runtime. */
+@import "tailwindcss" source(".");
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/figtree";

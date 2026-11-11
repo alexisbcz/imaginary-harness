@@ -11,13 +11,16 @@ import {
   type Harness,
   type JsonObject,
 } from "@earendil-works/pi-durable";
+import type { UserInput } from "@earendil-works/pi-durable";
 import { config } from "../config.ts";
+import type { WorkspaceStore } from "./workspace.ts";
 
 type MessageRow = {
   id: string;
   thread_id: string;
   user_id: string;
   content: string;
+  attachments?: string[];
 };
 
 /** How often a streamed answer is written to its row at most. */
@@ -25,7 +28,7 @@ const STREAM_INTERVAL_MS = 150;
 /** Pending messages are swept this often too, should a Realtime event be missed. */
 const SWEEP_INTERVAL_MS = 30_000;
 
-const INSTRUCTIONS = `You are Richelieu, a helpful assistant. Answer in the user's language. Use Markdown when it helps.`;
+const INSTRUCTIONS = `You are Richelieu, an AI app builder: you turn what the user describes into a working web app, and change it as they ask. Answer in the user's language. Use Markdown when it helps.`;
 
 /** The text parts of an assistant message as pi-ai represents it. */
 function textOf(message: unknown): string {
@@ -50,6 +53,7 @@ export class Agent {
     private readonly sql: SQL,
     private readonly harness: Harness,
     private readonly context: Context,
+    private readonly store?: WorkspaceStore,
   ) {
     this.supabase = createClient(config.supabaseUrl, config.serviceRoleKey, {
       auth: { persistSession: false, autoRefreshToken: false },
@@ -103,7 +107,7 @@ export class Agent {
 
   private async sweep() {
     const rows = await this.sql<MessageRow[]>`
-      SELECT id, thread_id, user_id, content FROM public.messages
+      SELECT id, thread_id, user_id, content, attachments FROM public.messages
       WHERE role = 'user' AND status = 'pending' ORDER BY created_at`;
     for (const row of rows) this.enqueue(row);
   }
@@ -128,6 +132,8 @@ export class Agent {
       .sql`SELECT status FROM public.messages WHERE id = ${message.id}`;
     if (current?.status !== "pending") return;
 
+    // A new project starts from the app template, before the agent sees it.
+    await this.store?.seed({ id: message.thread_id, user_id: message.user_id });
     const conversation = await this.conversationOf(message.thread_id);
     const [reply] = await this.sql<{ id: string }[]>`
       INSERT INTO public.messages (thread_id, user_id, role, status, reply_to)
@@ -138,12 +144,17 @@ export class Agent {
 
     // The message ID is the request ID: after a crash, submitting again finds the same submission.
     const submission = await conversation.submit(
-      { type: "input", content: message.content, requestId: message.id },
+      {
+        type: "input",
+        content: await this.inputOf(message),
+        requestId: message.id,
+      },
       this.context,
     );
     const stopStreaming = await this.stream(conversation, replyId);
     const settled = await submission.wait(this.context).finally(stopStreaming);
 
+    // Steps still marked running when the answer settles were cut off (a restart): close them in the same update.
     if (settled.status === "done" && settled.type === "input") {
       const answer = await conversation.commit(
         (tx) => tx.entry(AssistantEntry, settled.answer),
@@ -151,17 +162,34 @@ export class Agent {
       );
       const text = textOf(answer?.model?.[0]);
       await this.sql.begin(async (tx) => {
-        await tx`UPDATE public.messages SET content = ${text}, status = 'done' WHERE id = ${replyId}`;
+        await tx`UPDATE public.messages SET content = ${text}, status = 'done', steps = COALESCE((SELECT jsonb_agg(CASE WHEN x->>'status' = 'running' THEN x || '{"status":"done"}'::jsonb ELSE x END) FROM jsonb_array_elements(steps) x), '[]'::jsonb) WHERE id = ${replyId}`;
         await tx`UPDATE public.messages SET status = 'done' WHERE id = ${message.id}`;
       });
     } else {
       const reason =
         "reason" in settled ? String(settled.reason) : settled.status;
       await this.sql.begin(async (tx) => {
-        await tx`UPDATE public.messages SET status = 'failed', error = ${reason} WHERE id = ${replyId}`;
+        await tx`UPDATE public.messages SET status = 'failed', error = ${reason}, steps = COALESCE((SELECT jsonb_agg(CASE WHEN x->>'status' = 'running' THEN x || '{"status":"error"}'::jsonb ELSE x END) FROM jsonb_array_elements(steps) x), '[]'::jsonb) WHERE id = ${replyId}`;
         await tx`UPDATE public.messages SET status = 'failed', error = ${reason} WHERE id = ${message.id}`;
       });
     }
+  }
+
+  /** The message as the model reads it: its text, then its images (only the sender's own). */
+  private async inputOf(message: MessageRow): Promise<UserInput> {
+    const ids = message.attachments ?? [];
+    if (ids.length === 0) return message.content;
+    const images = await this.sql<{ mime_type: string; data: Uint8Array }[]>`
+      SELECT mime_type, data FROM public.attachments
+      WHERE id = ANY(${this.sql.array(ids, "uuid")}) AND user_id = ${message.user_id}`;
+    return [
+      { type: "text", text: message.content || "(see the attached images)" },
+      ...images.map((image) => ({
+        type: "image" as const,
+        data: Buffer.from(image.data).toString("base64"),
+        mimeType: image.mime_type,
+      })),
+    ];
   }
 
   /** The thread's Pi conversation, created with the thread's first message. */
