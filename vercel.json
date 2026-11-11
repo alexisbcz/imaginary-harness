@@ -4,12 +4,29 @@
   "buildCommand": "bun run build",
   "outputDirectory": "dist",
   "functions": {
-    "api/forge.ts": { "maxDuration": 60 },
-    "api/agent.ts": { "maxDuration": 300 }
+    "api/forge.ts": {
+      "maxDuration": 60,
+      "includeFiles": "supabase/migrations/**"
+    },
+    "api/agent.ts": {
+      "maxDuration": 300,
+      "includeFiles": "supabase/migrations/**"
+    }
   },
   "rewrites": [
-    { "source": "/forge/:path*", "destination": "/api/forge?__path=:path*" },
-    { "source": "/((?!api/|forge/).*)", "destination": "/index.html" }
+    {
+      "source": "/forge/:path*",
+      "destination": "/api/forge?__path=:path*"
+    },
+    {
+      "source": "/((?!api/|forge/).*)",
+      "destination": "/index.html"
+    }
   ],
-  "crons": [{ "path": "/api/agent", "schedule": "* * * * *" }]
+  "crons": [
+    {
+      "path": "/api/agent",
+      "schedule": "* * * * *"
+    }
+  ]
 }
