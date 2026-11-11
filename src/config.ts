@@ -12,7 +12,16 @@ export const config = {
   databaseUrl:
     Bun.env.DATABASE_URL ??
     "postgres://postgres:postgres@localhost:54322/postgres",
-  supabaseUrl: Bun.env.BUN_PUBLIC_SUPABASE_URL ?? "http://localhost:54321",
+  /** Where the server reaches Supabase: its own address for it when the browser goes through a proxy. */
+  supabaseUrl:
+    Bun.env.SUPABASE_INTERNAL_URL ??
+    Bun.env.BUN_PUBLIC_SUPABASE_URL ??
+    "http://localhost:54321",
+  /**
+   * Forward /auth/v1, /rest/v1, /realtime/v1 and /storage/v1 to SUPABASE_INTERNAL_URL, so the browser reaches
+   * Supabase on the app's origin (BUN_PUBLIC_SUPABASE_URL = PUBLIC_URL): the one-box VPS setup.
+   */
+  supabaseProxy: Bun.env.SUPABASE_PROXY === "true",
   serviceRoleKey:
     Bun.env.SUPABASE_SERVICE_ROLE_KEY ??
     "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJpY2hlbGlldSIsInJvbGUiOiJzZXJ2aWNlX3JvbGUiLCJpYXQiOjE3NjI4MTkyMDAsImV4cCI6NDEwMjQ0NDgwMH0.XC6fU0Bn6yXm28zVgFvQ__a8I8TkQIpidY-HfJQb-PY",

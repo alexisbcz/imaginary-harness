@@ -16,6 +16,7 @@ import { MailStore } from "./mail/store.ts";
 import { challengeResponse } from "./mail/tls/acme.ts";
 import { createBuilderApi } from "./server/builder-api.ts";
 import { createMailApi } from "./server/mail-api.ts";
+import { createSupabaseProxy } from "./server/supabase-proxy.ts";
 import { createServices, FORGE_PATH } from "./server/services.ts";
 import index from "./web/index.html";
 
@@ -119,7 +120,7 @@ async function boot() {
 
 declare global {
   var richelieu: ReturnType<typeof boot> | undefined;
-  var richelieuServer: Bun.Server<undefined> | undefined;
+  var richelieuServer: Bun.Server<any> | undefined;
 }
 
 globalThis.richelieu ??= boot();
@@ -142,6 +143,9 @@ if (config.https && !tls)
     "[web] WEB_HTTPS is set but there is no certificate yet (MAIL_ENABLED and MAIL_TLS=acme issue one)",
   );
 
+// Its WebSocket handler only runs for upgrades its routes start, which exist only with SUPABASE_PROXY.
+const proxy = createSupabaseProxy(config.supabaseUrl);
+
 const server = Bun.serve({
   port: tls ? config.httpsPort : config.port,
   ...(tls ? { tls: { cert: tls.cert, key: tls.key } } : {}),
@@ -152,8 +156,10 @@ const server = Bun.serve({
     ...createBuilderApi({ sql, store, previews, shipping }),
     ...mailApi.api,
     ...mailApi.wellKnown,
+    ...(config.supabaseProxy ? proxy.routes : {}),
     "/*": index,
   },
+  websocket: proxy.websocket,
   development: Bun.env.NODE_ENV !== "production" && {
     hmr: true,
     console: true,
