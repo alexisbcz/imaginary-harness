@@ -29,5 +29,7 @@
     "noUnusedLocals": false,
     "noUnusedParameters": false,
     "noPropertyAccessFromIndexSignature": false
-  }
+  },
+  // The app template and the preview runtime run in their own containers, with their own config.
+  "exclude": ["node_modules", "dist", "templates", "docker"]
 }
