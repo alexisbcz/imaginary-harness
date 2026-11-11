@@ -158,3 +158,18 @@ describe("commits and reads", () => {
     expect(await text(await fork.getFileStream({ path: "src/app.ts", ref: fromDiff.commitSha }))).toBe("const a = 10;\nconst b = 2;\n");
   });
 });
+
+describe("concurrency", () => {
+  test("concurrent commits without an expected head all land", async () => {
+    const repo = await env.storage.createRepo({ id: "concurrent" });
+    await repo.createCommit({ targetBranch: "main", commitMessage: "Base", author }).addFileFromString("base", "base\n").send();
+    const results = await Promise.all(
+      Array.from({ length: 6 }, (_, i) =>
+        repo.createCommit({ targetBranch: "main", commitMessage: `File ${i}`, author }).addFileFromString(`file-${i}.txt`, `${i}\n`).send(),
+      ),
+    );
+    expect(new Set(results.map((r) => r.commitSha)).size).toBe(6);
+    expect((await repo.listFiles()).paths.length).toBe(7);
+    expect((await repo.listCommits({ limit: 100 })).commits.length).toBe(7);
+  });
+});

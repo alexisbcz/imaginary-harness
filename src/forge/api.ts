@@ -152,7 +152,9 @@ async function commitToBranch(
   await repoOf(call);
   if (options.targetBranch.startsWith("refs/")) throw new BadRequest("targetBranch must not include refs/");
   const refName = `${HEADS}${options.targetBranch}`;
-  const current = await call.ctx.repos.ref(org, repo, options.ephemeral, refName);
+  // Without an expected head, a commit lands on whatever the head is: a concurrent commit makes it retry on top.
+  const attempts = options.expectedHeadSha ? 1 : 8;
+  let current: string | undefined;
   const failure = (status: string, message: string, http = 409): RefUpdateResult => ({
     status: http,
     body: {
@@ -160,32 +162,36 @@ async function commitToBranch(
       result: { branch: options.targetBranch, old_sha: current ?? ZERO_OID, new_sha: current ?? ZERO_OID, success: false, status, message },
     },
   });
-  if (options.expectedHeadSha && options.expectedHeadSha !== (current ?? ZERO_OID)) {
-    return failure("precondition_failed", `Branch ${options.targetBranch} is at ${current ?? "nothing"}, not ${options.expectedHeadSha}`);
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    current = await call.ctx.repos.ref(org, repo, options.ephemeral, refName);
+    if (options.expectedHeadSha && options.expectedHeadSha !== (current ?? ZERO_OID)) {
+      return failure("precondition_failed", `Branch ${options.targetBranch} is at ${current ?? "nothing"}, not ${options.expectedHeadSha}`);
+    }
+    let parent = current;
+    if (parent === undefined && options.baseBranch) {
+      parent = (await resolve(call, options.baseBranch, options.ephemeralBase ?? false)).oid;
+    }
+    const parentTree = parent === undefined ? undefined : (await call.store.commit(parent)).tree;
+    const tree = await options.tree(parentTree, parent);
+    const commitOid = call.store.writeCommit({
+      tree,
+      parents: [...(parent ? [parent] : []), ...(options.extraParents ?? [])],
+      author: options.author,
+      committer: options.committer ?? options.author,
+      message: options.message,
+    });
+    const packBytes = await call.store.flush();
+    const moved = await call.ctx.repos.updateRef(call.ctx.sql, org, repo, options.ephemeral, refName, current, commitOid);
+    if (!moved) continue;
+    return {
+      status: 200,
+      body: {
+        ...options.ack({ commit_sha: commitOid, tree_sha: tree, target_branch: options.targetBranch, pack_bytes: packBytes }),
+        result: { branch: options.targetBranch, old_sha: current ?? ZERO_OID, new_sha: commitOid, success: true, status: "ok" },
+      },
+    };
   }
-  let parent = current;
-  if (parent === undefined && options.baseBranch) {
-    parent = (await resolve(call, options.baseBranch, options.ephemeralBase ?? false)).oid;
-  }
-  const parentTree = parent === undefined ? undefined : (await call.store.commit(parent)).tree;
-  const tree = await options.tree(parentTree, parent);
-  const commitOid = call.store.writeCommit({
-    tree,
-    parents: [...(parent ? [parent] : []), ...(options.extraParents ?? [])],
-    author: options.author,
-    committer: options.committer ?? options.author,
-    message: options.message,
-  });
-  const packBytes = await call.store.flush();
-  const moved = await call.ctx.repos.updateRef(call.ctx.sql, org, repo, options.ephemeral, refName, current, commitOid);
-  if (!moved) return failure("conflict", `Branch ${options.targetBranch} moved during the commit; retry`);
-  return {
-    status: 200,
-    body: {
-      ...options.ack({ commit_sha: commitOid, tree_sha: tree, target_branch: options.targetBranch, pack_bytes: packBytes }),
-      result: { branch: options.targetBranch, old_sha: current ?? ZERO_OID, new_sha: commitOid, success: true, status: "ok" },
-    },
-  };
+  return failure("conflict", `Branch ${options.targetBranch} kept moving during the commit; retry`);
 }
 
 /** The NDJSON body of commit-pack and diff-commit: a metadata line, then base64 chunks. */
