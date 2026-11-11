@@ -9,6 +9,7 @@ import { MultiFileDiff } from "@pierre/diffs/react";
 import { SegmentedControl } from "twenty-ui/components/input";
 import { Button } from "twenty-ui/primitives/input";
 import { IconCode, IconFileDiff } from "@tabler/icons-react";
+import pierreDark from "@pierre/theme/pierre-dark";
 import pierreLight from "@pierre/theme/pierre-light";
 import { themeToTreeStyles } from "@pierre/trees";
 import {
@@ -18,9 +19,13 @@ import {
 } from "@pierre/trees/react";
 
 import type { WorkspaceFile } from "@/components/workspace";
+import { useColorScheme } from "@/hooks/use-color-scheme";
 import { api } from "@/lib/api";
 
-const treeStyles = themeToTreeStyles(pierreLight);
+const treeStyles = {
+  light: themeToTreeStyles(pierreLight),
+  dark: themeToTreeStyles(pierreDark),
+};
 
 function languageOf(path: string) {
   if (/\.(tsx?|jsx?|mjs|cjs)$/.test(path))
@@ -40,6 +45,7 @@ export function CodePanel({
   threadId: string;
   files: WorkspaceFile[];
 }) {
+  const scheme = useColorScheme();
   const paths = useMemo(() => files.map((file) => file.path), [files]);
   const { model } = useFileTree({ paths, flattenEmptyDirectories: true });
   const selection = useFileTreeSelection(model);
@@ -91,7 +97,10 @@ export function CodePanel({
   return (
     <div className="flex h-full min-h-0">
       <div className="w-56 shrink-0 border-r">
-        <FileTree model={model} style={{ ...treeStyles, height: "100%" }} />
+        <FileTree
+          model={model}
+          style={{ ...treeStyles[scheme], height: "100%" }}
+        />
       </div>
       {selected ? (
         <div className="flex min-w-0 flex-1 flex-col">
@@ -156,7 +165,7 @@ export function CodePanel({
                 oldFile={{ name: selected.path, contents: selected.previous! }}
                 newFile={{ name: selected.path, contents: selected.contents }}
                 options={{
-                  themeType: "light",
+                  themeType: scheme,
                   overflow: "scroll",
                   diffStyle: "unified",
                 }}
@@ -170,6 +179,7 @@ export function CodePanel({
                 height="100%"
                 className="h-full"
                 basicSetup={{ foldGutter: false }}
+                theme={scheme}
               />
             )}
           </div>

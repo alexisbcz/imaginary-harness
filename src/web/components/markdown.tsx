@@ -9,7 +9,8 @@ import { File, PatchDiff, type SupportedLanguages } from "@pierre/diffs/react";
 import { cn } from "cn";
 
 const CODE_OPTIONS = {
-  themeType: "light",
+  // The app follows the system appearance; so do the diffs.
+  themeType: "system",
   disableFileHeader: true,
   overflow: "scroll",
 } as const;

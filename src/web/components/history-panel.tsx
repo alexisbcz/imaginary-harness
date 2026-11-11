@@ -187,7 +187,7 @@ export function HistoryPanel({
                 <PatchDiff
                   patch={patchOf(file)}
                   options={{
-                    themeType: "light",
+                    themeType: "system",
                     overflow: "scroll",
                     diffStyle: "unified",
                   }}

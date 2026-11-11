@@ -149,3 +149,12 @@
     @apply font-sans;
   }
 }
+
+/* The code editor sits on the page's card, in light and dark. */
+.cm-editor,
+.cm-editor .cm-gutters {
+  background-color: transparent !important;
+}
+.cm-editor .cm-gutters {
+  border-right-color: var(--t-border-color-light) !important;
+}
