@@ -1,37 +1,120 @@
 import { useCallback, useEffect, useState } from "react";
-import { cn } from "cn";
-
+import { IconDatabaseFilled } from "@tabler/icons-react";
+import { SegmentedControl } from "twenty-ui/components/input";
 import { Loader } from "twenty-ui/primitives/feedback";
 import { Button } from "twenty-ui/primitives/input";
-import { IconDatabase, IconTable } from "twenty-ui/icon";
+import { ListItem } from "twenty-ui/primitives/navigation";
+import { LightIconButton } from "twenty-ui/components/input";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+  IconArrowLeft,
+  IconColumns,
+  IconDatabase,
+  IconKey,
+  IconLayoutList,
+  IconLink,
+  IconTable,
+  IconTerminal2,
+} from "twenty-ui/icon";
+
+import { DataGrid, TypeTag, type GridColumn } from "@/components/data-grid";
+import { IconTile } from "@/components/icon-tile";
+import { SqlEditor } from "@/components/sql-editor";
+import { TableBrowser, type Filter } from "@/components/table-browser";
 import { api } from "@/lib/api";
 
-type Database = {
-  schema: string;
-  tables: {
-    name: string;
-    columns: { name: string; type: string }[];
-    rows: Record<string, unknown>[];
-    count: number;
-  }[];
+type Column = GridColumn & {
+  nullable: boolean;
+  default: string | null;
 };
 
-function cell(value: unknown) {
-  if (value === null || value === undefined)
-    return <span className="text-muted-foreground">null</span>;
-  if (typeof value === "object") return JSON.stringify(value);
-  return String(value);
+type Table = {
+  name: string;
+  columns: Column[];
+  rows: unknown[][];
+  count: number;
+};
+
+type Database = { schema: string; tables: Table[] };
+
+type View =
+  | {
+      kind: "table";
+      name: string | null;
+      tab: "data" | "structure";
+      /** Filters to open the table with, such as the row a foreign key points to. */
+      filters?: Filter[];
+      key?: number;
+    }
+  | { kind: "sql"; initialText?: string; key: number };
+
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="px-1 pt-4 pb-1 text-[11px] font-semibold text-t-text-light">
+      {children}
+    </div>
+  );
 }
 
-/** The app's database: its tables, their columns and first rows. The agent creates and changes them. */
+/** Each column with its type, whether it may be empty, its default and its keys. */
+function Structure({ table }: { table: Table }) {
+  return (
+    <table className="w-full border-separate border-spacing-0 text-[13px]">
+      <thead>
+        <tr className="text-left text-[12px] text-t-text-tertiary">
+          {["Column", "Type", "Empty", "Default", "Keys"].map((label) => (
+            <th
+              key={label}
+              className="sticky top-0 h-9 border-b border-t-border-light bg-t-secondary px-3 font-medium"
+            >
+              {label}
+            </th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {table.columns.map((column) => (
+          <tr key={column.name} className="hover:bg-t-hover">
+            <td className="h-10 border-b border-t-border-light px-3 font-medium text-t-text">
+              {column.name}
+            </td>
+            <td className="border-b border-t-border-light px-3">
+              <TypeTag type={column.type} />
+            </td>
+            <td className="border-b border-t-border-light px-3 text-t-text-secondary">
+              {column.nullable ? (
+                "Allowed"
+              ) : (
+                <span className="text-t-text-tertiary">Required</span>
+              )}
+            </td>
+            <td className="max-w-72 truncate border-b border-t-border-light px-3 font-mono text-[12px] text-t-text-tertiary">
+              {column.default ?? <span className="text-t-text-light">—</span>}
+            </td>
+            <td className="border-b border-t-border-light px-3">
+              <span className="flex items-center gap-1.5">
+                {column.primary && (
+                  <span className="inline-flex items-center gap-1 rounded-sm bg-[var(--t-color-amber3)] px-1.5 py-0.5 text-[11px] font-medium text-[var(--t-color-amber11)]">
+                    <IconKey size={12} /> Primary
+                  </span>
+                )}
+                {column.references && (
+                  <span className="inline-flex items-center gap-1 rounded-sm bg-[var(--t-color-sky3)] px-1.5 py-0.5 text-[11px] font-medium text-[var(--t-color-sky11)]">
+                    <IconLink size={12} /> {column.references}
+                  </span>
+                )}
+              </span>
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+/**
+ * The app's database: its tables with their first rows and their structure, and a SQL editor to query it. The agent
+ * creates and changes the tables; the user can too, from the editor.
+ */
 export function DatabasePanel({
   threadId,
   revision,
@@ -42,7 +125,13 @@ export function DatabasePanel({
   const [database, setDatabase] = useState<Database | null | undefined>(
     undefined,
   );
-  const [selected, setSelected] = useState<string | null>(null);
+  const [view, setView] = useState<View>({
+    kind: "table",
+    name: null,
+    tab: "data",
+  });
+  // Where following foreign keys came from, to go back.
+  const [trail, setTrail] = useState<View[]>([]);
   const [enabling, setEnabling] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -73,6 +162,34 @@ export function DatabasePanel({
     }
   }
 
+  function query(text?: string) {
+    setTrail([]);
+    setView({ kind: "sql", initialText: text, key: Date.now() });
+  }
+
+  function open(next: View) {
+    setTrail([]);
+    setView(next);
+  }
+
+  function follow(table: string, filter: Filter) {
+    setTrail((current) => [...current, view]);
+    setView({
+      kind: "table",
+      name: table,
+      tab: "data",
+      filters: [filter],
+      key: Date.now(),
+    });
+  }
+
+  function back() {
+    const previous = trail.at(-1);
+    if (!previous) return;
+    setTrail(trail.slice(0, -1));
+    setView(previous);
+  }
+
   if (database === undefined)
     return (
       <div className="flex h-full items-center justify-center">
@@ -83,9 +200,9 @@ export function DatabasePanel({
   if (database === null)
     return (
       <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
-        <span className="flex size-10 items-center justify-center rounded-md border border-t-border bg-t-primary text-t-text-tertiary shadow-[0_2px_4px_rgb(0_0_0/0.04)]">
-          <IconDatabase size={20} />
-        </span>
+        <IconTile size="lg" color="green">
+          <IconDatabaseFilled />
+        </IconTile>
         <div className="flex max-w-sm flex-col gap-1">
           <p className="font-semibold text-t-text">No database yet</p>
           <p className="leading-[1.45] text-t-text-tertiary">
@@ -108,67 +225,161 @@ export function DatabasePanel({
       </div>
     );
 
+  const previous = trail.at(-1);
+  const previousName = previous?.kind === "table" ? previous.name : null;
   const table =
-    database.tables.find((t) => t.name === selected) ?? database.tables[0];
+    view.kind === "table"
+      ? (database.tables.find((t) => t.name === view.name) ??
+        database.tables[0])
+      : undefined;
+
   return (
     <div className="flex h-full min-h-0">
-      <div className="flex w-56 shrink-0 flex-col gap-px overflow-y-auto border-r border-t-border-light p-2">
-        <p className="px-2 pt-1 pb-1.5 font-mono text-[11px] text-t-text-light">
-          {database.schema.slice(0, 12)}…
+      <nav
+        aria-label="Database"
+        className="flex w-56 shrink-0 flex-col overflow-y-auto border-r border-t-border-light p-2"
+      >
+        <ListItem
+          render={<button type="button" />}
+          startIcon={
+            <IconTile color="purple">
+              <IconTerminal2 />
+            </IconTile>
+          }
+          selected={view.kind === "sql"}
+          onClick={() => view.kind !== "sql" && query()}
+        >
+          SQL editor
+        </ListItem>
+        <SectionLabel>Tables</SectionLabel>
+        <div className="flex flex-col gap-px">
+          {database.tables.length === 0 && (
+            <p className="px-1 py-1 leading-[1.45] text-t-text-tertiary">
+              No tables yet. Ask Richelieu to create some, or write a{" "}
+              <code className="font-mono text-[12px]">create table</code> in the
+              SQL editor.
+            </p>
+          )}
+          {database.tables.map((t) => (
+            <ListItem
+              key={t.name}
+              render={<button type="button" />}
+              startIcon={
+                <IconTile color="green">
+                  <IconTable />
+                </IconTile>
+              }
+              selected={view.kind === "table" && t.name === table?.name}
+              description={t.count.toLocaleString()}
+              descriptionPlacement="end"
+              onClick={() =>
+                open({
+                  kind: "table",
+                  name: t.name,
+                  tab: view.kind === "table" ? view.tab : "data",
+                  key: Date.now(),
+                })
+              }
+            >
+              {t.name}
+            </ListItem>
+          ))}
+        </div>
+        <p
+          className="mt-auto truncate px-1 pt-3 font-mono text-[11px] text-t-text-light"
+          title={database.schema}
+        >
+          {database.schema}
         </p>
-        {database.tables.length === 0 && (
-          <p className="px-2 py-1 text-t-text-tertiary">
-            No tables yet. Ask Richelieu to create some.
-          </p>
-        )}
-        {database.tables.map((t) => (
-          <button
-            key={t.name}
-            type="button"
-            onClick={() => setSelected(t.name)}
-            className={cn(
-              "flex h-7 items-center gap-2 rounded-sm px-2 text-left text-t-text-secondary outline-none hover:bg-t-hover focus-visible:ring-2 focus-visible:ring-ring",
-              t.name === table?.name && "bg-t-press text-t-text",
+      </nav>
+
+      <div className="flex min-w-0 flex-1 flex-col">
+        {view.kind === "sql" ? (
+          <SqlEditor
+            key={view.key}
+            threadId={threadId}
+            tables={database.tables}
+            initialText={view.initialText}
+            onChanged={load}
+          />
+        ) : table ? (
+          <>
+            <div className="flex h-10 shrink-0 items-center gap-2 border-b border-t-border-light px-3">
+              {trail.length > 0 ? (
+                <LightIconButton
+                  aria-label="Back"
+                  tooltip={`Back to ${previousName ?? "the previous table"}`}
+                  size="sm"
+                  onClick={back}
+                >
+                  <IconArrowLeft size={16} />
+                </LightIconButton>
+              ) : (
+                <IconTable
+                  size={16}
+                  className="shrink-0 text-t-text-tertiary"
+                />
+              )}
+              <span className="truncate font-medium text-t-text">
+                {table.name}
+              </span>
+              <span className="shrink-0 text-t-text-tertiary">
+                {table.count.toLocaleString()}{" "}
+                {table.count === 1 ? "row" : "rows"} · {table.columns.length}{" "}
+                columns
+              </span>
+              <span className="flex-1" />
+              <SegmentedControl<"data" | "structure">
+                aria-label="View"
+                size="sm"
+                value={view.tab}
+                onValueChange={(tab) => setView({ ...view, tab })}
+                options={[
+                  {
+                    value: "data",
+                    startIcon: <IconLayoutList size={14} />,
+                    label: "Data",
+                  },
+                  {
+                    value: "structure",
+                    startIcon: <IconColumns size={14} />,
+                    label: "Structure",
+                  },
+                ]}
+              />
+            </div>
+            {/* Kept mounted under Structure, so its search, filters and page are there on coming back. */}
+            <div className={view.tab === "data" ? "min-h-0 flex-1" : "hidden"}>
+              <TableBrowser
+                key={`${table.name}:${view.key ?? 0}`}
+                threadId={threadId}
+                table={table.name}
+                columns={table.columns}
+                total={table.count}
+                revision={revision}
+                initialFilters={view.filters}
+                onFollow={follow}
+                onQuery={query}
+              />
+            </div>
+            {view.tab === "structure" && (
+              <div className="min-h-0 flex-1 overflow-auto">
+                <Structure table={table} />
+              </div>
             )}
-          >
-            <IconTable size={14} className="shrink-0 text-t-text-tertiary" />
-            <span className="min-w-0 flex-1 truncate">{t.name}</span>
-            <span className="text-[12px] text-t-text-light tabular-nums">
-              {t.count}
-            </span>
-          </button>
-        ))}
-      </div>
-      <div className="min-w-0 flex-1 overflow-auto">
-        {table && (
-          <Table className="text-xs">
-            <TableHeader>
-              <TableRow>
-                {table.columns.map((column) => (
-                  <TableHead key={column.name} className="whitespace-nowrap">
-                    {column.name}{" "}
-                    <span className="font-normal text-muted-foreground">
-                      {column.type}
-                    </span>
-                  </TableHead>
-                ))}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {table.rows.map((row, index) => (
-                <TableRow key={index}>
-                  {table.columns.map((column) => (
-                    <TableCell
-                      key={column.name}
-                      className="max-w-64 truncate font-mono"
-                    >
-                      {cell(row[column.name])}
-                    </TableCell>
-                  ))}
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+          </>
+        ) : (
+          <div className="flex flex-1 flex-col items-center justify-center gap-3 text-center text-t-text-tertiary">
+            <p>This database has no tables yet.</p>
+            <Button
+              size="sm"
+              variant="outline"
+              startIcon={<IconTerminal2 size={14} />}
+              onClick={() => query()}
+            >
+              Open the SQL editor
+            </Button>
+          </div>
         )}
       </div>
     </div>

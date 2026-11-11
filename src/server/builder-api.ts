@@ -5,7 +5,7 @@
 import type { SQL } from "bun";
 import { createClient } from "@supabase/supabase-js";
 import type { Previews } from "../builder/previews.ts";
-import type { Shipping } from "../builder/shipping.ts";
+import type { BrowseRequest, Shipping } from "../builder/shipping.ts";
 import type { WorkspaceStore } from "../agent/workspace.ts";
 import { config } from "../config.ts";
 
@@ -196,6 +196,24 @@ export function createBuilderApi({
         return {
           schema: await need(shipping, "Databases").enableDatabase(thread),
         };
+      }),
+    },
+    "/api/projects/:id/database/browse": {
+      POST: handle(async (request) => {
+        const thread = await project(request);
+        const body = (await request.json()) as BrowseRequest;
+        if (typeof body?.table !== "string")
+          throw new HttpError(400, "Name the table to browse");
+        return need(shipping, "Databases").browseTable(thread.id, body);
+      }),
+    },
+    "/api/projects/:id/database/query": {
+      POST: handle(async (request) => {
+        const thread = await project(request);
+        const { sql: text } = (await request.json()) as { sql?: unknown };
+        if (typeof text !== "string")
+          throw new HttpError(400, "Send the query as `sql`");
+        return need(shipping, "Databases").querySql(thread.id, text);
       }),
     },
     "/api/projects/:id/clone": {

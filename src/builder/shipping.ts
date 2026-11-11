@@ -11,6 +11,110 @@ import type { Thread, WorkspaceStore } from "../agent/workspace.ts";
 const BUILD_DIR = "/tmp/richelieu-build";
 const CLONE_TTL_SECONDS = 60 * 60;
 const MAX_ROWS = 50;
+/** Rows a query typed in the Database tab sends back; the rest are counted, not sent. */
+const QUERY_ROWS = 500;
+const MAX_QUERY_LENGTH = 100_000;
+
+/** A column of the app's database, as the Database tab shows it. */
+export type DatabaseColumn = {
+  name: string;
+  /** Postgres's short name for the type, such as `int4`, `timestamptz` or `text[]`. */
+  type: string;
+  nullable: boolean;
+  default: string | null;
+  primary: boolean;
+  /** The table a foreign key points to, when it is one of the app's own. */
+  references: string | null;
+  /** The column of that table it points to. */
+  referencesColumn: string | null;
+};
+
+/** What a query typed in the Database tab gave back: the last statement's rows, or Postgres's error. */
+export type QueryResult =
+  | {
+      ok: true;
+      command: string | null;
+      /** Rows returned, or written when the statement returns none. */
+      count: number;
+      statements: number;
+      /** `type` is null when the server does not describe its columns: the client guesses from the values. */
+      columns: { name: string; type: string | null }[];
+      rows: unknown[][];
+      truncated: boolean;
+      durationMs: number;
+    }
+  | {
+      ok: false;
+      message: string;
+      detail: string | null;
+      hint: string | null;
+      /** Where in the text the error is, from 1, when Postgres says. */
+      position: number | null;
+      durationMs: number;
+    };
+
+export const FILTER_OPERATORS = [
+  "=",
+  "!=",
+  ">",
+  ">=",
+  "<",
+  "<=",
+  "contains",
+  "not contains",
+  "starts with",
+  "ends with",
+  "in",
+  "is null",
+  "is not null",
+] as const;
+
+export type BrowseFilter = {
+  column: string;
+  operator: (typeof FILTER_OPERATORS)[number];
+  value?: string;
+};
+
+/** What the Database tab asks for when it pages through a table. */
+export type BrowseRequest = {
+  table: string;
+  /** Matches any column whose text contains it, ignoring case. */
+  search?: string;
+  filters?: BrowseFilter[];
+  sort?: { column: string; direction: "asc" | "desc" } | null;
+  limit?: number;
+  offset?: number;
+};
+
+export type BrowseResult =
+  | { ok: true; rows: unknown[][]; count: number; durationMs: number }
+  | { ok: false; message: string };
+
+const BROWSE_MAX_LIMIT = 500;
+
+/** `"name"`, with any quote in it doubled. */
+function ident(name: string) {
+  return `"${name.replace(/"/g, '""')}"`;
+}
+
+/** Text for LIKE that matches itself: `%`, `_` and `\` lose their meaning. */
+function likeLiteral(text: string) {
+  return text.replace(/[\\%_]/g, (c) => `\\${c}`);
+}
+
+/** `_int4` is how Postgres names an array of `int4`. */
+function shortType(name: string) {
+  return name.startsWith("_") ? `${name.slice(1)}[]` : name;
+}
+
+/** Values JSON can carry as they read: bytes as hex, big integers as strings. */
+function plain(value: unknown): unknown {
+  if (typeof value === "bigint") return value.toString();
+  if (value instanceof Uint8Array)
+    return `\\x${Buffer.from(value).toString("hex")}`;
+  if (Array.isArray(value)) return value.map(plain);
+  return value;
+}
 
 const CONTENT_TYPES: Record<string, string> = {
   html: "text/html; charset=utf-8",
@@ -328,6 +432,232 @@ export function createShipping({
     }
   }
 
+  /** Runs SQL typed in the Database tab as the app's role, in one transaction, and describes what came back. */
+  async function querySql(
+    threadId: string,
+    text: string,
+  ): Promise<QueryResult> {
+    const database = await databaseOf(threadId);
+    if (!database)
+      throw new Error("This project has no database yet: enable it first");
+    if (!text.trim()) throw new Error("Write a query first");
+    if (text.length > MAX_QUERY_LENGTH)
+      throw new Error("This query is too long to run here");
+    const connection = connect(database);
+    const started = performance.now();
+    try {
+      // Kept from inside the transaction: what `begin` resolves to is a copy, without the result's metadata.
+      let results: unknown[] = [];
+      await connection.begin(async (tx) => {
+        results = await tx.unsafe(text);
+      });
+      const durationMs = Math.round(performance.now() - started);
+      // Several statements give one result each: the last one is the answer.
+      const parts = (
+        Array.isArray(results[0]) ? results : [results]
+      ) as (Record<string, unknown>[] & {
+        command?: string | null;
+        count?: number;
+        columns?: { name: string; type: number }[] | null;
+      })[];
+      const last = parts.at(-1)!;
+      if (parts.some((part) => part.command !== "SELECT"))
+        await sql`NOTIFY pgrst, 'reload schema'`;
+
+      // Postgres describes the columns, with their types, also when there are no rows. Bun before 1.4.4 does not
+      // pass that on: the names then come from the first row.
+      let columns: { name: string; type: string | null }[];
+      if (last.columns?.length) {
+        const oids = [...new Set(last.columns.map((column) => column.type))];
+        const types = await connection<{ oid: number; typname: string }[]>`
+          SELECT oid::int AS oid, typname FROM pg_catalog.pg_type WHERE oid IN ${connection(oids)}`;
+        const names = new Map(types.map((t) => [t.oid, shortType(t.typname)]));
+        columns = last.columns.map((column) => ({
+          name: column.name,
+          type: names.get(column.type) ?? null,
+        }));
+      } else {
+        columns = Object.keys(last[0] ?? {}).map((name) => ({
+          name,
+          type: null,
+        }));
+      }
+      return {
+        ok: true,
+        command: last.command ?? null,
+        count: last.count ?? last.length,
+        statements: parts.length,
+        columns,
+        rows: last
+          .slice(0, QUERY_ROWS)
+          .map((row) => columns.map((column) => plain(row[column.name]))),
+        truncated: last.length > QUERY_ROWS,
+        durationMs,
+      };
+    } catch (error) {
+      const durationMs = Math.round(performance.now() - started);
+      const pg = error as {
+        message?: string;
+        detail?: string;
+        hint?: string;
+        position?: string | number;
+      };
+      return {
+        ok: false,
+        message: pg.message ?? String(error),
+        detail: pg.detail || null,
+        hint: pg.hint || null,
+        position: pg.position ? Number(pg.position) : null,
+        durationMs,
+      };
+    } finally {
+      await connection.close();
+    }
+  }
+
+  /**
+   * A page of one of the app's tables, searched, filtered and sorted in Postgres. Table and column names are checked
+   * against the schema and quoted; every value the user typed is a parameter.
+   */
+  async function browseTable(
+    threadId: string,
+    request: BrowseRequest,
+  ): Promise<BrowseResult> {
+    const database = await databaseOf(threadId);
+    if (!database)
+      throw new Error("This project has no database yet: enable it first");
+    const connection = connect(database);
+    const started = performance.now();
+    try {
+      const columns = (
+        await connection<{ name: string }[]>`
+          SELECT column_name AS name FROM information_schema.columns
+          WHERE table_schema = ${database.schema_name} AND table_name = ${request.table}
+          ORDER BY ordinal_position`
+      ).map((c) => c.name);
+      if (columns.length === 0)
+        return { ok: false, message: `There is no table ${request.table}` };
+      const known = new Set(columns);
+
+      const params: unknown[] = [];
+      const param = (value: unknown) => {
+        params.push(value);
+        return `$${params.length}`;
+      };
+      const where: string[] = [];
+
+      const search = request.search?.trim();
+      if (search) {
+        const p = param(`%${likeLiteral(search)}%`);
+        where.push(
+          `(${columns.map((c) => `${ident(c)}::text ILIKE ${p}`).join(" OR ")})`,
+        );
+      }
+
+      for (const filter of request.filters ?? []) {
+        if (!known.has(filter.column))
+          return { ok: false, message: `There is no column ${filter.column}` };
+        const column = ident(filter.column);
+        const value = filter.value ?? "";
+        switch (filter.operator) {
+          case "=":
+          case "!=":
+          case ">":
+          case ">=":
+          case "<":
+          case "<=":
+            where.push(
+              `${column} ${filter.operator === "!=" ? "IS DISTINCT FROM" : filter.operator} ${param(value)}`,
+            );
+            break;
+          case "contains":
+            where.push(
+              `${column}::text ILIKE ${param(`%${likeLiteral(value)}%`)}`,
+            );
+            break;
+          case "not contains":
+            where.push(
+              `(${column} IS NULL OR ${column}::text NOT ILIKE ${param(`%${likeLiteral(value)}%`)})`,
+            );
+            break;
+          case "starts with":
+            where.push(
+              `${column}::text ILIKE ${param(`${likeLiteral(value)}%`)}`,
+            );
+            break;
+          case "ends with":
+            where.push(
+              `${column}::text ILIKE ${param(`%${likeLiteral(value)}`)}`,
+            );
+            break;
+          case "in": {
+            const items = value
+              .split(",")
+              .map((item) => item.trim())
+              .filter(Boolean);
+            where.push(
+              items.length
+                ? `${column} IN (${items.map(param).join(", ")})`
+                : "false",
+            );
+            break;
+          }
+          case "is null":
+            where.push(`${column} IS NULL`);
+            break;
+          case "is not null":
+            where.push(`${column} IS NOT NULL`);
+            break;
+          default:
+            return { ok: false, message: "Unknown filter" };
+        }
+      }
+
+      const from = `${ident(database.schema_name)}.${ident(request.table)}`;
+      const condition = where.length ? ` WHERE ${where.join(" AND ")}` : "";
+      let order = "";
+      if (request.sort) {
+        if (!known.has(request.sort.column))
+          return {
+            ok: false,
+            message: `There is no column ${request.sort.column}`,
+          };
+        order = ` ORDER BY ${ident(request.sort.column)} ${request.sort.direction === "desc" ? "DESC NULLS LAST" : "ASC NULLS FIRST"}`;
+      }
+      const limit = Math.min(
+        Math.max(1, Math.floor(request.limit ?? 100)),
+        BROWSE_MAX_LIMIT,
+      );
+      const offset = Math.max(0, Math.floor(request.offset ?? 0));
+
+      const [rows, [{ count }]] = await Promise.all([
+        connection.unsafe(
+          `SELECT * FROM ${from}${condition}${order} LIMIT ${limit} OFFSET ${offset}`,
+          params,
+        ),
+        connection.unsafe(
+          `SELECT count(*)::int AS count FROM ${from}${condition}`,
+          params,
+        ),
+      ]);
+      return {
+        ok: true,
+        rows: [...rows].map((row: Record<string, unknown>) =>
+          columns.map((column) => plain(row[column])),
+        ),
+        count,
+        durationMs: Math.round(performance.now() - started),
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        message: error instanceof Error ? error.message : String(error),
+      };
+    } finally {
+      await connection.close();
+    }
+  }
+
   /** The app's tables, their columns and first rows, for the Database tab. */
   async function inspectDatabase(threadId: string) {
     const database = await databaseOf(threadId);
@@ -335,26 +665,65 @@ export function createShipping({
     const connection = connect(database);
     try {
       const columns = await connection<
-        { table_name: string; column_name: string; data_type: string }[]
+        ({ table_name: string; udt_name: string } & Omit<
+          DatabaseColumn,
+          "type"
+        >)[]
       >`
-        SELECT table_name, column_name, data_type FROM information_schema.columns
-        WHERE table_schema = ${database.schema_name} ORDER BY table_name, ordinal_position`;
-      const tables = new Map<string, { name: string; type: string }[]>();
-      for (const c of columns) {
-        if (!tables.has(c.table_name)) tables.set(c.table_name, []);
-        tables
-          .get(c.table_name)!
-          .push({ name: c.column_name, type: c.data_type });
+        SELECT c.table_name, c.column_name AS name, c.udt_name, c.is_nullable = 'YES' AS nullable,
+          c.column_default AS default,
+          EXISTS (
+            SELECT 1 FROM information_schema.table_constraints tc
+            JOIN information_schema.key_column_usage k
+              ON k.constraint_schema = tc.constraint_schema AND k.constraint_name = tc.constraint_name
+            WHERE tc.constraint_type = 'PRIMARY KEY' AND tc.table_schema = c.table_schema
+              AND tc.table_name = c.table_name AND k.column_name = c.column_name
+          ) AS primary,
+          (
+            SELECT u.table_name FROM information_schema.table_constraints tc
+            JOIN information_schema.key_column_usage k
+              ON k.constraint_schema = tc.constraint_schema AND k.constraint_name = tc.constraint_name
+            JOIN information_schema.constraint_column_usage u
+              ON u.constraint_schema = tc.constraint_schema AND u.constraint_name = tc.constraint_name
+            WHERE tc.constraint_type = 'FOREIGN KEY' AND tc.table_schema = c.table_schema
+              AND tc.table_name = c.table_name AND k.column_name = c.column_name
+            LIMIT 1
+          ) AS references,
+          (
+            SELECT u.column_name FROM information_schema.table_constraints tc
+            JOIN information_schema.key_column_usage k
+              ON k.constraint_schema = tc.constraint_schema AND k.constraint_name = tc.constraint_name
+            JOIN information_schema.constraint_column_usage u
+              ON u.constraint_schema = tc.constraint_schema AND u.constraint_name = tc.constraint_name
+            WHERE tc.constraint_type = 'FOREIGN KEY' AND tc.table_schema = c.table_schema
+              AND tc.table_name = c.table_name AND k.column_name = c.column_name
+            LIMIT 1
+          ) AS "referencesColumn"
+        FROM information_schema.columns c
+        WHERE c.table_schema = ${database.schema_name}
+        ORDER BY c.table_name, c.ordinal_position`;
+      const tables = new Map<string, DatabaseColumn[]>();
+      for (const { table_name, udt_name, ...column } of columns) {
+        if (!tables.has(table_name)) tables.set(table_name, []);
+        tables.get(table_name)!.push({ ...column, type: shortType(udt_name) });
       }
       const result = [];
       for (const [name, cols] of tables) {
+        const quoted = `"${database.schema_name}"."${name.replace(/"/g, '""')}"`;
         const rows = await connection.unsafe(
-          `SELECT * FROM "${database.schema_name}"."${name.replace(/"/g, '""')}" LIMIT ${MAX_ROWS}`,
+          `SELECT * FROM ${quoted} LIMIT ${MAX_ROWS}`,
         );
         const [{ count }] = await connection.unsafe(
-          `SELECT count(*)::int AS count FROM "${database.schema_name}"."${name.replace(/"/g, '""')}"`,
+          `SELECT count(*)::int AS count FROM ${quoted}`,
         );
-        result.push({ name, columns: cols, rows: [...rows], count });
+        result.push({
+          name,
+          columns: cols,
+          rows: [...rows].map((row: Record<string, unknown>) =>
+            cols.map((column) => plain(row[column.name])),
+          ),
+          count,
+        });
       }
       return { schema: database.schema_name, tables: result };
     } finally {
@@ -385,6 +754,8 @@ export function createShipping({
     serveSite,
     enableDatabase,
     runSql,
+    querySql,
+    browseTable,
     inspectDatabase,
     cloneUrl,
   };
