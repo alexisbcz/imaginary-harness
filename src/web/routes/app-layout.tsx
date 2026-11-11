@@ -7,18 +7,18 @@ import {
   useRouteLoaderData,
 } from "react-router";
 import { LightIconButton } from "twenty-ui/components/input";
-import { Avatar } from "twenty-ui/primitives/data-display";
 import { Skeleton } from "twenty-ui/primitives/feedback";
 import { ListItem } from "twenty-ui/primitives/navigation";
+import { IconSquareRoundedPlusFilled } from "@tabler/icons-react";
 import {
   IconLayoutSidebarLeftCollapse,
   IconLogout,
   IconSearch,
-  IconSquarePlus,
   IconTrash,
 } from "twenty-ui/icon";
 
 import { CommandMenu, useCommandMenuShortcut } from "@/components/command-menu";
+import { IconTile, NameTile } from "@/components/icon-tile";
 import { Logo } from "@/components/logo";
 import { DrawerContext } from "@/components/page";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -110,7 +110,7 @@ export function AppLayout() {
                 to="/"
                 className="flex min-w-0 flex-1 items-center gap-2 rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
-                <Logo />
+                <Logo size={22} />
                 <span className="truncate font-semibold text-t-text">
                   Richelieu
                 </span>
@@ -127,7 +127,11 @@ export function AppLayout() {
 
             <ListItem
               render={<button type="button" />}
-              startIcon={<IconSearch size={16} />}
+              startIcon={
+                <IconTile>
+                  <IconSearch />
+                </IconTile>
+              }
               shortcut={["Mod", "K"]}
               onClick={() => setMenuOpen(true)}
             >
@@ -135,7 +139,11 @@ export function AppLayout() {
             </ListItem>
             <ListItem
               render={<Link to="/" />}
-              startIcon={<IconSquarePlus size={16} />}
+              startIcon={
+                <IconTile color="pink">
+                  <IconSquareRoundedPlusFilled />
+                </IconTile>
+              }
               selected={!threadId}
             >
               New project
@@ -163,13 +171,7 @@ export function AppLayout() {
                   key={thread.id}
                   render={<Link to={`/t/${thread.id}`} />}
                   selected={thread.id === threadId}
-                  startIcon={
-                    <Avatar
-                      name={thread.title}
-                      size="sm"
-                      shape="rounded-square"
-                    />
-                  }
+                  startIcon={<NameTile name={thread.title} />}
                   actionsVisibility="hover"
                   actions={
                     <LightIconButton
@@ -191,7 +193,7 @@ export function AppLayout() {
             </div>
 
             <div className="flex shrink-0 items-center gap-2 border-t border-t-border-light px-1 pt-2">
-              <Avatar name={name} size="lg" shape="circle" />
+              <NameTile name={name} round />
               <span className="min-w-0 flex-1 truncate text-t-text-secondary">
                 {name}
               </span>

@@ -1,6 +1,15 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useNavigate, useParams } from "react-router";
-import { Avatar, Chip } from "twenty-ui/primitives/data-display";
+import {
+  IconDeviceDesktopFilled,
+  IconLayoutSidebarLeftCollapseFilled,
+  IconLayoutSidebarLeftExpandFilled,
+  IconMoonFilled,
+  IconPaletteFilled,
+  IconSquareRoundedPlusFilled,
+  IconSunFilled,
+} from "@tabler/icons-react";
+import { Chip } from "twenty-ui/primitives/data-display";
 import { Autocomplete } from "twenty-ui/primitives/input";
 import { Dialog } from "twenty-ui/primitives/surfaces";
 import { Shortcut } from "twenty-ui/primitives/typography";
@@ -8,17 +17,13 @@ import {
   IconArrowLeft,
   IconCheck,
   IconChevronRight,
-  IconColorSwatch,
-  IconDeviceDesktop,
-  IconLayoutSidebarLeftCollapse,
-  IconLayoutSidebarLeftExpand,
   IconLogout,
-  IconMoon,
   IconSearch,
-  IconSquarePlus,
-  IconSun,
 } from "twenty-ui/icon";
 
+import type { ThemeColor } from "twenty-ui/theme";
+
+import { IconTile, NameTile } from "@/components/icon-tile";
 import { useDrawer } from "@/components/page";
 import {
   setThemePreference,
@@ -58,6 +63,10 @@ type Command = {
   /** Other words the command answers to when searching. */
   keywords?: string;
   icon: ReactNode;
+  /** The icon stands on its own, such as a project's avatar, instead of on a tile. */
+  bare?: boolean;
+  /** The tile's color: the same one the thing has elsewhere in the app. */
+  color?: ThemeColor;
   description?: ReactNode;
   end?: ReactNode;
   run: () => void;
@@ -67,10 +76,20 @@ type Group = { value: string; label: string; items: Command[] };
 
 type View = "root" | "theme";
 
-const themes: { value: ThemePreference; label: string; icon: ReactNode }[] = [
-  { value: "system", label: "System", icon: <IconDeviceDesktop size={16} /> },
-  { value: "light", label: "Light", icon: <IconSun size={16} /> },
-  { value: "dark", label: "Dark", icon: <IconMoon size={16} /> },
+const themes: {
+  value: ThemePreference;
+  label: string;
+  icon: ReactNode;
+  color: ThemeColor;
+}[] = [
+  {
+    value: "system",
+    label: "System",
+    icon: <IconDeviceDesktopFilled />,
+    color: "gray",
+  },
+  { value: "light", label: "Light", icon: <IconSunFilled />, color: "orange" },
+  { value: "dark", label: "Dark", icon: <IconMoonFilled />, color: "iris" },
 ];
 
 /** Projects shown before anything is typed; typing searches all of them. */
@@ -128,6 +147,7 @@ export function CommandMenu({
             value: `theme-${option.value}`,
             label: option.label,
             icon: option.icon,
+            color: option.color,
             end: option.value === theme && <IconCheck size={16} />,
             run: close(() => setThemePreference(option.value)),
           })),
@@ -145,7 +165,8 @@ export function CommandMenu({
             value: "new-project",
             label: "New project",
             keywords: "create start app",
-            icon: <IconSquarePlus size={16} />,
+            icon: <IconSquareRoundedPlusFilled />,
+            color: "pink",
             run: close(() => void navigate("/")),
           },
           {
@@ -153,9 +174,9 @@ export function CommandMenu({
             label: drawer.open ? "Hide the sidebar" : "Show the sidebar",
             keywords: "toggle drawer navigation panel",
             icon: drawer.open ? (
-              <IconLayoutSidebarLeftCollapse size={16} />
+              <IconLayoutSidebarLeftCollapseFilled />
             ) : (
-              <IconLayoutSidebarLeftExpand size={16} />
+              <IconLayoutSidebarLeftExpandFilled />
             ),
             run: close(() => drawer.setOpen(!drawer.open)),
           },
@@ -170,7 +191,8 @@ export function CommandMenu({
             value: `project-${thread.id}`,
             label: thread.title,
             keywords: "project open go",
-            icon: <Avatar name={thread.title} size="sm" shape="rounded-square" />,
+            icon: <NameTile name={thread.title} />,
+            bare: true,
             run: close(() => void navigate(`/t/${thread.id}`)),
           })),
       },
@@ -182,7 +204,8 @@ export function CommandMenu({
             value: "theme",
             label: "Change theme",
             keywords: "appearance dark light mode color scheme",
-            icon: <IconColorSwatch size={16} />,
+            icon: <IconPaletteFilled />,
+            color: "plum",
             description: currentTheme.label,
             end: <IconChevronRight size={16} />,
             run: () => go("theme"),
@@ -191,7 +214,8 @@ export function CommandMenu({
             value: "sign-out",
             label: "Sign out",
             keywords: "log out logout account leave",
-            icon: <IconLogout size={16} />,
+            icon: <IconLogout />,
+            color: "tomato",
             run: close(() => void supabase.auth.signOut()),
           },
         ],
@@ -313,7 +337,15 @@ export function CommandMenu({
                         <Autocomplete.Item
                           key={item.value}
                           value={item}
-                          startIcon={item.icon}
+                          startIcon={
+                            item.bare ? (
+                              item.icon
+                            ) : (
+                              <IconTile color={item.color}>
+                                {item.icon}
+                              </IconTile>
+                            )
+                          }
                           description={item.description}
                           endIcon={item.end || undefined}
                           onClick={item.run}

@@ -1,20 +1,25 @@
 import { useCallback, useEffect, useState } from "react";
 import { useOutletContext, useParams } from "react-router";
 import { AssistantAvatar } from "twenty-ui/components/data-display";
-import { Avatar, Chip } from "twenty-ui/primitives/data-display";
+import { Chip } from "twenty-ui/primitives/data-display";
 import { Tabs } from "twenty-ui/primitives/navigation";
 import {
   IconAlertTriangle,
   IconClick,
-  IconCode,
-  IconDatabase,
-  IconHistory,
-  IconLayout,
   IconMessageCircle,
 } from "twenty-ui/icon";
 
 import { Shimmer } from "@/components/ai-elements/shimmer";
+import {
+  IconCode,
+  IconDatabaseFilled,
+  IconHistory,
+  IconLayoutFilled,
+  IconMessageCircleFilled,
+} from "@tabler/icons-react";
+
 import { CodePanel } from "@/components/code-panel";
+import { IconTile, NameTile } from "@/components/icon-tile";
 import { DatabasePanel } from "@/components/database-panel";
 import { CloneButton, PublishButton } from "@/components/ship-menu";
 import { Composer, type PickedElement } from "@/components/composer";
@@ -290,12 +295,34 @@ export function Chat() {
 
   const tabs = [
     ...(isMobile
-      ? [{ value: "chat", label: "Chat", icon: IconMessageCircle }]
+      ? [
+          {
+            value: "chat",
+            label: "Chat",
+            icon: IconMessageCircleFilled,
+            color: "jade" as const,
+          },
+        ]
       : []),
-    { value: "preview", label: "Preview", icon: IconLayout },
-    { value: "code", label: "Code", icon: IconCode },
-    { value: "history", label: "History", icon: IconHistory },
-    { value: "database", label: "Database", icon: IconDatabase },
+    {
+      value: "preview",
+      label: "Preview",
+      icon: IconLayoutFilled,
+      color: "blue" as const,
+    },
+    { value: "code", label: "Code", icon: IconCode, color: "iris" as const },
+    {
+      value: "history",
+      label: "History",
+      icon: IconHistory,
+      color: "orange" as const,
+    },
+    {
+      value: "database",
+      label: "Database",
+      icon: IconDatabaseFilled,
+      color: "green" as const,
+    },
   ];
 
   // On a phone the conversation is one more tab; elsewhere it sits beside the workspace.
@@ -307,12 +334,19 @@ export function Chat() {
       className="flex h-full min-h-0 flex-col"
     >
       <div className="flex h-10 shrink-0 items-end">
-        <Tabs.List aria-label="Project views" className="relative w-full overflow-x-auto px-3">
-          {tabs.map(({ value, label, icon: TabIcon }) => (
+        <Tabs.List
+          aria-label="Project views"
+          className="relative w-full overflow-x-auto px-3"
+        >
+          {tabs.map(({ value, label, icon: TabIcon, color }) => (
             <Tabs.Tab
               key={value}
               value={value}
-              startIcon={<TabIcon size={16} />}
+              startIcon={
+                <IconTile size="xs" color={color}>
+                  <TabIcon />
+                </IconTile>
+              }
             >
               {label}
             </Tabs.Tab>
@@ -364,11 +398,7 @@ export function Chat() {
   return (
     <Page
       title={thread?.title ?? ""}
-      icon={
-        thread && (
-          <Avatar name={thread.title} size="md" shape="rounded-square" />
-        )
-      }
+      icon={thread && <NameTile name={thread.title} />}
       actions={
         <>
           {!isMobile && (

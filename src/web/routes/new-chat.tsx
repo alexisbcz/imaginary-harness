@@ -2,16 +2,14 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { formatDistanceToNow } from "date-fns";
 
-import { Avatar, Chip } from "twenty-ui/primitives/data-display";
+import { Chip } from "twenty-ui/primitives/data-display";
 import { Skeleton } from "twenty-ui/primitives/feedback";
-import {
-  IconClock,
-  IconSparkles,
-  IconSquarePlus,
-  IconTextSize,
-} from "twenty-ui/icon";
+import { IconClock, IconSparkles, IconTextSize } from "twenty-ui/icon";
+
+import { IconSquareRoundedPlusFilled } from "@tabler/icons-react";
 
 import { Composer } from "@/components/composer";
+import { IconTile, NameTile } from "@/components/icon-tile";
 import { Page } from "@/components/page";
 import { startThread, type Outgoing, type Thread } from "@/lib/chat";
 import { createClient } from "@/lib/supabase/client";
@@ -55,7 +53,14 @@ export function NewChat() {
   }
 
   return (
-    <Page title="New project" icon={<IconSquarePlus size={16} />}>
+    <Page
+      title="New project"
+      icon={
+        <IconTile color="pink">
+          <IconSquareRoundedPlusFilled />
+        </IconTile>
+      }
+    >
       <div className="flex flex-1 flex-col items-center overflow-y-auto px-4 pt-[12vh] pb-16">
         <div className="flex w-full max-w-[640px] flex-col">
           <div className="mb-6 flex flex-col gap-1.5">
@@ -123,11 +128,7 @@ export function NewChat() {
                         className="grid h-8 grid-cols-[1fr_9rem] items-center border-b border-t-border-light outline-none last:border-b-0 hover:bg-t-hover focus-visible:bg-t-hover"
                       >
                         <span className="flex min-w-0 items-center gap-2 px-2">
-                          <Avatar
-                            name={project.title}
-                            size="sm"
-                            shape="rounded-square"
-                          />
+                          <NameTile name={project.title} />
                           <span className="truncate text-t-text">
                             {project.title}
                           </span>

@@ -3,13 +3,16 @@ import { cn } from "cn";
 import { LightIconButton, SegmentedControl } from "twenty-ui/components/input";
 import { Button, Input, InputGroup } from "twenty-ui/primitives/input";
 // Twenty UI's icons are Tabler's; it does not re-export these two.
-import { IconDeviceMobile, IconDeviceTablet } from "@tabler/icons-react";
+import {
+  IconDeviceMobile,
+  IconDeviceTablet,
+  IconLayoutFilled,
+} from "@tabler/icons-react";
 import {
   IconAlertTriangle,
   IconClick,
   IconDeviceDesktop,
   IconExternalLink,
-  IconLayout,
   IconRefresh,
   IconReload,
   IconX,
@@ -17,6 +20,7 @@ import {
 
 import { Shimmer } from "@/components/ai-elements/shimmer";
 import type { PickedElement } from "@/components/composer";
+import { IconTile } from "@/components/icon-tile";
 import { api } from "@/lib/api";
 
 type Status =
@@ -48,9 +52,9 @@ function EmptyState({
 }) {
   return (
     <div className="flex max-w-sm flex-col items-center gap-3 self-center px-6 text-center">
-      <span className="flex size-10 items-center justify-center rounded-md border border-t-border bg-t-primary text-t-text-tertiary shadow-[0_2px_4px_rgb(0_0_0/0.04)]">
-        <IconLayout size={20} />
-      </span>
+      <IconTile size="lg" color="blue">
+        <IconLayoutFilled />
+      </IconTile>
       <div className="flex flex-col gap-1">
         <p className="font-semibold text-t-text">{title}</p>
         <div className="leading-[1.45] text-t-text-tertiary">{children}</div>
