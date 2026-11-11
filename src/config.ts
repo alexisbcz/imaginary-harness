@@ -16,6 +16,18 @@ export const config = {
   serviceRoleKey:
     Bun.env.SUPABASE_SERVICE_ROLE_KEY ??
     "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJpY2hlbGlldSIsInJvbGUiOiJzZXJ2aWNlX3JvbGUiLCJpYXQiOjE3NjI4MTkyMDAsImV4cCI6NDEwMjQ0NDgwMH0.XC6fU0Bn6yXm28zVgFvQ__a8I8TkQIpidY-HfJQb-PY",
+  /** The public (anon) key, which generated apps use to reach their database. */
+  anonKey:
+    Bun.env.BUN_PUBLIC_SUPABASE_ANON_KEY ??
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJpY2hlbGlldSIsInJvbGUiOiJhbm9uIiwiaWF0IjoxNzYyODE5MjAwLCJleHAiOjQxMDI0NDQ4MDB9.A7UFTz_dhd_vLCC895znt_r5pOuYCjzOnRSvk-oR-VI",
+  /**
+   * Where published apps are served: their own origin, so a published app's scripts can never read the builder's
+   * session. Locally a second port of the same server.
+   */
+  sitesPort: Number(Bun.env.SITES_PORT ?? 3001),
+  sitesUrl: (
+    Bun.env.SITES_URL ?? `http://localhost:${Bun.env.SITES_PORT ?? 3001}`
+  ).replace(/\/+$/, ""),
   model: {
     provider: "anthropic",
     modelId: Bun.env.MODEL ?? "claude-sonnet-5-5",

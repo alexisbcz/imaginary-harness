@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
 import { useParams } from "react-router";
-import { IconCodeComments } from "@pierre/icons";
+import { IconCodeComments, IconCursor } from "@pierre/icons";
 
 import { Shimmer } from "@/components/ai-elements/shimmer";
 import { CodePanel } from "@/components/code-panel";
+import { DatabasePanel } from "@/components/database-panel";
+import { CloneButton, PublishButton } from "@/components/ship-menu";
 import { Composer, type PickedElement } from "@/components/composer";
 import { HistoryPanel } from "@/components/history-panel";
 import { Markdown } from "@/components/markdown";
@@ -125,18 +127,40 @@ function MessageImages({ ids }: { ids: string[] }) {
   );
 }
 
+/** A message about a picked element starts with the element's context (see the composer): show it as a chip. */
+function splitPicked(content: string) {
+  const match =
+    /^About this element of the preview: <([\w-]+)> rendered at (\S+)\n(?:.*\n)*?\n/.exec(
+      content,
+    );
+  if (!match) return { picked: null, text: content };
+  return {
+    picked: { tag: match[1]!, loc: match[2]! },
+    text: content.slice(match[0].length),
+  };
+}
+
 function ChatBubble({ message }: { message: ChatMessage }) {
   if (message.role === "user") {
+    const { picked, text } = splitPicked(message.content);
     return (
       <Message align="end">
         <MessageContent className="items-end gap-2">
           {message.attachments.length > 0 && (
             <MessageImages ids={message.attachments} />
           )}
-          {message.content && (
+          {picked && (
+            <span className="inline-flex max-w-full items-center gap-1.5 rounded-lg bg-muted px-2 py-1 text-xs text-muted-foreground">
+              <IconCursor className="size-3.5 shrink-0" />
+              <span className="truncate font-mono">
+                &lt;{picked.tag}&gt; {picked.loc}
+              </span>
+            </span>
+          )}
+          {text && (
             <Bubble variant="secondary">
               <BubbleContent className="whitespace-pre-wrap">
-                {message.content}
+                {text}
               </BubbleContent>
             </Bubble>
           )}
@@ -246,12 +270,20 @@ export function Chat() {
           onValueChange={(value) => setTab(String(value))}
           className="flex h-full min-h-0 flex-col gap-0"
         >
-          <div className="flex h-11 shrink-0 items-center border-b px-2">
+          <div className="flex h-11 shrink-0 items-center gap-2 border-b px-2">
             <TabsList>
               <TabsTrigger value="preview">Preview</TabsTrigger>
               <TabsTrigger value="code">Code</TabsTrigger>
               <TabsTrigger value="history">History</TabsTrigger>
+              <TabsTrigger value="database">Database</TabsTrigger>
             </TabsList>
+            <div className="ml-auto flex items-center gap-2">
+              <CloneButton threadId={threadId} disabled={files.length === 0} />
+              <PublishButton
+                threadId={threadId}
+                disabled={files.length === 0}
+              />
+            </div>
           </div>
           {/* The preview stays mounted, so switching tabs does not reload the app. */}
           <TabsContent
@@ -278,6 +310,13 @@ export function Chat() {
           </TabsContent>
           <TabsContent value="history" className="min-h-0 flex-1">
             <HistoryPanel threadId={threadId} revision={revision} />
+          </TabsContent>
+          <TabsContent value="database" className="min-h-0 flex-1">
+            {/* The agent changes the database without touching files: reload as its answers move along. */}
+            <DatabasePanel
+              threadId={threadId}
+              revision={`${revision}:${last?.id}:${last?.status}:${last?.steps?.length ?? 0}`}
+            />
           </TabsContent>
         </Tabs>
       </ResizablePanel>

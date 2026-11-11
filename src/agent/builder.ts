@@ -11,6 +11,7 @@ import {
 } from "@earendil-works/pi-durable";
 import { arr, obj, str } from "@earendil-works/pi-schema";
 import type { Previews } from "../builder/previews.ts";
+import type { Shipping } from "../builder/shipping.ts";
 import type { WorkspaceStore } from "./workspace.ts";
 
 /** Tools that change the project, which chat-only mode blocks. */
@@ -84,6 +85,7 @@ export function createBuilder(
   sql: SQL,
   store: WorkspaceStore,
   previews: Previews | undefined,
+  shipping: Shipping | undefined,
 ) {
   const checkApp = defineTool({
     name: "check_app",
@@ -191,9 +193,59 @@ export function createBuilder(
     },
   });
 
+  const enableDatabase = defineTool({
+    name: "enable_database",
+    description:
+      "Give the app a database (Postgres through Supabase, with auth), when it needs to keep data across visits or " +
+      "users: sign-in, saved records, shared data. Creates the app's own schema, installs @supabase/supabase-js, and " +
+      "writes src/lib/supabase.ts (export `supabase`) and .env. Then create tables with run_sql.",
+    parameters: obj({}),
+    execute: async (_args, api) => {
+      if (!shipping) return text("Databases are off on this server.", true);
+      const thread = await store.threadOfConversation(api.conversationId);
+      const schema = await shipping.enableDatabase(thread);
+      return text(
+        `The database is ready: schema ${schema}. Import { supabase } from "@/lib/supabase"; queries reach this ` +
+          'schema\'s tables by name (supabase.from("todos")). Create tables with run_sql.',
+      );
+    },
+  });
+
+  const runSql = defineTool({
+    name: "run_sql",
+    description:
+      "Run SQL in the app's database, in one transaction, inside the app's own schema (unqualified names land " +
+      "there). Use it to create and change tables, and to look at data. Every table the app reads in the browser " +
+      "needs row level security and grants: `alter table x enable row level security;` + policies, and " +
+      "`grant select, insert, update, delete on x to anon, authenticated;`. Tie rows to users with " +
+      "`user_id uuid not null default uid()` and policies on `uid() = user_id`: the schema's own uid() is the " +
+      "signed-in user's id (auth.uid() is out of reach). " +
+      "Returns the last statement's rows (50 at most).",
+    parameters: obj({
+      sql: str({ description: "One or more SQL statements" }),
+    }),
+    execute: async (args, api) => {
+      if (!shipping) return text("Databases are off on this server.", true);
+      const thread = await store.threadOfConversation(api.conversationId);
+      try {
+        const rows = await shipping.runSql(thread.id, args.sql);
+        return text(
+          rows.length
+            ? JSON.stringify(rows, null, 1).slice(0, 8000)
+            : "Done (no rows).",
+        );
+      } catch (error) {
+        return text(
+          `SQL error: ${error instanceof Error ? error.message : String(error)}`,
+          true,
+        );
+      }
+    },
+  });
+
   return defineExtension({
     name: "builder",
-    tools: [checkApp, addDependencies],
+    tools: [checkApp, addDependencies, enableDatabase, runSql],
     hooks: [
       hook(ToolTask, {
         async beforeTool(call, api) {
@@ -247,6 +299,8 @@ How to work:
 - Split the app into components under src/components and pages under src/pages; keep files small.
 - Build real, polished interfaces: sensible layout, spacing and hierarchy, responsive down to phone width, empty and loading states. Fill them with realistic sample data, never lorem ipsum.
 - After a round of changes, call check_app and fix every error it reports before you finish.
+- When the app must keep data (accounts, saved items, anything shared or lasting), call enable_database, create the tables with run_sql (with row level security), then use supabase from "@/lib/supabase". For sign-in, use supabase.auth (email and password). Without a database, keep state in React or localStorage.
+- The app may be published under a sub-path: if you add react-router, give the router basename={import.meta.env.BASE_URL}.
 - When the user's message points at an element of the preview, it gives the element's source location (path:line:column): change that place.
 - Answer briefly: what you built or changed, in a few lines. Never paste the code you wrote into the answer: the user sees it in the code view.
 - In chat mode, the user wants to talk, not change anything: answer, and propose a plan when it helps.`,

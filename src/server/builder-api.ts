@@ -1,9 +1,11 @@
-// The builder's HTTP API, beside the web app on the local server: previews, history, restore and hand edits. Each
+// The builder's HTTP API, beside the web app on the local server: previews, history, restore, hand edits,
+// publishing, the app's database and git clone URLs. Each
 // request carries the user's Supabase access token, and reaches only the user's own projects.
 
 import type { SQL } from "bun";
 import { createClient } from "@supabase/supabase-js";
 import type { Previews } from "../builder/previews.ts";
+import type { Shipping } from "../builder/shipping.ts";
 import type { WorkspaceStore } from "../agent/workspace.ts";
 import { config } from "../config.ts";
 
@@ -24,10 +26,12 @@ export function createBuilderApi({
   sql,
   store,
   previews,
+  shipping,
 }: {
   sql: SQL;
   store: WorkspaceStore | undefined;
   previews: Previews | undefined;
+  shipping: Shipping | undefined;
 }) {
   const supabase = createClient(config.supabaseUrl, config.serviceRoleKey, {
     auth: { persistSession: false, autoRefreshToken: false },
@@ -152,6 +156,52 @@ export function createBuilderApi({
           await authorOf(thread.user_id),
         );
         return { changed };
+      }),
+    },
+    "/api/projects/:id/publish": {
+      GET: handle(async (request) => {
+        const thread = await project(request);
+        const [row] = await sql<
+          { published_slug: string | null; published_at: Date | null }[]
+        >`
+          SELECT published_slug, published_at FROM public.threads WHERE id = ${thread.id}`;
+        return {
+          url: row?.published_slug
+            ? `${config.sitesUrl}/${row.published_slug}/`
+            : null,
+          publishedAt: row?.published_at ?? null,
+        };
+      }),
+      POST: handle(async (request) => {
+        const thread = await project(request);
+        return need(shipping, "Publishing").publish(thread);
+      }),
+      DELETE: handle(async (request) => {
+        const thread = await project(request);
+        await need(shipping, "Publishing").unpublish(thread);
+        return { ok: true };
+      }),
+    },
+    "/api/projects/:id/database": {
+      GET: handle(async (request) => {
+        const thread = await project(request);
+        return {
+          database: await need(shipping, "Databases").inspectDatabase(
+            thread.id,
+          ),
+        };
+      }),
+      POST: handle(async (request) => {
+        const thread = await project(request);
+        return {
+          schema: await need(shipping, "Databases").enableDatabase(thread),
+        };
+      }),
+    },
+    "/api/projects/:id/clone": {
+      GET: handle(async (request) => {
+        const thread = await project(request);
+        return { url: await need(shipping, "Git").cloneUrl(thread.id) };
       }),
     },
     "/api/projects/:id/files": {

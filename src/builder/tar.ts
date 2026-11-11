@@ -60,3 +60,43 @@ export function tar(
   }
   return out;
 }
+
+const decoder = new TextDecoder();
+
+function field(block: Uint8Array, offset: number, length: number) {
+  const bytes = block.subarray(offset, offset + length);
+  const end = bytes.indexOf(0);
+  return decoder.decode(end === -1 ? bytes : bytes.subarray(0, end));
+}
+
+/**
+ * The regular files of a tar archive (as `docker cp` writes it), by path. Directories, links and the PAX headers'
+ * other records are skipped; a PAX `path` record names the file after it.
+ */
+export function untar(archive: Uint8Array): Record<string, Uint8Array> {
+  const files: Record<string, Uint8Array> = {};
+  let offset = 0;
+  let paxPath: string | undefined;
+  while (offset + BLOCK <= archive.length) {
+    const block = archive.subarray(offset, offset + BLOCK);
+    if (block.every((byte) => byte === 0)) break;
+    const name = field(block, 0, 100);
+    const size = parseInt(field(block, 124, 12).trim() || "0", 8);
+    const type = String.fromCharCode(block[156] ?? 0);
+    const prefix = field(block, 345, 155);
+    const data = archive.subarray(offset + BLOCK, offset + BLOCK + size);
+    offset += BLOCK + Math.ceil(size / BLOCK) * BLOCK;
+    if (type === "x") {
+      // PAX records: "<length> <key>=<value>\n".
+      for (const record of decoder.decode(data).split("\n")) {
+        const match = /^\d+ path=(.*)$/.exec(record);
+        if (match) paxPath = match[1];
+      }
+      continue;
+    }
+    const path = paxPath ?? (prefix ? `${prefix}/${name}` : name);
+    paxPath = undefined;
+    if (type === "0" || type === "\0") files[path] = data.slice();
+  }
+  return files;
+}

@@ -89,6 +89,12 @@ function describe(step: Step): { icon: Icon; running: string; done: string } {
         done: `Ran ${command}`,
       };
     }
+    case "enable_database":
+      return {
+        icon: IconBox,
+        running: "Adding a database",
+        done: "Added a database",
+      };
     case "run_sql":
       return {
         icon: IconCodeSearch,

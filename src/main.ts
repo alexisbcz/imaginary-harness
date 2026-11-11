@@ -41,7 +41,23 @@ async function boot() {
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);
 
-  return { sql, forge, storage, previews, store: opened.store };
+  // Published apps, on their own origin.
+  const sites = opened.shipping
+    ? Bun.serve({
+        port: config.sitesPort,
+        fetch: (request) => opened.shipping!.serveSite(request),
+      })
+    : undefined;
+  if (sites) console.log(`[sites] ${config.sitesUrl}`);
+
+  return {
+    sql,
+    forge,
+    storage,
+    previews,
+    store: opened.store,
+    shipping: opened.shipping,
+  };
 }
 
 declare global {
@@ -50,7 +66,7 @@ declare global {
 }
 
 globalThis.richelieu ??= boot();
-const { sql, forge, store, previews } = await globalThis.richelieu;
+const { sql, forge, store, previews, shipping } = await globalThis.richelieu;
 
 const server = Bun.serve({
   port: config.port,
@@ -58,7 +74,7 @@ const server = Bun.serve({
     [`${FORGE_PATH}/*`]: (request) => forge.fetch(request),
     // The deployed app pings its agent function after sending; here the agent already follows Realtime.
     "/api/agent": () => new Response(null, { status: 202 }),
-    ...createBuilderApi({ sql, store, previews }),
+    ...createBuilderApi({ sql, store, previews, shipping }),
     "/*": index,
   },
   development: Bun.env.NODE_ENV !== "production" && {

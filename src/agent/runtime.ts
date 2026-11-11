@@ -8,6 +8,7 @@ import { anthropicProvider } from "@earendil-works/pi-ai/providers/anthropic";
 import { createRegistry, Harness } from "@earendil-works/pi-durable";
 import type { GitStorage } from "@pierre/storage";
 import type { Previews } from "../builder/previews.ts";
+import { createShipping, type Shipping } from "../builder/shipping.ts";
 import { PostgresStorage } from "../pi/postgres-storage.ts";
 import { Agent } from "./agent.ts";
 import { createBuilder } from "./builder.ts";
@@ -29,14 +30,16 @@ export async function openAgent(
   models.setProvider(anthropicProvider());
   const registry = createRegistry();
   let store: WorkspaceStore | undefined;
+  let shipping: Shipping | undefined;
   if (storage) {
     store = createWorkspaceStore(sql, storage, (threadId, changes) => {
       previews
         ?.apply(threadId, changes)
         .catch((error) => console.error("[preview] sync:", error));
     });
+    shipping = createShipping({ sql, store, storage, previews });
     registry.install(createWorkspace(store));
-    registry.install(createBuilder(sql, store, previews));
+    registry.install(createBuilder(sql, store, previews, shipping));
   } else
     console.warn(
       "[agent] FORGE_PRIVATE_KEY is not set: the workspace tools are off (bun run forge:org <name> --write-env)",
@@ -59,6 +62,7 @@ export async function openAgent(
   return {
     agent,
     store,
+    shipping,
     async close() {
       await agent.stop();
       await harness.close(context);

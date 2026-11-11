@@ -26,6 +26,8 @@ type Preview = {
   starting?: Promise<string>;
   lastUsed: number;
   errors: PreviewError[];
+  /** Changes committed while the preview was starting: its files were read before them, so they land after. */
+  pending?: FileChanges;
 };
 
 async function run(
@@ -220,6 +222,7 @@ export class Previews {
       if (started.exitCode !== 0) throw new Error(started.stderr.trim());
       const url = await this.waitReady(preview.name);
       preview.status = { state: "running", url };
+      await this.flushPending(threadId, preview);
       return url;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -272,10 +275,21 @@ export class Previews {
       throw new Error(`Could not copy the files in: ${copy.stderr.trim()}`);
   }
 
+  private async flushPending(threadId: string, preview: Preview) {
+    const pending = preview.pending;
+    preview.pending = undefined;
+    if (pending) await this.apply(threadId, pending);
+  }
+
   /** Applies committed changes to a running preview; a changed package.json reinstalls and restarts it. */
   async apply(threadId: string, changes: FileChanges) {
     const preview = this.previews.get(threadId);
-    if (!preview || preview.status.state !== "running") return;
+    if (!preview) return;
+    if (preview.status.state === "starting") {
+      preview.pending = { ...preview.pending, ...changes };
+      return;
+    }
+    if (preview.status.state !== "running") return;
     if (!(await this.alive(preview))) {
       // Gone: the next `ensure` starts a fresh one from the committed files, these changes included.
       preview.status = { state: "stopped" };
@@ -315,6 +329,7 @@ export class Previews {
       await run(["docker", "restart", "-t", "2", preview.name]);
       const url = await this.waitReady(preview.name);
       preview.status = { state: "running", url };
+      await this.flushPending(threadId, preview);
       return url;
     })()
       .catch((error) => {
@@ -339,6 +354,24 @@ export class Previews {
     return run(["docker", "exec", "-w", "/app", preview.name, ...argv], {
       timeoutMs,
     });
+  }
+
+  /** A directory of the project's preview, as a tar archive. */
+  async copyOut(threadId: string, path: string) {
+    await this.ensure(threadId);
+    const preview = this.entry(threadId);
+    const child = Bun.spawn(["docker", "cp", `${preview.name}:${path}`, "-"], {
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const [archive, stderr, exitCode] = await Promise.all([
+      new Response(child.stdout).arrayBuffer(),
+      new Response(child.stderr).text(),
+      child.exited,
+    ]);
+    if (exitCode !== 0)
+      throw new Error(`Could not copy ${path} out: ${stderr.trim()}`);
+    return new Uint8Array(archive);
   }
 
   /** The dev server's latest output. */
