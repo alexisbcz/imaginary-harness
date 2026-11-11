@@ -82,6 +82,7 @@ export function NewChat() {
                 shape="round"
                 size="md"
                 color="secondary"
+                className="[&>span]:leading-[16px]"
                 startElement={<IconSparkles size={14} />}
                 onClick={() => setValue(suggestion)}
                 render={<button type="button" />}
