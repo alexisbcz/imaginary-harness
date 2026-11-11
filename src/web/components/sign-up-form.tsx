@@ -1,6 +1,7 @@
 import { useState } from "react";
 
 import { createClient } from "@/lib/supabase/client";
+import { cleanName, NAME_MAX_LENGTH } from "@/lib/profile";
 import {
   AuthError,
   AuthField,
@@ -10,6 +11,7 @@ import {
 } from "@/components/auth-ui";
 
 export function SignUpForm() {
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [repeatPassword, setRepeatPassword] = useState("");
@@ -26,12 +28,18 @@ export function SignUpForm() {
       setError("Passwords do not match");
       return;
     }
+    const cleaned = cleanName(name);
+    if (!cleaned) {
+      setError("Enter your name");
+      return;
+    }
     setIsLoading(true);
 
     try {
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
+        options: { data: { name: cleaned } },
       });
       if (error) throw error;
       // With email confirmation off (the local default), sign-up already signed the user in.
@@ -59,6 +67,16 @@ export function SignUpForm() {
         description="Describe an app, and watch Richelieu build it."
       />
       <div className="flex flex-col gap-4">
+        <AuthField
+          label="Name"
+          type="text"
+          placeholder="Ada Lovelace"
+          autoComplete="name"
+          required
+          maxLength={NAME_MAX_LENGTH}
+          value={name}
+          onValueChange={setName}
+        />
         <AuthField
           label="Email"
           type="email"

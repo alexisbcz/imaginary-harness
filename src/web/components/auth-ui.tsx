@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useId, type ReactNode } from "react";
 import { Field, Input, Button } from "twenty-ui/primitives/input";
 
 import { Logo } from "@/components/logo";
@@ -25,20 +25,26 @@ export function AuthHeader({
 export function AuthField({
   label,
   aside,
+  id,
   ...props
 }: {
   label: string;
   aside?: ReactNode;
 } & Parameters<typeof Input>[0]) {
+  const generatedId = useId();
+  const fieldId = id ?? generatedId;
   return (
     <Field.Root className="flex flex-col gap-1.5">
       <div className="flex items-center">
-        <Field.Label className="text-[12px] font-medium text-t-text-tertiary">
+        <Field.Label
+          htmlFor={fieldId}
+          className="text-[12px] font-medium text-t-text-tertiary"
+        >
           {label}
         </Field.Label>
         {aside && <div className="ml-auto">{aside}</div>}
       </div>
-      <Input size="md" {...props} />
+      <Input size="md" {...props} id={fieldId} />
     </Field.Root>
   );
 }

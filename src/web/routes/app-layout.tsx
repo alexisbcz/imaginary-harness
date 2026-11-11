@@ -6,7 +6,6 @@ import {
   useParams,
   useRouteLoaderData,
 } from "react-router";
-import type { User } from "@supabase/supabase-js";
 import { LightIconButton } from "twenty-ui/components/input";
 import { Avatar } from "twenty-ui/primitives/data-display";
 import { Skeleton } from "twenty-ui/primitives/feedback";
@@ -70,7 +69,7 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 }
 
 export function AppLayout() {
-  const { user } = useRouteLoaderData("app") as { user: User };
+  const { name } = useRouteLoaderData("app") as { name: string };
   const { threadId } = useParams();
   const navigate = useNavigate();
   const [threads, setThreads] = useThreads();
@@ -180,9 +179,9 @@ export function AppLayout() {
             </div>
 
             <div className="flex shrink-0 items-center gap-2 border-t border-t-border-light px-1 pt-2">
-              <Avatar name={user.email ?? "You"} size="lg" shape="circle" />
+              <Avatar name={name} size="lg" shape="circle" />
               <span className="min-w-0 flex-1 truncate text-t-text-secondary">
-                {user.email}
+                {name}
               </span>
               <LightIconButton
                 aria-label="Sign out"

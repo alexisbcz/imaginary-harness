@@ -227,10 +227,12 @@ export function createBuilderApi({
     },
   };
 
-  /** A hand edit or a restore is the user's commit, under their email. */
+  /** A hand edit or a restore is the user's commit, under their name and email. */
   async function authorOf(userId: string) {
     const { data } = await supabase.auth.admin.getUserById(userId);
     const email = data.user?.email ?? "user@richelieu.ai";
-    return { name: email.split("@")[0]!, email };
+    const [profile] = await sql<{ name: string }[]>`
+      SELECT name FROM public.profiles WHERE id = ${userId}`;
+    return { name: profile?.name ?? email.split("@")[0]!, email };
   }
 }
