@@ -72,6 +72,19 @@ export class Agent {
     await this.supabase.removeAllChannels();
   }
 
+  /**
+   * Answers every pending message, then returns: the serverless mode, where a cron or a ping starts a run instead
+   * of Realtime. Stops picking up messages at `deadline`; an answer cut short stays pending for the next run.
+   */
+  async drain(deadline: number) {
+    this.harness.resume();
+    while (Date.now() < deadline) {
+      await this.sweep();
+      if (this.threads.size === 0) return;
+      await Promise.race([Promise.allSettled([...this.threads.values()]), Bun.sleep(Math.max(0, deadline - Date.now()))]);
+    }
+  }
+
   private async sweep() {
     const rows = await this.sql<MessageRow[]>`
       SELECT id, thread_id, user_id, content FROM public.messages
