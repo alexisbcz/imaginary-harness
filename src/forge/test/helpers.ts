@@ -60,6 +60,10 @@ export async function git(cwd: string, ...args: string[]) {
       "user.email=tester@example.com",
       "-c",
       "init.defaultBranch=main",
+      // Apple's git ships a built-in config with the osxkeychain helper that
+      // GIT_CONFIG_NOSYSTEM does not skip: an empty value clears the helpers.
+      "-c",
+      "credential.helper=",
       ...args,
     ],
     {
@@ -67,7 +71,10 @@ export async function git(cwd: string, ...args: string[]) {
       stdout: "pipe",
       stderr: "pipe",
       env: {
-        ...process.env,
+        // An editor's askpass (VS Code sets GIT_ASKPASS) would prompt on a 401.
+        ...Object.fromEntries(
+          Object.entries(process.env).filter(([key]) => !/ASKPASS/.test(key)),
+        ),
         GIT_TERMINAL_PROMPT: "0",
         GIT_CONFIG_NOSYSTEM: "1",
         HOME: cwd,
