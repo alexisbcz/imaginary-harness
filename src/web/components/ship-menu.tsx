@@ -22,9 +22,14 @@ function CopyButton({ value, label }: { value: string; label: string }) {
       tooltip={copied ? "Copied" : "Copy"}
       size="sm"
       onClick={() => {
-        void navigator.clipboard.writeText(value);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 1500);
+        // Only confirm a copy that happened: the browser can refuse clipboard access.
+        navigator.clipboard.writeText(value).then(
+          () => {
+            setCopied(true);
+            setTimeout(() => setCopied(false), 1500);
+          },
+          () => {},
+        );
       }}
     >
       {copied ? <IconCheck size={14} /> : <IconCopy size={14} />}
