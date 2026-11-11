@@ -28,6 +28,13 @@ export const config = {
   sitesUrl: (
     Bun.env.SITES_URL ?? `http://localhost:${Bun.env.SITES_PORT ?? 3001}`
   ).replace(/\/+$/, ""),
+  /**
+   * Serve the web app over HTTPS itself, on HTTPS_PORT (443), with the mail server's certificate, and answer ACME
+   * challenges and redirect to HTTPS on HTTP_PORT (80): the one-box VPS setup, without a reverse proxy.
+   */
+  https: Bun.env.WEB_HTTPS === "true",
+  httpsPort: Number(Bun.env.HTTPS_PORT ?? 443),
+  httpPort: Number(Bun.env.HTTP_PORT ?? 80),
   model: {
     provider: "anthropic",
     modelId: Bun.env.MODEL ?? "claude-sonnet-5-5",

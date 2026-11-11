@@ -40,6 +40,9 @@ export class Certificates {
   private info: CertificateInfo | undefined;
   private timer: Timer | undefined;
   private fileStamp = 0;
+  private pemPair: { cert: string; key: string } | undefined;
+  /** Called after a new certificate is loaded (a renewal), with its PEM pair. */
+  onChange: (pair: { cert: string; key: string }) => void = () => {};
 
   constructor(
     private readonly sql: SQL,
@@ -62,8 +65,17 @@ export class Certificates {
     return this.context;
   }
 
+  /** The certificate chain and key as PEM, for a web server sharing the certificate. */
+  get pem() {
+    return this.pemPair;
+  }
+
   private load(certificate: string, privateKey: string) {
+    const changed =
+      this.pemPair !== undefined && this.pemPair.cert !== certificate;
     this.context = createSecureContext({ cert: certificate, key: privateKey });
+    this.pemPair = { cert: certificate, key: privateKey };
+    if (changed) this.onChange(this.pemPair);
     const meta = describe(certificate);
     this.info = { hostname: this.config.hostname, ...meta };
   }

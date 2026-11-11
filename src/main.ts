@@ -8,7 +8,14 @@ import { openAgent } from "./agent/runtime.ts";
 import { dockerAvailable, Previews } from "./builder/previews.ts";
 import { config } from "./config.ts";
 import { migrate } from "./db/migrate.ts";
+import { systemResolver } from "./mail/auth/dns.ts";
+import { mailConfig } from "./mail/config.ts";
+import { startMail, type MailRuntime } from "./mail/runtime.ts";
+import { MailService } from "./mail/service.ts";
+import { MailStore } from "./mail/store.ts";
+import { challengeResponse } from "./mail/tls/acme.ts";
 import { createBuilderApi } from "./server/builder-api.ts";
+import { createMailApi } from "./server/mail-api.ts";
 import { createServices, FORGE_PATH } from "./server/services.ts";
 import index from "./web/index.html";
 
@@ -25,15 +32,63 @@ async function boot() {
     await previews.start();
   } else console.warn("[preview] Docker is not available: previews are off");
 
-  const opened = await openAgent(sql, storage, { previews });
+  // Plain HTTP: ACME challenges (before the certificate below is ordered) and a redirect to HTTPS.
+  const challengePort = config.https
+    ? config.httpPort
+    : mailConfig.enabled
+      ? mailConfig.ports.http
+      : 0;
+  const http = challengePort
+    ? Bun.serve({
+        port: challengePort,
+        fetch: (request) => {
+          const url = new URL(request.url);
+          const token = url.pathname.match(
+            /^\/\.well-known\/acme-challenge\/([\w-]+)$/,
+          )?.[1];
+          if (token) return challengeResponse(sql, token);
+          if (!config.https) return new Response("Not found", { status: 404 });
+          url.protocol = "https:";
+          url.port = config.httpsPort === 443 ? "" : String(config.httpsPort);
+          return Response.redirect(url.toString(), 301);
+        },
+      })
+    : undefined;
+
+  // Mail: SMTP, IMAP, the outbound queue and the certificate, in this process when MAIL_ENABLED is set.
+  let mail: MailRuntime | undefined;
+  if (mailConfig.enabled)
+    mail = await startMail(sql, {
+      webHost: new URL(config.publicUrl).hostname,
+    });
+  const mailService =
+    mail?.service ??
+    new MailService(
+      sql,
+      new MailStore(sql),
+      mailConfig,
+      systemResolver(mailConfig.dnsServers),
+    );
+  // A renewed certificate reaches the mail servers on the next connection; the web server restarts to take it
+  // (systemd starts it again).
+  if (mail && config.https)
+    mail.certificates.onChange = () => {
+      console.log("[tls] new certificate: restarting to serve it");
+      void shutdown();
+    };
+
+  const opened = await openAgent(sql, storage, { previews, mailService });
   opened.agent.start();
+  opened.assistant.start();
 
   let stopping = false;
   async function shutdown() {
     if (stopping) return;
     stopping = true;
     await globalThis.richelieuServer?.stop();
+    await http?.stop();
     await opened.close();
+    await mail?.stop();
     await previews?.stop();
     await sql.close();
     process.exit(0);
@@ -57,6 +112,8 @@ async function boot() {
     previews,
     store: opened.store,
     shipping: opened.shipping,
+    mailService,
+    certificates: mail?.certificates,
   };
 }
 
@@ -66,15 +123,25 @@ declare global {
 }
 
 globalThis.richelieu ??= boot();
-const { sql, forge, store, previews, shipping } = await globalThis.richelieu;
+const { sql, forge, store, previews, shipping, mailService, certificates } =
+  await globalThis.richelieu;
+const mailApi = createMailApi({ sql, service: mailService, certificates });
+const tls = config.https ? certificates?.pem : undefined;
+if (config.https && !tls)
+  console.warn(
+    "[web] WEB_HTTPS is set but there is no certificate yet (MAIL_ENABLED and MAIL_TLS=acme issue one)",
+  );
 
 const server = Bun.serve({
-  port: config.port,
+  port: tls ? config.httpsPort : config.port,
+  ...(tls ? { tls: { cert: tls.cert, key: tls.key } } : {}),
   routes: {
     [`${FORGE_PATH}/*`]: (request) => forge.fetch(request),
     // The deployed app pings its agent function after sending; here the agent already follows Realtime.
     "/api/agent": () => new Response(null, { status: 202 }),
     ...createBuilderApi({ sql, store, previews, shipping }),
+    ...mailApi.api,
+    ...mailApi.wellKnown,
     "/*": index,
   },
   development: Bun.env.NODE_ENV !== "production" && {

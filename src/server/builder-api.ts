@@ -8,19 +8,12 @@ import type { Previews } from "../builder/previews.ts";
 import type { BrowseRequest, Shipping } from "../builder/shipping.ts";
 import type { WorkspaceStore } from "../agent/workspace.ts";
 import { config } from "../config.ts";
-
-type Request = Bun.BunRequest<string> & { params: Record<string, string> };
-
-class HttpError extends Error {
-  constructor(
-    readonly status: number,
-    message: string,
-  ) {
-    super(message);
-  }
-}
-
-const TOKEN_CACHE_MS = 60_000;
+import {
+  createUserAuth,
+  handle,
+  HttpError,
+  type ApiRequest as Request,
+} from "./http.ts";
 
 export function createBuilderApi({
   sql,
@@ -36,23 +29,7 @@ export function createBuilderApi({
   const supabase = createClient(config.supabaseUrl, config.serviceRoleKey, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
-  const tokens = new Map<string, { userId: string; until: number }>();
-
-  async function userOf(request: Request) {
-    const token = request.headers
-      .get("authorization")
-      ?.replace(/^Bearer /i, "");
-    if (!token) throw new HttpError(401, "Sign in first");
-    const cached = tokens.get(token);
-    if (cached && cached.until > Date.now()) return cached.userId;
-    const { data, error } = await supabase.auth.getUser(token);
-    if (error || !data.user) throw new HttpError(401, "Sign in again");
-    tokens.set(token, {
-      userId: data.user.id,
-      until: Date.now() + TOKEN_CACHE_MS,
-    });
-    return data.user.id;
-  }
+  const userOf = createUserAuth();
 
   /** The project, when the request's user owns it. */
   async function project(request: Request) {
@@ -68,22 +45,6 @@ export function createBuilderApi({
       throw new HttpError(503, `${what} is off on this server`);
     return value;
   }
-
-  const handle =
-    (handler: (request: Request) => Promise<unknown>) =>
-    async (request: Request) => {
-      try {
-        const result = await handler(request);
-        return result instanceof Response
-          ? result
-          : Response.json(result ?? { ok: true });
-      } catch (error) {
-        const status = error instanceof HttpError ? error.status : 500;
-        const message = error instanceof Error ? error.message : String(error);
-        if (status === 500) console.error("[api]", error);
-        return Response.json({ error: message }, { status });
-      }
-    };
 
   return {
     "/api/projects/:id/preview": {
