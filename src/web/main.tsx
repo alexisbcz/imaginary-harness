@@ -2,12 +2,15 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { createBrowserRouter, redirect, RouterProvider } from "react-router";
 
+import { ThemeProvider } from "twenty-ui/theme";
+
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ForgotPasswordForm } from "@/components/forgot-password-form";
 import { LoginForm } from "@/components/login-form";
 import { SignUpForm } from "@/components/sign-up-form";
 import { UpdatePasswordForm } from "@/components/update-password-form";
 import { createClient } from "@/lib/supabase/client";
+import { useColorScheme } from "@/hooks/use-color-scheme";
 import { AppLayout } from "@/routes/app-layout";
 import { AuthPage } from "@/routes/auth-page";
 import { Chat } from "@/routes/chat";
@@ -68,10 +71,18 @@ supabase.auth.onAuthStateChange((event) => {
   if (event === "SIGNED_OUT") void router.navigate("/login");
 });
 
+function App() {
+  return (
+    <ThemeProvider colorScheme={useColorScheme()}>
+      <TooltipProvider>
+        <RouterProvider router={router} />
+      </TooltipProvider>
+    </ThemeProvider>
+  );
+}
+
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <TooltipProvider>
-      <RouterProvider router={router} />
-    </TooltipProvider>
+    <App />
   </StrictMode>,
 );

@@ -1,23 +1,16 @@
 import { useState } from "react";
 
-import { cn } from "@/lib/utils";
 import { safeNextPath } from "@/lib/safe-next-path";
 import { createClient } from "@/lib/supabase/client";
-import { Button } from "@/components/ui/button";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+  AuthError,
+  AuthField,
+  AuthHeader,
+  AuthLink,
+  AuthSubmit,
+} from "@/components/auth-ui";
 
-export function LoginForm({
-  className,
-  ...props
-}: React.ComponentPropsWithoutRef<"div">) {
+export function LoginForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -46,62 +39,36 @@ export function LoginForm({
   };
 
   return (
-    <div className={cn("flex flex-col gap-6", className)} {...props}>
-      <Card>
-        <CardHeader>
-          <CardTitle className="font-medium text-lg tracking-normal">
-            Sign in
-          </CardTitle>
-          <CardDescription>
-            Enter your email below to sign in to your account
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleLogin}>
-            <div className="flex flex-col gap-6">
-              <div className="grid gap-2">
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="m@example.com"
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                />
-              </div>
-              <div className="grid gap-2">
-                <div className="flex items-center">
-                  <Label htmlFor="password">Password</Label>
-                  <a
-                    href="/forgot-password"
-                    className="ml-auto inline-block text-sm underline-offset-4 hover:underline"
-                  >
-                    Forgot your password?
-                  </a>
-                </div>
-                <Input
-                  id="password"
-                  type="password"
-                  required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                />
-              </div>
-              {error && <p className="text-sm text-red-500">{error}</p>}
-              <Button type="submit" className="w-full" disabled={isLoading}>
-                {isLoading ? "Signing in..." : "Sign in"}
-              </Button>
-            </div>
-            <div className="mt-4 text-center text-sm">
-              Don&apos;t have an account?{" "}
-              <a href="/sign-up" className="underline underline-offset-4">
-                Sign up
-              </a>
-            </div>
-          </form>
-        </CardContent>
-      </Card>
-    </div>
+    <form onSubmit={handleLogin} className="flex flex-col">
+      <AuthHeader
+        title="Welcome to Richelieu"
+        description="Sign in to build apps by describing them."
+      />
+      <div className="flex flex-col gap-4">
+        <AuthField
+          label="Email"
+          type="email"
+          placeholder="you@example.com"
+          autoComplete="email"
+          required
+          value={email}
+          onValueChange={setEmail}
+        />
+        <AuthField
+          label="Password"
+          aside={<AuthLink href="/forgot-password">Forgot it?</AuthLink>}
+          type="password"
+          autoComplete="current-password"
+          required
+          value={password}
+          onValueChange={setPassword}
+        />
+        {error && <AuthError>{error}</AuthError>}
+        <AuthSubmit loading={isLoading}>Sign in</AuthSubmit>
+      </div>
+      <p className="mt-6 text-center text-t-text-tertiary">
+        No account yet? <AuthLink href="/sign-up">Sign up</AuthLink>
+      </p>
+    </form>
   );
 }

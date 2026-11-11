@@ -1,32 +1,26 @@
+import { useState, type ComponentType } from "react";
+import { cn } from "cn";
 import {
+  IconAlertTriangle,
+  IconBox,
+  IconChevronDown,
   IconCheck,
-  IconCodeSearch,
+  IconDatabase,
+  IconDatabaseExport,
   IconEye,
-  IconFileCode,
+  IconFilePencil,
+  IconFileText,
   IconFolder,
   IconListCheck,
-  IconBox,
-  IconClockArrow,
   IconPencil,
+  IconRestore,
   IconTerminal,
   IconTrash,
-  IconWarningOctogonFill,
-} from "@pierre/icons";
-import type { ComponentType, SVGProps } from "react";
+} from "twenty-ui/icon";
 
-import {
-  Trace,
-  TraceCollapsible,
-  TraceCollapsibleContent,
-  TraceCollapsibleTrigger,
-  TraceDescription,
-  TraceIcon,
-  TraceLine,
-  TraceTitle,
-} from "@/components/ui/trace";
 import type { Step } from "@/lib/chat";
 
-type Icon = ComponentType<SVGProps<SVGSVGElement>>;
+type Icon = ComponentType<{ size?: number; className?: string }>;
 
 const arg = (step: Step, name: string) =>
   typeof step.args?.[name] === "string" ? (step.args[name] as string) : "";
@@ -49,13 +43,13 @@ function describe(step: Step): { icon: Icon; running: string; done: string } {
       };
     case "write_file":
       return {
-        icon: IconFileCode,
+        icon: IconFileText,
         running: `Writing ${path}`,
         done: `Wrote ${path}`,
       };
     case "edit_file":
       return {
-        icon: IconPencil,
+        icon: IconFilePencil,
         running: `Editing ${path}`,
         done: `Edited ${path}`,
       };
@@ -91,19 +85,19 @@ function describe(step: Step): { icon: Icon; running: string; done: string } {
     }
     case "enable_database":
       return {
-        icon: IconBox,
+        icon: IconDatabase,
         running: "Adding a database",
         done: "Added a database",
       };
     case "run_sql":
       return {
-        icon: IconCodeSearch,
+        icon: IconDatabaseExport,
         running: "Changing the database",
         done: "Changed the database",
       };
     case "restore_version":
       return {
-        icon: IconClockArrow,
+        icon: IconRestore,
         running: "Restoring a version",
         done: "Restored a version",
       };
@@ -114,29 +108,40 @@ function describe(step: Step): { icon: Icon; running: string; done: string } {
 
 function StepLine({ step }: { step: Step }) {
   const { icon: StepIcon, running, done } = describe(step);
-  const status =
-    step.status === "running"
-      ? "running"
-      : step.status === "error"
-        ? "error"
-        : undefined;
+  const isRunning = step.status === "running";
+  const failed = step.status === "error";
   return (
-    <TraceLine status={status} title={step.summary}>
-      <TraceIcon>
-        {step.status === "error" ? <IconWarningOctogonFill /> : <StepIcon />}
-      </TraceIcon>
-      <TraceTitle className="truncate">
-        {step.status === "running" ? `${running}…` : done}
-      </TraceTitle>
-      {step.status === "error" && step.summary && (
-        <TraceDescription className="truncate">{step.summary}</TraceDescription>
+    <div
+      title={step.summary}
+      className={cn(
+        "flex h-6 min-w-0 items-center gap-2 text-t-text-tertiary",
+        failed && "text-t-text-danger",
       )}
-    </TraceLine>
+    >
+      <span className="flex size-4 shrink-0 items-center justify-center">
+        {failed ? <IconAlertTriangle size={14} /> : <StepIcon size={14} />}
+      </span>
+      <span
+        className={cn(
+          "min-w-0 truncate",
+          isRunning &&
+            "shimmer text-t-text-secondary motion-reduce:shimmer-none",
+        )}
+      >
+        {isRunning ? `${running}…` : done}
+      </span>
+      {failed && step.summary && (
+        <span className="min-w-0 truncate text-t-text-light">
+          {step.summary}
+        </span>
+      )}
+    </div>
   );
 }
 
 /** What the agent did for an answer: the running step in full, the finished ones folded once there are many. */
 export function Steps({ steps: all, live }: { steps: Step[]; live: boolean }) {
+  const [open, setOpen] = useState(false);
   // Only well-formed steps: a malformed one must not take the chat down.
   const steps = all.filter(
     (step): step is Step =>
@@ -146,17 +151,14 @@ export function Steps({ steps: all, live }: { steps: Step[]; live: boolean }) {
   );
   if (steps.length === 0) return null;
   const FOLD_AFTER = 4;
-  if (live || steps.length <= FOLD_AFTER) {
-    return (
-      <Trace>
-        {steps.map((step) => (
-          <div key={step.id}>
-            <StepLine step={step} />
-          </div>
-        ))}
-      </Trace>
-    );
-  }
+  const lines = (
+    <div className="flex flex-col">
+      {steps.map((step) => (
+        <StepLine key={step.id} step={step} />
+      ))}
+    </div>
+  );
+  if (live || steps.length <= FOLD_AFTER) return lines;
   const edited = new Set(
     steps
       .filter((step) =>
@@ -165,30 +167,32 @@ export function Steps({ steps: all, live }: { steps: Step[]; live: boolean }) {
       .map((step) => arg(step, "path")),
   );
   return (
-    <Trace>
-      <TraceCollapsible>
-        <TraceCollapsibleTrigger>
-          <TraceLine>
-            <TraceIcon>
-              <IconListCheck />
-            </TraceIcon>
-            <TraceTitle>
-              {steps.length} steps
-              {edited.size > 0 &&
-                `, ${edited.size} file${edited.size === 1 ? "" : "s"} changed`}
-            </TraceTitle>
-          </TraceLine>
-        </TraceCollapsibleTrigger>
-        <TraceCollapsibleContent>
-          <Trace>
-            {steps.map((step) => (
-              <div key={step.id}>
-                <StepLine step={step} />
-              </div>
-            ))}
-          </Trace>
-        </TraceCollapsibleContent>
-      </TraceCollapsible>
-    </Trace>
+    <div className="flex flex-col">
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen(!open)}
+        className="-mx-1 flex h-6 w-fit items-center gap-2 rounded-sm px-1 text-t-text-tertiary outline-none hover:bg-t-hover hover:text-t-text-secondary focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        <IconListCheck size={14} />
+        <span>
+          {steps.length} steps
+          {edited.size > 0 &&
+            ` · ${edited.size} file${edited.size === 1 ? "" : "s"} changed`}
+        </span>
+        <IconChevronDown
+          size={14}
+          className={cn(
+            "transition-transform duration-150",
+            open && "rotate-180",
+          )}
+        />
+      </button>
+      {open && (
+        <div className="mt-0.5 ml-[7px] border-l border-t-border pl-[11px]">
+          {lines}
+        </div>
+      )}
+    </div>
   );
 }

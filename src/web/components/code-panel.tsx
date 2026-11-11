@@ -6,7 +6,9 @@ import { javascript } from "@codemirror/lang-javascript";
 import { json } from "@codemirror/lang-json";
 import { markdown } from "@codemirror/lang-markdown";
 import { MultiFileDiff } from "@pierre/diffs/react";
-import { IconDiffUnified, IconFile } from "@pierre/icons";
+import { SegmentedControl } from "twenty-ui/components/input";
+import { Button } from "twenty-ui/primitives/input";
+import { IconCode, IconFileDiff } from "@tabler/icons-react";
 import pierreLight from "@pierre/theme/pierre-light";
 import { themeToTreeStyles } from "@pierre/trees";
 import {
@@ -16,9 +18,6 @@ import {
 } from "@pierre/trees/react";
 
 import type { WorkspaceFile } from "@/components/workspace";
-import { Button } from "@/components/ui/button";
-import { Kbd } from "@/components/ui/kbd";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { api } from "@/lib/api";
 
 const treeStyles = themeToTreeStyles(pierreLight);
@@ -96,12 +95,12 @@ export function CodePanel({
       </div>
       {selected ? (
         <div className="flex min-w-0 flex-1 flex-col">
-          <div className="flex h-11 shrink-0 items-center gap-2 border-b px-3">
-            <span className="min-w-0 flex-1 truncate font-mono text-xs text-muted-foreground">
+          <div className="flex h-10 shrink-0 items-center gap-2 border-b border-t-border-light px-3">
+            <span className="min-w-0 flex-1 truncate font-mono text-[12px] text-t-text-tertiary">
               {selected.path}
               {dirty && " •"}
             </span>
-            {error && <span className="text-xs text-destructive">{error}</span>}
+            {error && <span className="text-t-text-danger">{error}</span>}
             {dirty && (
               <>
                 <Button
@@ -111,30 +110,37 @@ export function CodePanel({
                 >
                   Discard
                 </Button>
-                <Button size="sm" disabled={saving} onClick={() => void save()}>
-                  Save <Kbd>⌘S</Kbd>
+                <Button
+                  size="sm"
+                  variant="solid"
+                  color="accent"
+                  loading={saving}
+                  shortcut={["⌘", "S"]}
+                  onClick={() => void save()}
+                >
+                  Save
                 </Button>
               </>
             )}
-            <ToggleGroup
+            <SegmentedControl<"code" | "diff">
+              aria-label="View"
               size="sm"
-              value={[showDiff ? "diff" : "code"]}
-              onValueChange={(value: unknown[]) => {
-                if (value[0] === "diff" || value[0] === "code")
-                  setView(value[0]);
-              }}
-            >
-              <ToggleGroupItem value="code" aria-label="Edit the file">
-                <IconFile />
-              </ToggleGroupItem>
-              <ToggleGroupItem
-                value="diff"
-                aria-label="Its latest change"
-                disabled={!canDiff}
-              >
-                <IconDiffUnified />
-              </ToggleGroupItem>
-            </ToggleGroup>
+              value={showDiff ? "diff" : "code"}
+              onValueChange={(value) => setView(value)}
+              options={[
+                {
+                  value: "code",
+                  startIcon: <IconCode size={14} />,
+                  "aria-label": "Edit the file",
+                },
+                {
+                  value: "diff",
+                  startIcon: <IconFileDiff size={14} />,
+                  "aria-label": "Its latest change",
+                  disabled: !canDiff,
+                },
+              ]}
+            />
           </div>
           <div
             className="min-h-0 flex-1 overflow-auto text-[13px]"

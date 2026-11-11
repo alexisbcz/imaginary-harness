@@ -1,34 +1,22 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { cn } from "cn";
+import { LightIconButton, SegmentedControl } from "twenty-ui/components/input";
+import { Button, Input, InputGroup } from "twenty-ui/primitives/input";
+// Twenty UI's icons are Tabler's; it does not re-export these two.
+import { IconDeviceMobile, IconDeviceTablet } from "@tabler/icons-react";
 import {
-  IconArrowUpRight,
-  IconCursor,
-  IconDesktop,
-  IconPhone,
+  IconAlertTriangle,
+  IconClick,
+  IconDeviceDesktop,
+  IconExternalLink,
+  IconLayout,
   IconRefresh,
   IconReload,
-  IconTablet,
-  IconWarningOctogonFill,
   IconX,
-} from "@pierre/icons";
-import { cn } from "cn";
+} from "twenty-ui/icon";
 
 import { Shimmer } from "@/components/ai-elements/shimmer";
 import type { PickedElement } from "@/components/composer";
-import { Button } from "@/components/ui/button";
-import {
-  Empty,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyTitle,
-} from "@/components/ui/empty";
-import { Input } from "@/components/ui/input";
-import { Toggle } from "@/components/ui/toggle";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { api } from "@/lib/api";
 
 type Status =
@@ -48,34 +36,27 @@ const STATUS_POLL_MS = 5_000;
 
 type PreviewError = { message: string; stack?: string };
 
-function IconButton({
-  label,
-  onClick,
-  disabled,
+/** An empty or failed preview: a title and a line of explanation, centered, like Twenty's empty states. */
+function EmptyState({
+  title,
   children,
+  action,
 }: {
-  label: string;
-  onClick: () => void;
-  disabled?: boolean;
+  title: string;
   children: React.ReactNode;
+  action?: React.ReactNode;
 }) {
   return (
-    <Tooltip>
-      <TooltipTrigger
-        render={
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            aria-label={label}
-            disabled={disabled}
-            onClick={onClick}
-          />
-        }
-      >
-        {children}
-      </TooltipTrigger>
-      <TooltipContent>{label}</TooltipContent>
-    </Tooltip>
+    <div className="flex max-w-sm flex-col items-center gap-3 self-center px-6 text-center">
+      <span className="flex size-10 items-center justify-center rounded-md border border-t-border bg-t-primary text-t-text-tertiary shadow-[0_2px_4px_rgb(0_0_0/0.04)]">
+        <IconLayout size={20} />
+      </span>
+      <div className="flex flex-col gap-1">
+        <p className="font-semibold text-t-text">{title}</p>
+        <div className="leading-[1.45] text-t-text-tertiary">{children}</div>
+      </div>
+      {action}
+    </div>
   );
 }
 
@@ -221,14 +202,15 @@ export function PreviewPanel({
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="flex h-11 shrink-0 items-center gap-1 border-b px-2">
-        <IconButton
-          label="Reload"
+      <div className="flex h-10 shrink-0 items-center gap-1 border-b border-t-border-light px-2">
+        <LightIconButton
+          aria-label="Reload"
+          tooltip="Reload"
           disabled={!url}
           onClick={() => setReloads((n) => n + 1)}
         >
-          <IconRefresh />
-        </IconButton>
+          <IconRefresh size={16} />
+        </LightIconButton>
         <form
           className="min-w-0 flex-1"
           onSubmit={(event) => {
@@ -236,69 +218,96 @@ export function PreviewPanel({
             navigate(address);
           }}
         >
-          <Input
-            aria-label="Page"
-            value={address}
-            disabled={!url}
-            onChange={(event) => setAddress(event.target.value)}
-            className="h-7 rounded-full bg-muted/60 font-mono text-xs"
-          />
-        </form>
-        <ToggleGroup
-          size="sm"
-          value={[device]}
-          onValueChange={(value: unknown[]) => {
-            if (
-              value[0] === "desktop" ||
-              value[0] === "tablet" ||
-              value[0] === "phone"
-            )
-              setDevice(value[0]);
-          }}
-        >
-          <ToggleGroupItem value="desktop" aria-label="Desktop width">
-            <IconDesktop />
-          </ToggleGroupItem>
-          <ToggleGroupItem value="tablet" aria-label="Tablet width">
-            <IconTablet />
-          </ToggleGroupItem>
-          <ToggleGroupItem value="phone" aria-label="Phone width">
-            <IconPhone />
-          </ToggleGroupItem>
-        </ToggleGroup>
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Toggle
-                size="sm"
-                aria-label="Pick an element to change"
-                pressed={picking}
-                disabled={!url}
-                onPressedChange={togglePicking}
+          <InputGroup
+            size="sm"
+            startElement={
+              <span
+                aria-hidden
+                className={cn(
+                  "ml-1.5 size-1.5 rounded-full",
+                  status.state === "starting" && "animate-pulse",
+                )}
+                style={{
+                  background:
+                    status.state === "running"
+                      ? "var(--t-color-green9)"
+                      : status.state === "failed"
+                        ? "var(--t-color-red9)"
+                        : "var(--t-color-gray8)",
+                }}
               />
             }
           >
-            <IconCursor />
-          </TooltipTrigger>
-          <TooltipContent>Pick an element to change</TooltipContent>
-        </Tooltip>
-        <IconButton
-          label="Open in a new tab"
+            <Input
+              aria-label="Page"
+              value={address}
+              disabled={!url}
+              onValueChange={(value) => setAddress(value)}
+              className="font-mono"
+            />
+          </InputGroup>
+        </form>
+        <SegmentedControl<Device>
+          aria-label="Width"
+          size="sm"
+          value={device}
+          onValueChange={(value) => setDevice(value)}
+          options={[
+            {
+              value: "desktop",
+              startIcon: <IconDeviceDesktop size={14} />,
+              "aria-label": "Desktop width",
+            },
+            {
+              value: "tablet",
+              startIcon: <IconDeviceTablet size={14} />,
+              "aria-label": "Tablet width",
+            },
+            {
+              value: "phone",
+              startIcon: <IconDeviceMobile size={14} />,
+              "aria-label": "Phone width",
+            },
+          ]}
+        />
+        <div className="mx-1 h-4 w-px bg-t-border" />
+        <LightIconButton
+          aria-label="Pick an element to change"
+          aria-pressed={picking}
+          tooltip="Pick an element to change"
+          disabled={!url}
+          onClick={togglePicking}
+          className={cn(
+            picking &&
+              "!bg-[var(--t-accent-tertiary)] !text-[var(--t-color-blue11)]",
+          )}
+        >
+          <IconClick size={16} />
+        </LightIconButton>
+        <LightIconButton
+          aria-label="Open in a new tab"
+          tooltip="Open in a new tab"
           disabled={!url}
           onClick={() => url && window.open(url + path, "_blank", "noopener")}
         >
-          <IconArrowUpRight />
-        </IconButton>
-        <IconButton
-          label="Restart the dev server"
+          <IconExternalLink size={16} />
+        </LightIconButton>
+        <LightIconButton
+          aria-label="Restart the dev server"
+          tooltip="Restart the dev server"
           disabled={status.state === "starting" || !hasFiles}
           onClick={() => void start(true)}
         >
-          <IconReload />
-        </IconButton>
+          <IconReload size={16} />
+        </LightIconButton>
       </div>
 
-      <div className="relative flex min-h-0 flex-1 justify-center overflow-auto bg-muted/40">
+      <div
+        className={cn(
+          "relative flex min-h-0 flex-1 justify-center overflow-auto",
+          (width || !url) && "bg-t-secondary",
+        )}
+      >
         {url ? (
           <iframe
             key={`${url}:${reloads}`}
@@ -306,54 +315,55 @@ export function PreviewPanel({
             title="Preview"
             src={url + path}
             className={cn(
-              "h-full bg-background",
-              width ? "my-3 rounded-xl border shadow-sm" : "w-full",
+              "h-full bg-white",
+              width
+                ? "my-4 rounded-lg border border-t-border shadow-[0_4px_16px_rgb(0_0_0/0.06)]"
+                : "w-full",
             )}
-            style={width ? { width, height: "calc(100% - 1.5rem)" } : undefined}
+            style={width ? { width, height: "calc(100% - 2rem)" } : undefined}
           />
         ) : status.state === "failed" ? (
-          <Empty>
-            <EmptyHeader>
-              <EmptyTitle>The preview did not start</EmptyTitle>
-              <EmptyDescription className="max-h-40 overflow-auto font-mono text-xs whitespace-pre-wrap">
-                {status.error}
-              </EmptyDescription>
-            </EmptyHeader>
-            <Button variant="outline" onClick={() => void start()}>
-              Try again
-            </Button>
-          </Empty>
+          <EmptyState
+            title="The preview did not start"
+            action={
+              <Button size="sm" variant="outline" onClick={() => void start()}>
+                Try again
+              </Button>
+            }
+          >
+            <pre className="max-h-40 overflow-auto text-left font-mono text-[11px] whitespace-pre-wrap">
+              {status.error}
+            </pre>
+          </EmptyState>
         ) : hasFiles ? (
           <div className="flex items-center">
             <Shimmer>Starting the preview…</Shimmer>
           </div>
         ) : (
-          <Empty>
-            <EmptyHeader>
-              <EmptyTitle>Your app shows here</EmptyTitle>
-              <EmptyDescription>
-                It runs live as Richelieu builds it, and updates with each
-                change.
-              </EmptyDescription>
-            </EmptyHeader>
-          </Empty>
+          <EmptyState title="Your app shows here">
+            It runs live as Richelieu builds it, and updates with each change.
+          </EmptyState>
         )}
 
         {errors.length > 0 && (
-          <div className="absolute inset-x-3 bottom-3 flex items-start gap-3 rounded-xl border bg-background p-3 text-sm shadow-lg">
-            <IconWarningOctogonFill className="mt-0.5 size-4 shrink-0 text-destructive" />
+          <div className="absolute inset-x-3 bottom-3 flex items-center gap-3 rounded-md border border-t-border bg-t-primary p-2.5 pl-3 shadow-[0_0_4px_rgb(0_0_0/0.04),0_8px_24px_rgb(0_0_0/0.1)]">
+            <span className="flex size-7 shrink-0 items-center justify-center rounded-sm bg-[var(--t-background-danger)] text-t-text-danger">
+              <IconAlertTriangle size={16} />
+            </span>
             <div className="min-w-0 flex-1">
-              <p className="font-medium">
+              <p className="font-medium text-t-text">
                 {errors.length === 1
                   ? "The app hit an error"
                   : `The app hit ${errors.length} errors`}
               </p>
-              <p className="line-clamp-2 font-mono text-xs text-muted-foreground">
+              <p className="truncate font-mono text-[11px] text-t-text-tertiary">
                 {errors.at(-1)!.message}
               </p>
             </div>
             <Button
               size="sm"
+              variant="solid"
+              color="accent"
               disabled={busy}
               onClick={() => {
                 onFix(errors);
@@ -362,14 +372,13 @@ export function PreviewPanel({
             >
               Fix it
             </Button>
-            <Button
-              variant="ghost"
-              size="icon-sm"
+            <LightIconButton
               aria-label="Dismiss the errors"
+              size="sm"
               onClick={() => setErrors([])}
             >
-              <IconX />
-            </Button>
+              <IconX size={14} />
+            </LightIconButton>
           </div>
         )}
       </div>

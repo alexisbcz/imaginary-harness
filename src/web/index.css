@@ -1,8 +1,15 @@
 /* Classes come from the web app only, not from the generated apps' template or the preview runtime. */
+/* Twenty UI's styles live in the twenty-ui layer: above Tailwind's reset, below its utilities. */
+@layer theme, base, twenty-ui, components, utilities;
 @import "tailwindcss" source(".");
+@import "twenty-ui/style.css";
+@import "twenty-ui/theme-light.css";
+@import "twenty-ui/theme-dark.css";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
-@import "@fontsource-variable/figtree";
+@import "@fontsource-variable/inter";
+@import "@fontsource/dm-mono/400.css";
+@import "@fontsource/dm-mono/500.css";
 @source "../../node_modules/streamdown/dist/*.js";
 
 /* The light sweeping across <Shimmer> text. */
@@ -19,7 +26,24 @@
 
 @theme inline {
   --font-heading: var(--font-sans);
-  --font-sans: "Figtree Variable", sans-serif;
+  --font-sans: "Inter Variable", Inter, sans-serif;
+  --font-mono: "DM Mono", ui-monospace, monospace;
+  /* Twenty UI's palette, for utilities: bg-t-secondary, text-t-tertiary, border-t-light… */
+  --color-t-primary: var(--t-background-primary);
+  --color-t-secondary: var(--t-background-secondary);
+  --color-t-tertiary: var(--t-background-tertiary);
+  --color-t-quaternary: var(--t-background-quaternary);
+  --color-t-hover: var(--t-background-transparent-light);
+  --color-t-press: var(--t-background-transparent-medium);
+  --color-t-blue: var(--t-color-blue9);
+  --color-t-text: var(--t-font-color-primary);
+  --color-t-text-secondary: var(--t-font-color-secondary);
+  --color-t-text-tertiary: var(--t-font-color-tertiary);
+  --color-t-text-light: var(--t-font-color-light);
+  --color-t-text-danger: var(--t-font-color-danger);
+  --color-t-border: var(--t-border-color-medium);
+  --color-t-border-light: var(--t-border-color-light);
+  --color-t-border-strong: var(--t-border-color-strong);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -60,73 +84,52 @@
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
+/* The shadcn tokens the remaining panels use, read from Twenty UI's tokens so both libraries share one palette.
+   ThemeProvider puts .light or .dark on <html>; Twenty UI defines its --t-* tokens under those classes. */
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
-}
+  --background: var(--t-background-primary);
+  --foreground: var(--t-font-color-primary);
+  --card: var(--t-background-primary);
+  --card-foreground: var(--t-font-color-primary);
+  --popover: var(--t-background-primary);
+  --popover-foreground: var(--t-font-color-primary);
+  --primary: var(--t-background-inverted-primary);
+  --primary-foreground: var(--t-font-color-inverted);
+  --secondary: var(--t-background-tertiary);
+  --secondary-foreground: var(--t-font-color-primary);
+  --muted: var(--t-background-tertiary);
+  --muted-foreground: var(--t-font-color-tertiary);
+  --accent: var(--t-background-transparent-light);
+  --accent-foreground: var(--t-font-color-primary);
+  --destructive: var(--t-font-color-danger);
+  --border: var(--t-border-color-medium);
+  --input: var(--t-border-color-medium);
+  --ring: var(--t-color-blue8);
+  --chart-1: var(--t-color-blue9);
+  --chart-2: var(--t-color-turquoise9);
+  --chart-3: var(--t-color-orange9);
+  --chart-4: var(--t-color-purple9);
+  --chart-5: var(--t-color-pink9);
+  --radius: 8px;
+  --sidebar: var(--t-background-secondary);
+  --sidebar-foreground: var(--t-font-color-primary);
+  --sidebar-primary: var(--t-background-inverted-primary);
+  --sidebar-primary-foreground: var(--t-font-color-inverted);
+  --sidebar-accent: var(--t-background-transparent-light);
+  --sidebar-accent-foreground: var(--t-font-color-primary);
+  --sidebar-border: var(--t-border-color-medium);
+  --sidebar-ring: var(--t-color-blue8);
 
-.dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  /* Twenty's type scale is written for a 13px root. Tailwind keeps a 16px one, so the scale is pinned in pixels. */
+  --t-font-size-xxs: 8px;
+  --t-font-size-xs: 11px;
+  --t-font-size-sm: 12px;
+  --t-font-size-md: 13px;
+  --t-font-size-lg: 16px;
+  --t-font-size-xl: 20px;
+  --t-font-size-xxl: 24px;
+  --t-font-family: "Inter Variable", Inter, sans-serif;
+  --t-code-font-family: "DM Mono", ui-monospace, monospace;
 }
 
 @layer base {
@@ -134,7 +137,9 @@
     @apply border-border outline-ring/50;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-t-secondary text-foreground antialiased;
+    font-size: var(--t-font-size-md);
+    font-feature-settings: "cv11", "ss01";
   }
   button:not(:disabled),
   [role="button"]:not(:disabled) {

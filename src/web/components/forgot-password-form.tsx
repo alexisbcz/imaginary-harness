@@ -1,22 +1,15 @@
 import { useState } from "react";
 
-import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
-import { Button } from "@/components/ui/button";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+  AuthError,
+  AuthField,
+  AuthHeader,
+  AuthLink,
+  AuthSubmit,
+} from "@/components/auth-ui";
 
-export function ForgotPasswordForm({
-  className,
-  ...props
-}: React.ComponentPropsWithoutRef<"div">) {
+export function ForgotPasswordForm() {
   const [email, setEmail] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
@@ -42,63 +35,41 @@ export function ForgotPasswordForm({
     }
   };
 
+  if (success)
+    return (
+      <div className="flex flex-col">
+        <AuthHeader
+          title="Check your email"
+          description="If an account uses this address, a link to reset its password is on its way."
+        />
+        <p className="text-center text-t-text-tertiary">
+          <AuthLink href="/login">Back to sign in</AuthLink>
+        </p>
+      </div>
+    );
+
   return (
-    <div className={cn("flex flex-col gap-6", className)} {...props}>
-      {success ? (
-        <Card>
-          <CardHeader>
-            <CardTitle className="font-medium text-lg tracking-normal">
-              Check Your Email
-            </CardTitle>
-            <CardDescription>Password reset instructions sent</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm text-muted-foreground">
-              If you registered using your email and password, you will receive
-              a password reset email.
-            </p>
-          </CardContent>
-        </Card>
-      ) : (
-        <Card>
-          <CardHeader>
-            <CardTitle className="font-medium text-lg tracking-normal">
-              Reset Your Password
-            </CardTitle>
-            <CardDescription>
-              Type in your email and we&apos;ll send you a link to reset your
-              password
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleForgotPassword}>
-              <div className="flex flex-col gap-6">
-                <div className="grid gap-2">
-                  <Label htmlFor="email">Email</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    placeholder="m@example.com"
-                    required
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                  />
-                </div>
-                {error && <p className="text-sm text-red-500">{error}</p>}
-                <Button type="submit" className="w-full" disabled={isLoading}>
-                  {isLoading ? "Sending..." : "Send reset email"}
-                </Button>
-              </div>
-              <div className="mt-4 text-center text-sm">
-                Already have an account?{" "}
-                <a href="/login" className="underline underline-offset-4">
-                  Sign in
-                </a>
-              </div>
-            </form>
-          </CardContent>
-        </Card>
-      )}
-    </div>
+    <form onSubmit={handleForgotPassword} className="flex flex-col">
+      <AuthHeader
+        title="Reset your password"
+        description="Enter your email, and we will send you a link to choose a new one."
+      />
+      <div className="flex flex-col gap-4">
+        <AuthField
+          label="Email"
+          type="email"
+          placeholder="you@example.com"
+          autoComplete="email"
+          required
+          value={email}
+          onValueChange={setEmail}
+        />
+        {error && <AuthError>{error}</AuthError>}
+        <AuthSubmit loading={isLoading}>Send the link</AuthSubmit>
+      </div>
+      <p className="mt-6 text-center text-t-text-tertiary">
+        Remembered it? <AuthLink href="/login">Sign in</AuthLink>
+      </p>
+    </form>
   );
 }

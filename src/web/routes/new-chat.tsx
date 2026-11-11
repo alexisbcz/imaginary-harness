@@ -2,14 +2,17 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { formatDistanceToNow } from "date-fns";
 
-import { Suggestion, Suggestions } from "@/components/ai-elements/suggestion";
-import { Composer } from "@/components/composer";
+import { Avatar, Chip } from "twenty-ui/primitives/data-display";
+import { Skeleton } from "twenty-ui/primitives/feedback";
 import {
-  Card,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+  IconClock,
+  IconSparkles,
+  IconSquarePlus,
+  IconTextSize,
+} from "twenty-ui/icon";
+
+import { Composer } from "@/components/composer";
+import { Page } from "@/components/page";
 import { startThread, type Outgoing, type Thread } from "@/lib/chat";
 import { createClient } from "@/lib/supabase/client";
 
@@ -52,65 +55,94 @@ export function NewChat() {
   }
 
   return (
-    <div className="flex flex-1 flex-col items-center overflow-y-auto px-4 pt-[14vh] pb-16">
-      <div className="flex w-full max-w-2xl flex-col gap-6">
-        <div className="flex flex-col items-center gap-2 text-center">
-          <h1 className="font-heading text-3xl font-medium text-balance">
-            What do you want to build?
-          </h1>
-          <p className="text-muted-foreground">
-            Describe an app, or paste a screenshot of one. Richelieu builds it
-            while you watch.
-          </p>
-        </div>
-        <Composer
-          autoFocus
-          placeholder="An app that…"
-          value={value}
-          onValueChange={setValue}
-          onSend={start}
-        />
-        <Suggestions className="justify-center">
-          {SUGGESTIONS.map((suggestion) => (
-            <Suggestion
-              key={suggestion}
-              suggestion={suggestion}
-              onClick={(text) => setValue(text)}
-            />
-          ))}
-        </Suggestions>
+    <Page title="New project" icon={<IconSquarePlus size={16} />}>
+      <div className="flex flex-1 flex-col items-center overflow-y-auto px-4 pt-[12vh] pb-16">
+        <div className="flex w-full max-w-[640px] flex-col">
+          <div className="mb-6 flex flex-col gap-1.5">
+            <h1 className="text-[24px] leading-tight font-semibold tracking-[-0.01em] text-balance text-t-text">
+              What do you want to build?
+            </h1>
+            <p className="text-t-text-tertiary">
+              Describe an app, or paste a screenshot of one. Richelieu builds it
+              while you watch.
+            </p>
+          </div>
+          <Composer
+            autoFocus
+            placeholder="An app that…"
+            value={value}
+            onValueChange={setValue}
+            onSend={start}
+          />
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            {SUGGESTIONS.map((suggestion) => (
+              <Chip
+                key={suggestion}
+                variant="outline"
+                shape="round"
+                size="md"
+                color="secondary"
+                startElement={<IconSparkles size={14} />}
+                onClick={() => setValue(suggestion)}
+                render={<button type="button" />}
+              >
+                {suggestion}
+              </Chip>
+            ))}
+          </div>
 
-        {projects && projects.length > 0 && (
-          <section className="mt-10 flex flex-col gap-3">
-            <h2 className="text-sm font-medium text-muted-foreground">
-              Recent projects
-            </h2>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {projects.map((project) => (
-                <Link
-                  key={project.id}
-                  to={`/t/${project.id}`}
-                  className="rounded-xl outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
-                >
-                  <Card className="h-full transition-colors hover:bg-muted/50">
-                    <CardHeader>
-                      <CardTitle className="line-clamp-2 text-sm">
-                        {project.title}
-                      </CardTitle>
-                      <CardDescription className="text-xs">
-                        Edited{" "}
-                        {formatDistanceToNow(new Date(project.updated_at), {
-                          addSuffix: true,
-                        })}
-                      </CardDescription>
-                    </CardHeader>
-                  </Card>
-                </Link>
-              ))}
-            </div>
-          </section>
-        )}
+          {(projects === null || projects.length > 0) && (
+            <section className="mt-14 flex flex-col">
+              <h2 className="mb-2 text-[11px] font-semibold text-t-text-light">
+                Recent projects
+              </h2>
+              <div className="overflow-hidden rounded-md border border-t-border">
+                <div className="grid h-8 grid-cols-[1fr_9rem] items-center border-b border-t-border bg-t-secondary text-t-text-tertiary">
+                  <span className="flex items-center gap-1 px-2">
+                    <IconTextSize size={14} /> Name
+                  </span>
+                  <span className="flex items-center gap-1 border-l border-t-border px-2">
+                    <IconClock size={14} /> Last edited
+                  </span>
+                </div>
+                {projects === null
+                  ? Array.from({ length: 3 }, (_, index) => (
+                      <div
+                        key={index}
+                        className="flex h-8 items-center gap-2 border-b border-t-border-light px-2 last:border-b-0"
+                      >
+                        <Skeleton width={14} height={14} borderRadius={3} />
+                        <Skeleton width={160 + index * 40} height={10} />
+                      </div>
+                    ))
+                  : projects.map((project) => (
+                      <Link
+                        key={project.id}
+                        to={`/t/${project.id}`}
+                        className="grid h-8 grid-cols-[1fr_9rem] items-center border-b border-t-border-light outline-none last:border-b-0 hover:bg-t-hover focus-visible:bg-t-hover"
+                      >
+                        <span className="flex min-w-0 items-center gap-2 px-2">
+                          <Avatar
+                            name={project.title}
+                            size="sm"
+                            shape="rounded-square"
+                          />
+                          <span className="truncate text-t-text">
+                            {project.title}
+                          </span>
+                        </span>
+                        <span className="truncate px-2 text-t-text-tertiary tabular-nums">
+                          {formatDistanceToNow(new Date(project.updated_at), {
+                            addSuffix: true,
+                          })}
+                        </span>
+                      </Link>
+                    ))}
+              </div>
+            </section>
+          )}
+        </div>
       </div>
-    </div>
+    </Page>
   );
 }

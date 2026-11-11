@@ -1,23 +1,13 @@
 import { useEffect, useState } from "react";
 import { formatDistanceToNow } from "date-fns";
 import { PatchDiff } from "@pierre/diffs/react";
-import { IconClockArrow } from "@pierre/icons";
+import { Skeleton } from "twenty-ui/primitives/feedback";
+import { Loader } from "twenty-ui/primitives/feedback";
+import { Button } from "twenty-ui/primitives/input";
+import { AlertDialog } from "twenty-ui/primitives/surfaces";
+import { IconRestore } from "twenty-ui/icon";
 import { cn } from "cn";
 
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
-import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Spinner } from "@/components/ui/spinner";
 import { api } from "@/lib/api";
 
 type Version = { sha: string; message: string; author: string; date: string };
@@ -87,35 +77,40 @@ export function HistoryPanel({
 
   if (versions === null)
     return (
-      <div className="flex flex-col gap-3 p-4">
+      <div className="flex w-64 flex-col gap-4 p-4">
         {Array.from({ length: 5 }, (_, i) => (
-          <Skeleton key={i} className="h-10" />
+          <div key={i} className="flex flex-col gap-1.5">
+            <Skeleton width={`${60 + ((i * 23) % 35)}%`} height={10} />
+            <Skeleton width="40%" height={8} />
+          </div>
         ))}
       </div>
     );
 
   if (versions.length === 0)
     return (
-      <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+      <div className="flex h-full items-center justify-center text-t-text-tertiary">
         {error ?? "No versions yet"}
       </div>
     );
 
   return (
     <div className="flex h-full min-h-0">
-      <ol className="w-64 shrink-0 overflow-y-auto border-r p-2">
+      <ol className="flex w-64 shrink-0 flex-col gap-px overflow-y-auto border-r border-t-border-light p-2">
         {versions.map((version, index) => (
           <li key={version.sha}>
             <button
               type="button"
               onClick={() => setSelected(version.sha)}
               className={cn(
-                "flex w-full flex-col gap-0.5 rounded-lg px-3 py-2 text-left text-sm hover:bg-muted",
-                version.sha === current && "bg-muted",
+                "flex w-full flex-col gap-0.5 rounded-sm px-2 py-1.5 text-left outline-none hover:bg-t-hover focus-visible:ring-2 focus-visible:ring-ring",
+                version.sha === current && "bg-t-press",
               )}
             >
-              <span className="line-clamp-2">{version.message}</span>
-              <span className="text-xs text-muted-foreground">
+              <span className="line-clamp-2 text-t-text">
+                {version.message}
+              </span>
+              <span className="text-[12px] text-t-text-tertiary">
                 {index === 0 ? "Current · " : ""}
                 {version.author} ·{" "}
                 {formatDistanceToNow(new Date(version.date), {
@@ -127,49 +122,68 @@ export function HistoryPanel({
         ))}
       </ol>
       <div className="flex min-w-0 flex-1 flex-col">
-        <div className="flex h-11 shrink-0 items-center gap-2 border-b px-3">
-          <span className="min-w-0 flex-1 truncate font-mono text-xs text-muted-foreground">
+        <div className="flex h-10 shrink-0 items-center gap-2 border-b border-t-border-light px-3">
+          <span className="min-w-0 flex-1 truncate font-mono text-[12px] text-t-text-tertiary">
             {current?.slice(0, 7)}
             {diff && ` · ${diff.length} file${diff.length === 1 ? "" : "s"}`}
           </span>
-          {error && <span className="text-xs text-destructive">{error}</span>}
+          {error && <span className="text-t-text-danger">{error}</span>}
           {current && current !== versions[0]!.sha && (
-            <AlertDialog>
-              <AlertDialogTrigger
+            <AlertDialog.Root>
+              <AlertDialog.Trigger
                 render={
-                  <Button size="sm" variant="outline" disabled={restoring} />
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    loading={restoring}
+                    loadingPosition="start"
+                    startIcon={<IconRestore size={14} />}
+                  />
                 }
               >
-                {restoring ? <Spinner /> : <IconClockArrow />}
                 Restore this version
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Restore this version?</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    Every file goes back to how it was at this version. The
-                    restore is a new version on top, so you can undo it the same
-                    way.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>Cancel</AlertDialogCancel>
-                  <AlertDialogAction onClick={() => void restore(current)}>
-                    Restore
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
+              </AlertDialog.Trigger>
+              <AlertDialog.Portal>
+                <AlertDialog.Backdrop />
+                <AlertDialog.Viewport>
+                  <AlertDialog.Popup size="sm">
+                    <AlertDialog.Header>
+                      <AlertDialog.Title>
+                        Restore this version?
+                      </AlertDialog.Title>
+                    </AlertDialog.Header>
+                    <AlertDialog.Body>
+                      <AlertDialog.Description>
+                        Every file goes back to how it was at this version. The
+                        restore is a new version on top, so you can undo it the
+                        same way.
+                      </AlertDialog.Description>
+                    </AlertDialog.Body>
+                    <AlertDialog.Footer>
+                      <AlertDialog.Close render={<Button variant="outline" />}>
+                        Cancel
+                      </AlertDialog.Close>
+                      <AlertDialog.Close
+                        render={<Button variant="solid" color="accent" />}
+                        onClick={() => void restore(current)}
+                      >
+                        Restore
+                      </AlertDialog.Close>
+                    </AlertDialog.Footer>
+                  </AlertDialog.Popup>
+                </AlertDialog.Viewport>
+              </AlertDialog.Portal>
+            </AlertDialog.Root>
           )}
         </div>
         <div className="min-h-0 flex-1 overflow-auto text-[13px]">
           {diff === null ? (
             <div className="flex h-full items-center justify-center">
-              <Spinner className="text-muted-foreground" />
+              <Loader />
             </div>
           ) : (
             diff.map((file) => (
-              <div key={file.path} className="border-b">
+              <div key={file.path} className="border-b border-t-border-light">
                 <PatchDiff
                   patch={patchOf(file)}
                   options={{

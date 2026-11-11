@@ -1,22 +1,14 @@
 import { useState } from "react";
 
-import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
-import { Button } from "@/components/ui/button";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+  AuthError,
+  AuthField,
+  AuthHeader,
+  AuthSubmit,
+} from "@/components/auth-ui";
 
-export function UpdatePasswordForm({
-  className,
-  ...props
-}: React.ComponentPropsWithoutRef<"div">) {
+export function UpdatePasswordForm() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -40,38 +32,23 @@ export function UpdatePasswordForm({
   };
 
   return (
-    <div className={cn("flex flex-col gap-6", className)} {...props}>
-      <Card>
-        <CardHeader>
-          <CardTitle className="font-medium text-lg tracking-normal">
-            Reset Your Password
-          </CardTitle>
-          <CardDescription>
-            Please enter your new password below.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleForgotPassword}>
-            <div className="flex flex-col gap-6">
-              <div className="grid gap-2">
-                <Label htmlFor="password">New password</Label>
-                <Input
-                  id="password"
-                  type="password"
-                  placeholder="New password"
-                  required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                />
-              </div>
-              {error && <p className="text-sm text-red-500">{error}</p>}
-              <Button type="submit" className="w-full" disabled={isLoading}>
-                {isLoading ? "Saving..." : "Save new password"}
-              </Button>
-            </div>
-          </form>
-        </CardContent>
-      </Card>
-    </div>
+    <form onSubmit={handleForgotPassword} className="flex flex-col">
+      <AuthHeader
+        title="Choose a new password"
+        description="You will stay signed in with it."
+      />
+      <div className="flex flex-col gap-4">
+        <AuthField
+          label="New password"
+          type="password"
+          autoComplete="new-password"
+          required
+          value={password}
+          onValueChange={setPassword}
+        />
+        {error && <AuthError>{error}</AuthError>}
+        <AuthSubmit loading={isLoading}>Save the password</AuthSubmit>
+      </div>
+    </form>
   );
 }

@@ -1,33 +1,21 @@
 import { useEffect, useRef, useState } from "react";
+import { cn } from "cn";
 import {
-  IconArrow,
-  IconCodeComments,
-  IconCursor,
-  IconImage,
-  IconWrench,
+  IconButton,
+  LightIconButton,
+  SegmentedControl,
+} from "twenty-ui/components/input";
+import { Chip } from "twenty-ui/primitives/data-display";
+import { Textarea } from "twenty-ui/primitives/input";
+import {
+  IconArrowUp,
+  IconClick,
+  IconTool,
+  IconMessageCircle,
+  IconPhoto,
   IconX,
-} from "@pierre/icons";
+} from "twenty-ui/icon";
 
-import {
-  Attachment,
-  AttachmentAction,
-  AttachmentActions,
-  AttachmentGroup,
-  AttachmentMedia,
-} from "@/components/ui/attachment";
-import {
-  InputGroup,
-  InputGroupAddon,
-  InputGroupButton,
-  InputGroupTextarea,
-} from "@/components/ui/input-group";
-import { Spinner } from "@/components/ui/spinner";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import type { Mode, Outgoing } from "@/lib/chat";
 
 /** An element the user picked in the preview, to ask a change about. */
@@ -159,56 +147,76 @@ export function Composer({
         addFiles(event.dataTransfer.files);
       }}
     >
-      <InputGroup className={dragging ? "ring-[3px] ring-ring/50" : undefined}>
+      <div
+        className={cn(
+          "flex cursor-text flex-col rounded-lg border border-t-border bg-t-primary shadow-[0_2px_4px_rgb(0_0_0/0.04),0_0_1px_rgb(0_0_0/0.04)] transition-[border-color,box-shadow] duration-150 focus-within:border-t-border-strong focus-within:shadow-[0_2px_8px_rgb(0_0_0/0.06)]",
+          dragging &&
+            "border-[var(--t-color-blue8)] ring-3 ring-[var(--t-color-blue4)]",
+        )}
+        onClick={(event) => {
+          if (event.target === event.currentTarget) textarea.current?.focus();
+        }}
+      >
         {(picked || images.length > 0) && (
-          <InputGroupAddon align="block-start" className="flex-wrap gap-2">
+          <div className="flex flex-wrap items-center gap-1.5 px-2.5 pt-2.5">
             {picked && (
-              <span className="inline-flex max-w-full items-center gap-1.5 rounded-lg bg-muted px-2 py-1 text-xs">
-                <IconCursor className="size-3.5 shrink-0" />
-                <span className="truncate font-mono">
+              <Chip
+                variant="soft"
+                size="md"
+                maxWidth={320}
+                startElement={<IconClick size={14} />}
+                endElement={
+                  <button
+                    type="button"
+                    aria-label="Forget the picked element"
+                    className="flex rounded-xs text-t-text-tertiary hover:text-t-text"
+                    onClick={onClearPicked}
+                  >
+                    <IconX size={12} />
+                  </button>
+                }
+              >
+                <span className="font-mono text-[11px]">
                   &lt;{picked.tag}&gt; {picked.loc}
                 </span>
+              </Chip>
+            )}
+            {images.map((image) => (
+              <div
+                key={image.url}
+                className="group relative size-12 overflow-hidden rounded-md border border-t-border"
+              >
+                <img
+                  src={image.url}
+                  alt={image.file.name}
+                  className="size-full object-cover"
+                />
                 <button
                   type="button"
-                  aria-label="Forget the picked element"
-                  className="-mr-0.5 rounded p-0.5 hover:bg-background"
-                  onClick={onClearPicked}
+                  aria-label={`Remove ${image.file.name}`}
+                  className="absolute top-0.5 right-0.5 flex size-4 items-center justify-center rounded-full bg-black/60 text-white opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+                  onClick={() => removeImage(image.url)}
                 >
-                  <IconX className="size-3" />
+                  <IconX size={10} />
                 </button>
-              </span>
-            )}
-            {images.length > 0 && (
-              <AttachmentGroup>
-                {images.map((image) => (
-                  <Attachment key={image.url} size="xs">
-                    <AttachmentMedia variant="image">
-                      <img src={image.url} alt={image.file.name} />
-                    </AttachmentMedia>
-                    <AttachmentActions>
-                      <AttachmentAction
-                        aria-label={`Remove ${image.file.name}`}
-                        onClick={() => removeImage(image.url)}
-                      >
-                        <IconX />
-                      </AttachmentAction>
-                    </AttachmentActions>
-                  </Attachment>
-                ))}
-              </AttachmentGroup>
-            )}
-          </InputGroupAddon>
+              </div>
+            ))}
+          </div>
         )}
-        <InputGroupTextarea
+        <Textarea
           ref={textarea}
           aria-label="Message"
+          variant="plain"
+          autoResize
+          maxRows={12}
+          rows={2}
           placeholder={
             mode === "chat" ? "Ask a question or plan a change…" : placeholder
           }
           value={value}
           autoFocus={autoFocus}
-          className="max-h-60 min-h-16 text-base md:text-sm"
-          onChange={(event) => setValue(event.target.value)}
+          className="min-h-14 w-full resize-none bg-transparent px-3 pt-2.5 text-[16px] leading-[1.5] outline-none md:text-[13px]"
+          onValueChange={(next) => setValue(next)}
           onPaste={(event) => {
             const files = [...event.clipboardData.files];
             if (files.some((file) => file.type.startsWith("image/"))) {
@@ -227,23 +235,17 @@ export function Composer({
             }
           }}
         />
-        <InputGroupAddon align="block-end" className="justify-between">
+        <div className="flex items-center justify-between gap-2 px-2 pb-2">
           <div className="flex items-center gap-1">
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <InputGroupButton
-                    size="icon-sm"
-                    aria-label="Attach images"
-                    disabled={images.length >= MAX_IMAGES}
-                    onClick={() => fileInput.current?.click()}
-                  />
-                }
-              >
-                <IconImage />
-              </TooltipTrigger>
-              <TooltipContent>Attach images</TooltipContent>
-            </Tooltip>
+            <LightIconButton
+              aria-label="Attach images"
+              tooltip="Attach images"
+              tooltipPlace="top"
+              disabled={images.length >= MAX_IMAGES}
+              onClick={() => fileInput.current?.click()}
+            >
+              <IconPhoto size={16} />
+            </LightIconButton>
             <input
               ref={fileInput}
               type="file"
@@ -255,41 +257,42 @@ export function Composer({
                 event.target.value = "";
               }}
             />
-            <ToggleGroup
+            <SegmentedControl<Mode>
+              aria-label="Mode"
               size="sm"
-              value={[mode]}
-              onValueChange={(next: unknown[]) => {
-                if (next[0] === "build" || next[0] === "chat") setMode(next[0]);
-              }}
-            >
-              <ToggleGroupItem
-                value="build"
-                aria-label="Build: the agent changes the app"
-              >
-                <IconWrench />
-                Build
-              </ToggleGroupItem>
-              <ToggleGroupItem
-                value="chat"
-                aria-label="Chat: discuss without changing the app"
-              >
-                <IconCodeComments />
-                Chat
-              </ToggleGroupItem>
-            </ToggleGroup>
+              value={mode}
+              onValueChange={(next) => setMode(next)}
+              options={[
+                {
+                  value: "build",
+                  label: "Build",
+                  startIcon: <IconTool size={14} />,
+                  "aria-label": "Build: the agent changes the app",
+                },
+                {
+                  value: "chat",
+                  label: "Chat",
+                  startIcon: <IconMessageCircle size={14} />,
+                  "aria-label": "Chat: discuss without changing the app",
+                },
+              ]}
+            />
           </div>
-          <InputGroupButton
+          <IconButton
             type="submit"
-            variant="default"
-            size="icon-sm"
-            disabled={!canSend}
             aria-label="Send"
+            variant="solid"
+            color="accent"
+            shape="round"
+            size="sm"
+            loading={sending}
+            disabled={!canSend}
           >
-            {sending ? <Spinner /> : <IconArrow className="rotate-90" />}
-          </InputGroupButton>
-        </InputGroupAddon>
-      </InputGroup>
-      {error && <p className="text-sm text-destructive">{error}</p>}
+            <IconArrowUp size={14} />
+          </IconButton>
+        </div>
+      </div>
+      {error && <p className="text-t-text-danger">{error}</p>}
     </form>
   );
 }
