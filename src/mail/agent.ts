@@ -37,16 +37,14 @@ export async function ownerOfConversation(
   sql: SQL,
   conversationId: number,
 ): Promise<{ userId: string; accountId?: string } | undefined> {
-  const [thread] = await sql<
-    { user_id: string }[]
-  >`SELECT user_id FROM public.threads WHERE conversation_id = ${conversationId}`;
-  if (thread) return { userId: thread.user_id };
+  // The assistant's conversations first: they are the narrower grant (one account).
   const [mail] = await sql<{ user_id: string; account_id: string }[]>`
     SELECT a.user_id, c.account_id FROM mail.conversations c JOIN public.mail_accounts a ON a.id = c.account_id
     WHERE c.conversation_id = ${conversationId}`;
-  return mail
-    ? { userId: mail.user_id, accountId: mail.account_id }
-    : undefined;
+  if (mail) return { userId: mail.user_id, accountId: mail.account_id };
+  const [thread] = await sql<{ user_id: string }[]>`
+    SELECT user_id FROM public.threads WHERE conversation_id = ${conversationId}`;
+  return thread ? { userId: thread.user_id } : undefined;
 }
 
 const recipients = (value: string | undefined): Address[] =>

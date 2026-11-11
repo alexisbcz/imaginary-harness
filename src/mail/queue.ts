@@ -5,7 +5,7 @@
 import { hostname as osHostname } from "node:os";
 import { domainOf } from "./mime/address.ts";
 import { buildMessage, formatDate } from "./mime/build.ts";
-import { bytesOf } from "./mime/encoding.ts";
+import { bytesOf, decodeWords } from "./mime/encoding.ts";
 import {
   deliverToDomain,
   parseRelay,
@@ -225,7 +225,12 @@ export class OutboundQueue {
       Buffer.from(original)
         .toString("latin1")
         .split(/\r?\n\r?\n/)[0] ?? "";
-    const subject = head.match(/^Subject:\s*(.*)$/im)?.[1] ?? "(no subject)";
+    // The subject as the sender wrote it: unfolded, encoded words decoded.
+    const subject = decodeWords(
+      head
+        .match(/^Subject:[ \t]*((?:.*)(?:\r?\n[ \t].*)*)/im)?.[1]
+        ?.replace(/\r?\n[ \t]/g, " ") ?? "(no subject)",
+    );
     const text = [
       `Your message "${subject}" could not be delivered to ${failed.length === 1 ? "this recipient" : "these recipients"}:`,
       "",
