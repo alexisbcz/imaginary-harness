@@ -1,8 +1,7 @@
 import { useEffect, useState } from "react"
 import { Link, Outlet, useNavigate, useParams, useRouteLoaderData } from "react-router"
 import type { User } from "@supabase/supabase-js"
-import { HugeiconsIcon } from "@hugeicons/react"
-import { Delete02Icon, Logout03Icon, PencilEdit02Icon } from "@hugeicons/core-free-icons"
+import { IconPencilSquircle, IconSignOut, IconTrash } from "@pierre/icons"
 
 import {
   Sidebar,
@@ -74,7 +73,7 @@ export function AppLayout() {
           <SidebarMenu>
             <SidebarMenuItem>
               <SidebarMenuButton render={<Link to="/" />} className="font-medium">
-                <HugeiconsIcon icon={PencilEdit02Icon} strokeWidth={2} />
+                <IconPencilSquircle />
                 New chat
               </SidebarMenuButton>
             </SidebarMenuItem>
@@ -97,7 +96,7 @@ export function AppLayout() {
                       <span className="truncate">{thread.title}</span>
                     </SidebarMenuButton>
                     <SidebarMenuAction showOnHover aria-label="Delete chat" onClick={() => void remove(thread.id)}>
-                      <HugeiconsIcon icon={Delete02Icon} strokeWidth={2} />
+                      <IconTrash />
                     </SidebarMenuAction>
                   </SidebarMenuItem>
                 ))}
@@ -109,7 +108,7 @@ export function AppLayout() {
           <SidebarMenu>
             <SidebarMenuItem>
               <SidebarMenuButton onClick={() => void supabase.auth.signOut()} tooltip="Sign out">
-                <HugeiconsIcon icon={Logout03Icon} strokeWidth={2} />
+                <IconSignOut />
                 <span className="truncate">{user.email}</span>
               </SidebarMenuButton>
             </SidebarMenuItem>

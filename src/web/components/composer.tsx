@@ -1,6 +1,5 @@
 import { useState } from "react"
-import { HugeiconsIcon } from "@hugeicons/react"
-import { ArrowUp02Icon } from "@hugeicons/core-free-icons"
+import { IconArrow } from "@pierre/icons"
 
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupTextarea } from "@/components/ui/input-group"
 import { Spinner } from "@/components/ui/spinner"
@@ -60,7 +59,7 @@ export function Composer({
         />
         <InputGroupAddon align="block-end" className="justify-end">
           <InputGroupButton type="submit" variant="default" size="icon-sm" disabled={!canSend} aria-label="Send">
-            {sending ? <Spinner /> : <HugeiconsIcon icon={ArrowUp02Icon} strokeWidth={2} />}
+            {sending ? <Spinner /> : <IconArrow className="rotate-90" />}
           </InputGroupButton>
         </InputGroupAddon>
       </InputGroup>
