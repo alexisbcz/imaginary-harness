@@ -1,9 +1,15 @@
+<p align="center">
+  <img src=".github/assets/banner.png" alt="Richelieu. Describe an app, and Richelieu builds it while you watch, with a live preview, every change in git, and a Postgres database of its own." width="100%">
+</p>
+
 # richelieu.ai
 
 A Pi Durable agent on Supabase, with its own git forge. Supabase runs locally from `compose.yml`. Everything the app
 keeps lives in that one Postgres: the agent's durable state (`pi` schema), the forge's repositories (`forge`
 schema), and the app's threads and messages (`public`). The web app talks to Supabase only: Auth, PostgREST and
 Realtime.
+
+![A project in Richelieu, in dark mode: the conversation with the agent on the left, and the recipe book it built running in the live preview on the right.](.github/assets/dashboard-dark.png)
 
 ## Development
 
