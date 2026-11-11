@@ -5,7 +5,7 @@
 <h2 align="center">Describe an app. Richelieu builds it while you watch.</h2>
 
 <p align="center">
-  <a href="#everything-you-need">Features</a> · <a href="#development">Development</a> · <a href="#the-app-builder">The app builder</a>
+  <a href="#everything-you-need">Features</a> · <a href="#development">Development</a> · <a href="#the-app-builder">The app builder</a> · <a href="#mail">Mail</a>
 </p>
 
 <p align="center">
@@ -180,6 +180,22 @@ Tokens are ES256 JWTs, the ones the SDK signs: the forge checks them against the
 Not supported yet: syncing with GitHub or other remotes (`pullUpstream`, git credentials), shallow and partial
 clones, and the `refs` claim's per-ref policies. Merges combine changes line by line; overlapping changes
 conflict.
+
+## Mail
+
+Richelieu also runs a mail server for your domains, written in TypeScript: SMTP to receive and send (SPF, DKIM and
+DMARC checked on the way in, DKIM-signed on the way out, a retrying queue in Postgres), IMAP for any mail app, and
+an inbox in the web app. Mail lives in the same Supabase Postgres. The agent can read, search, draft and send it
+through Pi Durable tools, and a mail assistant summarizes new mail and drafts replies.
+
+```sh
+sudo bash deploy/vps/install.sh --domain example.com --email you@example.com --anthropic-key sk-ant-...
+```
+
+That one command sets up a VPS: Supabase, HTTPS from Let's Encrypt, the agent and the mail server in one
+systemd service, and the DNS records to publish. Everything after that can be done from the terminal (`bun run
+mail setup`, `doctor`, `dns`, `account`, `password`…) or from **Mail settings** in the browser. See
+[docs/mail.md](docs/mail.md).
 
 ## Deploying to Vercel and Supabase
 
