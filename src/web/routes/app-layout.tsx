@@ -13,10 +13,12 @@ import { ListItem } from "twenty-ui/primitives/navigation";
 import {
   IconLayoutSidebarLeftCollapse,
   IconLogout,
+  IconSearch,
   IconSquarePlus,
   IconTrash,
 } from "twenty-ui/icon";
 
+import { CommandMenu, useCommandMenuShortcut } from "@/components/command-menu";
 import { Logo } from "@/components/logo";
 import { DrawerContext } from "@/components/page";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -80,6 +82,8 @@ export function AppLayout() {
   const drawerOpen = isMobile ? mobileOpen : open;
   const setDrawerOpen = isMobile ? setMobileOpen : setOpen;
   useEffect(() => setMobileOpen(false), [threadId]);
+  const [menuOpen, setMenuOpen] = useState(false);
+  useCommandMenuShortcut(() => setMenuOpen((current) => !current));
 
   async function remove(id: string) {
     setThreads(
@@ -121,6 +125,14 @@ export function AppLayout() {
               </LightIconButton>
             </div>
 
+            <ListItem
+              render={<button type="button" />}
+              startIcon={<IconSearch size={16} />}
+              shortcut={["Mod", "K"]}
+              onClick={() => setMenuOpen(true)}
+            >
+              Search
+            </ListItem>
             <ListItem
               render={<Link to="/" />}
               startIcon={<IconSquarePlus size={16} />}
@@ -203,6 +215,11 @@ export function AppLayout() {
         )}
         <Outlet context={{ threads } satisfies LayoutContext} />
       </div>
+      <CommandMenu
+        open={menuOpen}
+        onOpenChange={setMenuOpen}
+        threads={threads}
+      />
     </DrawerContext>
   );
 }
