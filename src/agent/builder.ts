@@ -22,6 +22,7 @@ const WRITING_TOOLS = new Set([
   "add_dependencies",
   "restore_version",
   "run_sql",
+  "send_mail",
 ]);
 /** Arguments too long to keep in a step. */
 const BULKY_ARGUMENTS = new Set(["contents", "old_text", "new_text", "sql"]);

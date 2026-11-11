@@ -8,6 +8,13 @@ import { anthropicProvider } from "@earendil-works/pi-ai/providers/anthropic";
 import { createRegistry, Harness } from "@earendil-works/pi-durable";
 import type { GitStorage } from "@pierre/storage";
 import type { Previews } from "../builder/previews.ts";
+import { config } from "../config.ts";
+import { createMailExtension } from "../mail/agent.ts";
+import { MailAssistant } from "../mail/assistant.ts";
+import { systemResolver } from "../mail/auth/dns.ts";
+import { mailConfig } from "../mail/config.ts";
+import { MailService } from "../mail/service.ts";
+import { MailStore } from "../mail/store.ts";
 import { createShipping, type Shipping } from "../builder/shipping.ts";
 import { PostgresStorage } from "../pi/postgres-storage.ts";
 import { Agent } from "./agent.ts";
@@ -22,7 +29,11 @@ import {
 export async function openAgent(
   sql: SQL,
   storage: GitStorage | undefined,
-  options: { lockTimeoutMs?: number; previews?: Previews } = {},
+  options: {
+    lockTimeoutMs?: number;
+    previews?: Previews;
+    mailService?: MailService;
+  } = {},
 ) {
   const { previews } = options;
   const context = BACKGROUND_CONTEXT;
@@ -46,6 +57,18 @@ export async function openAgent(
     );
   // Containers need Docker, which only the local server has; the run_command sandbox shares it with previews.
   if (previews) registry.install(createSandbox(sql));
+  // Mail: the agent reads and writes the user's mail, and the assistant reads new mail as it arrives. Sending
+  // only queues; the mail server's queue delivers (`MAIL_ENABLED`, or `bun run mail serve`).
+  const mailService =
+    options.mailService ??
+    new MailService(
+      sql,
+      new MailStore(sql),
+      mailConfig,
+      systemResolver(mailConfig.dnsServers),
+    );
+  const mail = createMailExtension(sql, mailService);
+  registry.install(mail.extension);
   const harness = await Harness.open(
     await PostgresStorage.open(sql, {
       schema: "pi",
@@ -59,12 +82,23 @@ export async function openAgent(
     context,
   );
   const agent = new Agent(sql, harness, context, store);
+  const assistant = new MailAssistant(
+    sql,
+    harness,
+    context,
+    mailService,
+    mail,
+    config.model,
+  );
   return {
     agent,
+    assistant,
     store,
     shipping,
+    mailService,
     async close() {
       await agent.stop();
+      await assistant.stop();
       await harness.close(context);
     },
   };

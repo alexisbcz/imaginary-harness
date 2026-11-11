@@ -25,6 +25,8 @@ export default {
     }
     try {
       await opened.agent.drain(started + BUDGET_MS);
+      // New mail waits for the assistant too; what a run leaves over, the next one reads.
+      await opened.assistant.drain(started + BUDGET_MS);
     } finally {
       await opened.close();
     }
