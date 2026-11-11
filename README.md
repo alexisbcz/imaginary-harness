@@ -11,7 +11,7 @@ Realtime.
 docker compose up -d                    # Supabase: API on :54321, Postgres on :54322, Studio on :54323
 bun install
 bun run forge:org richelieu --write-env # once: the forge organization the app signs its tokens as
-bun dev                                 # app on http://localhost:3000, forge under /forge
+bun dev                                 # app on http://localhost:3000, forge under /forge, sites on :3001
 bun test                                # needs Supabase running
 ```
 
@@ -22,13 +22,44 @@ How it fits together:
 - The app signs users in with the Supabase UI auth forms and writes to `threads` and `messages`, guarded by RLS.
 - The agent picks up new user messages. It answers each one with Pi Durable and streams the answer back into
   `messages`, and the app follows it there through Realtime.
-- Each thread has a git repository on the forge, the agent's workspace. Every file the agent writes is a commit.
+- Each thread (a project) has a git repository on the forge, the agent's workspace. Every file the agent writes is a commit.
   `public.files` mirrors each repository's head, and the app shows it with [Pierre](https://pierre.computer)'s
   libraries: `@pierre/trees` for the tree and `@pierre/diffs` for files and their latest change. Code blocks in
   answers also render through `@pierre/diffs`, with `@pierre/theme` and `@pierre/icons` throughout.
 - `src/pi/postgres-storage.ts` is Pi Durable's storage on Postgres. It passes the package's storage conformance
   suite. A crash mid-answer resumes on restart.
 - Migrations live in `supabase/migrations` and are applied at startup.
+
+## The app builder
+
+Each project is a web app the agent builds while the user watches it run. You describe an app, paste a screenshot
+or pick an element of the preview, and the agent changes the code.
+
+- **Template.** A new project starts from `templates/app`: a Vite + React + TypeScript app made by the shadcn CLI,
+  with every shadcn/ui component. `bun scripts/app-template.ts` regenerates it.
+- **Live preview.** Each open project runs its dev server in a Docker container (`docker/app`), from an image with
+  the template's packages already installed. Every commit is copied into it, and the dev server hot-reloads.
+  Previews stop after 30 idle minutes. The container has network access, so the agent can add packages
+  (`add_dependencies`).
+- **The preview talks back.** A dev-server plugin outside the project (`docker/app/richelieu`) tags each JSX
+  element with its source location and injects a bridge script. The bridge reports build and runtime errors (the
+  agent reads them with `check_app`, and the user can ask it to fix them) and lets the user pick an element to
+  change.
+- **Agent steps.** The chat shows each tool call as it runs (`messages.steps`). Chat mode
+  (`messages.mode = 'chat'`) blocks the tools that change the project.
+- **Code and history.** The Code tab edits files by hand: each save is a commit. The History tab lists every
+  commit with its diff, and restores any version as a new commit.
+- **Publishing.** Publish builds the app with `vite build` in its container and serves it from Postgres
+  (`published_files`) on its own origin (`SITES_URL`, by default `http://localhost:3001`). It is never served on
+  the builder's origin, where a published app could read the builder's session.
+- **Database.** `enable_database` gives an app its own Postgres schema behind the Supabase API (PostgREST reads
+  `pgrst.db_schemas` from the database), owned by a login role that reaches only that schema. The agent's
+  `run_sql` connects as that role. The app gets `src/lib/supabase.ts` and a `.env`. Its users sign up through
+  this project's Supabase Auth, so they share the builder's user pool.
+- **Git.** Clone gives a read-only `git clone` URL with a token that expires within the hour.
+
+Previews, `check_app`, `add_dependencies`, `run_command`, publishing and databases need Docker, so they work on
+the local server, not in the Vercel functions.
 
 ## The forge
 
