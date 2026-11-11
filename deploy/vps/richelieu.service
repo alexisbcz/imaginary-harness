@@ -1,0 +1,29 @@
+# Richelieu on a VPS: the web app over HTTPS, the agent, and the mail servers, in one process.
+# Installed by deploy/vps/install.sh as /etc/systemd/system/richelieu.service.
+
+[Unit]
+Description=Richelieu (web, agent and mail)
+After=network-online.target docker.service
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=simple
+User=richelieu
+Group=richelieu
+WorkingDirectory=/opt/richelieu/app
+# Bun loads .env from the working directory.
+ExecStart=/opt/richelieu/.bun/bin/bun src/main.ts
+Restart=always
+RestartSec=3
+# Ports 25, 80, 443, 465, 587 and 993 without running as root.
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=true
+PrivateTmp=true
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target
