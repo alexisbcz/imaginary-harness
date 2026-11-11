@@ -17,6 +17,8 @@ import { useColorScheme } from "@/hooks/use-color-scheme";
 import { AppLayout } from "@/routes/app-layout";
 import { AuthPage } from "@/routes/auth-page";
 import { Chat } from "@/routes/chat";
+import { Mail } from "@/routes/mail";
+import { MailSettings } from "@/routes/mail-settings";
 import { NewChat } from "@/routes/new-chat";
 
 const supabase = createClient();
@@ -99,6 +101,8 @@ const router = createBrowserRouter([
     children: [
       { index: true, element: <NewChat /> },
       { path: "t/:threadId", element: <Chat /> },
+      { path: "mail/settings", element: <MailSettings /> },
+      { path: "mail/:folderId?/:messageId?", element: <Mail /> },
     ],
   },
 ]);

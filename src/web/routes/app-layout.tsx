@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import {
   Link,
   Outlet,
+  useLocation,
   useNavigate,
   useParams,
   useRouteLoaderData,
@@ -13,6 +14,7 @@ import { IconSquareRoundedPlusFilled } from "@tabler/icons-react";
 import {
   IconLayoutSidebarLeftCollapse,
   IconLogout,
+  IconMail,
   IconSearch,
   IconTrash,
 } from "twenty-ui/icon";
@@ -23,6 +25,7 @@ import { Logo } from "@/components/logo";
 import { DrawerContext } from "@/components/page";
 import { useIsMobile } from "@/hooks/use-mobile";
 import type { Thread } from "@/lib/chat";
+import { useUnreadCount } from "@/lib/mail";
 import { createClient } from "@/lib/supabase/client";
 
 const supabase = createClient();
@@ -75,13 +78,16 @@ export function AppLayout() {
   const { threadId } = useParams();
   const navigate = useNavigate();
   const [threads, setThreads] = useThreads();
+  const unread = useUnreadCount();
+  const inMail = useLocation().pathname.startsWith("/mail");
   const isMobile = useIsMobile();
   const [open, setOpen] = useState(true);
   // On a phone the drawer covers the page, starts closed, and closes on each navigation.
   const [mobileOpen, setMobileOpen] = useState(false);
   const drawerOpen = isMobile ? mobileOpen : open;
   const setDrawerOpen = isMobile ? setMobileOpen : setOpen;
-  useEffect(() => setMobileOpen(false), [threadId]);
+  const { pathname } = useLocation();
+  useEffect(() => setMobileOpen(false), [pathname]);
   const [menuOpen, setMenuOpen] = useState(false);
   useCommandMenuShortcut(() => setMenuOpen((current) => !current));
 
@@ -144,9 +150,28 @@ export function AppLayout() {
                   <IconSquareRoundedPlusFilled />
                 </IconTile>
               }
-              selected={!threadId}
+              selected={!threadId && !inMail}
             >
               New project
+            </ListItem>
+            <ListItem
+              render={<Link to="/mail" />}
+              startIcon={
+                <IconTile color="blue">
+                  <IconMail />
+                </IconTile>
+              }
+              selected={inMail}
+              description={
+                unread > 0 ? (
+                  <span className="tabular-nums">
+                    {unread > 999 ? "999+" : unread}
+                  </span>
+                ) : undefined
+              }
+              descriptionPlacement="end"
+            >
+              Mail
             </ListItem>
 
             <SectionLabel>Projects</SectionLabel>

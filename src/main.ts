@@ -123,8 +123,18 @@ declare global {
 }
 
 globalThis.richelieu ??= boot();
-const { sql, forge, store, previews, shipping, mailService, certificates } =
-  await globalThis.richelieu;
+const booted = await globalThis.richelieu;
+const { sql, forge, store, previews, shipping, certificates } = booted;
+// A process booted before mail existed (a `bun --hot` reload) gets a mail service on the fly; restart it to run the
+// mail servers and the assistant.
+const mailService =
+  booted.mailService ??
+  new MailService(
+    sql,
+    new MailStore(sql),
+    mailConfig,
+    systemResolver(mailConfig.dnsServers),
+  );
 const mailApi = createMailApi({ sql, service: mailService, certificates });
 const tls = config.https ? certificates?.pem : undefined;
 if (config.https && !tls)
