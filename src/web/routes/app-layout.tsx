@@ -83,10 +83,13 @@ function RowActions({
   target,
   onRename,
   onDelete,
+  onNewChat,
 }: {
   target: Target;
   onRename: (target: Target) => void;
   onDelete: (target: Target) => void;
+  /** Projects: start a chat in it. */
+  onNewChat?: () => void;
 }) {
   const { t } = useTranslation("layout");
   const stop = (run: () => void) => (event: React.MouseEvent) => {
@@ -96,6 +99,16 @@ function RowActions({
   };
   return (
     <>
+      {onNewChat && (
+        <LightIconButton
+          aria-label={t("sidebar.newChatIn", { name: target.name })}
+          tooltip={t("sidebar.newChatIn", { name: target.name })}
+          size="xs"
+          onClick={stop(onNewChat)}
+        >
+          <IconPlus size={14} />
+        </LightIconButton>
+      )}
       <LightIconButton
         aria-label={t("sidebar.rename", { name: target.name })}
         size="xs"
@@ -325,12 +338,27 @@ export function AppLayout() {
                       startIcon={<NameTile name={project.name} />}
                       actionsVisibility="hover"
                       actions={
-                        <RowActions target={target} onRename={setRenaming} onDelete={setDeleting} />
+                        <RowActions
+                          target={target}
+                          onRename={setRenaming}
+                          onDelete={setDeleting}
+                          onNewChat={() => void navigate(`/p/${project.id}`)}
+                        />
                       }
                     >
                       {project.name}
                     </ListItem>
-                    {/* The open project shows its chats beneath it. */}
+                    {/* The open project shows a way to start a chat in it, then its chats. */}
+                    {current && (
+                      <div className="pl-[22px]">
+                        <ListItem
+                          render={<Link to={`/p/${project.id}`} />}
+                          startIcon={<IconPlus size={14} className="text-t-text-tertiary" />}
+                        >
+                          <span className="text-t-text-tertiary">{t("sidebar.newChat")}</span>
+                        </ListItem>
+                      </div>
+                    )}
                     {current &&
                       chatsOf(project.id).map((chat) => (
                         <div key={chat.id} className="pl-[22px]">
@@ -354,7 +382,20 @@ export function AppLayout() {
                 );
               })}
 
-              <SectionLabel>{tc("sections.chats")}</SectionLabel>
+              <SectionLabel
+                action={
+                  <LightIconButton
+                    aria-label={t("sidebar.newPlainChat")}
+                    tooltip={t("sidebar.newPlainChat")}
+                    size="xs"
+                    onClick={() => void navigate("/")}
+                  >
+                    <IconPlus size={14} />
+                  </LightIconButton>
+                }
+              >
+                {tc("sections.chats")}
+              </SectionLabel>
               {plainChats?.length === 0 && (
                 <p className="px-1 py-1 text-t-text-tertiary">
                   {t("sidebar.noChats")}

@@ -119,6 +119,7 @@ export function CommandMenu({
   const navigate = useNavigate();
   const { t, i18n } = useTranslation("layout");
   const { projectId, chatId } = useParams();
+  const currentProject = projects?.find((project) => project.id === projectId);
   const drawer = useDrawer();
   const theme = useThemePreference();
   const [view, setView] = useState<View>("root");
@@ -186,6 +187,19 @@ export function CommandMenu({
         value: "actions",
         label: t("commands.actions"),
         items: [
+          // Inside a project, a new chat there comes first.
+          ...(currentProject
+            ? [
+                {
+                  value: "new-chat-in-project",
+                  label: t("commands.newChatInProject", { name: currentProject.name }),
+                  keywords: t("commands.newChatInProjectKeywords"),
+                  icon: <IconMessageCirclePlus />,
+                  color: "pink" as const,
+                  run: close(() => void navigate(`/p/${currentProject.id}`)),
+                },
+              ]
+            : []),
           {
             value: "new-chat",
             label: t("commands.newChat"),
