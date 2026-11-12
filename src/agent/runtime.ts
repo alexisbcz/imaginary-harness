@@ -22,6 +22,7 @@ import { MailStore } from "../mail/store.ts";
 import { createShipping, type Shipping } from "../builder/shipping.ts";
 import { PostgresStorage } from "../pi/postgres-storage.ts";
 import { createNewsletterExtension } from "../newsletter/agent.ts";
+import { createResearchExtension } from "../research/agent.ts";
 import { NewsletterService } from "../newsletter/service.ts";
 import { createSocialExtension } from "../social/agent.ts";
 import { SocialService } from "../social/service.ts";
@@ -83,6 +84,10 @@ export async function openAgent(
       mailConfig,
       systemResolver(mailConfig.dnsServers),
     );
+  // Web research (blade.sh) for every agent: projects and mail here, the copilots below.
+  const research = config.bladeApiKey ? createResearchExtension() : undefined;
+  if (research) install(research);
+  else console.warn("[agent] BLADE_API_KEY is not set: web research is off");
   const mail = createMailExtension(sql, mailService);
   install(mail.extension);
   // Social: a brand's copilot plans, drafts and schedules its posts (Zernio) and researches accounts (ScrapeCreators).
@@ -107,8 +112,8 @@ export async function openAgent(
     context,
   );
   const agent = new Agent(sql, harness, context, store, {
-    social: { instructions: SOCIAL_INSTRUCTIONS, extensions: [social.extension] },
-    newsletter: { instructions: NEWSLETTER_INSTRUCTIONS, extensions: [newsletter.extension] },
+    social: { instructions: SOCIAL_INSTRUCTIONS, extensions: [social.extension, ...(research ? [research] : [])] },
+    newsletter: { instructions: NEWSLETTER_INSTRUCTIONS, extensions: [newsletter.extension, ...(research ? [research] : [])] },
   });
   const assistant = new MailAssistant(
     sql,

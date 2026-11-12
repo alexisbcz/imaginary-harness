@@ -51,4 +51,8 @@ export const config = {
   /** The forge organization the app signs its tokens as (`bun run forge:org <name> --write-env`). */
   forgeOrg: Bun.env.FORGE_ORG ?? "richelieu",
   forgePrivateKey: Bun.env.FORGE_PRIVATE_KEY?.replace(/\\n/g, "\n"),
+  /** blade.sh: the agents' web research (search and read pages). Without it, the web_research tool is off. */
+  bladeApiKey: Bun.env.BLADE_API_KEY || undefined,
+  /** The Blade model that researches: one that supports its built-in web_search and web_fetch tools. */
+  bladeResearchModel: Bun.env.BLADE_RESEARCH_MODEL ?? "qwen3.6-35b-a3b",
 } as const;
