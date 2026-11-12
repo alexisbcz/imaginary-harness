@@ -6,6 +6,7 @@ import {
   IconLayoutSidebarLeftExpandFilled,
   IconMoonFilled,
   IconPaletteFilled,
+  IconNews,
   IconSpeakerphone,
   IconSquareRoundedPlusFilled,
   IconSunFilled,
@@ -177,6 +178,14 @@ export function CommandMenu({
             icon: <IconSpeakerphone />,
             color: "violet",
             run: close(() => void navigate("/social")),
+          },
+          {
+            value: "newsletter",
+            label: "Newsletter: Substack posts, ideas and copilot",
+            keywords: "newsletter substack post draft publish email notes subscribers",
+            icon: <IconNews />,
+            color: "orange",
+            run: close(() => void navigate("/newsletter")),
           },
           {
             value: "sidebar",

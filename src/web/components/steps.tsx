@@ -27,6 +27,14 @@ import {
   IconEyeSearch,
   IconId,
   IconWorldSearch,
+  IconBulb,
+  IconClockCancel,
+  IconFilePlus,
+  IconMessageCircle,
+  IconNotes,
+  IconPhotoUp,
+  IconPlug,
+  IconFileCheck,
 } from "@tabler/icons-react";
 
 import type { Step } from "@/lib/chat";
@@ -146,6 +154,51 @@ function describe(step: Step): { icon: Icon; running: string; done: string } {
     case "read_website": {
       const url = arg(step, "url").replace(/^https?:\/\//, "");
       return { icon: IconWorldSearch, running: `Reading ${url}`, done: `Read ${url}` };
+    }
+    case "newsletter_overview":
+      return { icon: IconChartBar, running: "Looking at the newsletter", done: "Looked at the newsletter" };
+    case "newsletter_performance":
+      return { icon: IconChartBar, running: "Reading what readers opened", done: "Read what readers opened" };
+    case "list_newsletter_posts":
+      return { icon: IconFileText, running: "Reading the posts", done: "Read the posts" };
+    case "read_newsletter_post":
+      return { icon: IconEye, running: `Reading post ${arg(step, "id")}`, done: `Read post ${arg(step, "id")}` };
+    case "write_newsletter_draft": {
+      const title = arg(step, "title");
+      const short = title.length > 48 ? `${title.slice(0, 48)}…` : title;
+      return { icon: IconFilePlus, running: `Writing “${short}”`, done: `Wrote the draft “${short}”` };
+    }
+    case "update_newsletter_draft":
+      return { icon: IconPencil, running: `Revising draft ${arg(step, "id")}`, done: `Revised draft ${arg(step, "id")}` };
+    case "check_newsletter_post":
+      return { icon: IconFileCheck, running: "Checking the post", done: "Checked the post" };
+    case "schedule_newsletter_post":
+      return { icon: IconCalendarTime, running: "Scheduling the post", done: "Scheduled the post" };
+    case "unschedule_newsletter_post":
+      return { icon: IconClockCancel, running: "Unscheduling the post", done: "Unscheduled the post" };
+    case "delete_newsletter_draft":
+      return { icon: IconTrash, running: "Deleting a draft", done: "Deleted a draft" };
+    case "read_newsletter_comments":
+      return { icon: IconMessageCircle, running: "Reading the comments", done: "Read the comments" };
+    case "update_newsletter_brief":
+      return { icon: IconId, running: "Updating the brief", done: "Updated the brief" };
+    case "list_newsletter_ideas":
+      return { icon: IconBulb, running: "Reading the ideas", done: "Read the ideas" };
+    case "save_newsletter_idea": {
+      const title = arg(step, "title");
+      return { icon: IconBulb, running: title ? `Saving the idea “${title}”` : "Saving an idea", done: title ? `Saved the idea “${title}”` : "Saved an idea" };
+    }
+    case "draft_substack_note":
+      return { icon: IconNotes, running: "Drafting a Note", done: "Drafted a Note" };
+    case "schedule_substack_note":
+      return { icon: IconCalendarTime, running: "Scheduling a Note", done: "Scheduled a Note" };
+    case "add_newsletter_image":
+      return { icon: IconPhotoUp, running: "Uploading an image to Substack", done: "Uploaded an image to Substack" };
+    case "substack_mcp_tools":
+      return { icon: IconPlug, running: "Listing the Substack MCP's tools", done: "Listed the Substack MCP's tools" };
+    case "call_substack_mcp": {
+      const tool = arg(step, "tool");
+      return { icon: IconPlug, running: `Asking Substack (${tool})`, done: `Asked Substack (${tool})` };
     }
     case "list_mail":
     case "search_mail":

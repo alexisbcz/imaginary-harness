@@ -20,6 +20,7 @@ import { Chat } from "@/routes/chat";
 import { Mail } from "@/routes/mail";
 import { MailSettings } from "@/routes/mail-settings";
 import { NewChat } from "@/routes/new-chat";
+import { NewsletterPage } from "@/routes/newsletter";
 import { Social } from "@/routes/social";
 
 const supabase = createClient();
@@ -105,6 +106,7 @@ const router = createBrowserRouter([
       { path: "mail/settings", element: <MailSettings /> },
       { path: "mail/:folderId?/:messageId?", element: <Mail /> },
       { path: "social/:brandId?/:view?", element: <Social /> },
+      { path: "newsletter/:newsletterId?/:view?/:postId?", element: <NewsletterPage /> },
     ],
   },
 ]);

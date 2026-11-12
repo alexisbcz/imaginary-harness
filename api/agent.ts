@@ -27,6 +27,10 @@ export default {
       await opened.agent.drain(started + BUDGET_MS);
       // New mail waits for the assistant too; what a run leaves over, the next one reads.
       await opened.assistant.drain(started + BUDGET_MS);
+      // The cron's minute is also when scheduled newsletter posts and Notes go out.
+      await opened.newsletterService
+        .publishDue()
+        .catch((error) => console.warn("[newsletter] scheduler:", error));
     } finally {
       await opened.close();
     }

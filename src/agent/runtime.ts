@@ -21,9 +21,11 @@ import { MailService } from "../mail/service.ts";
 import { MailStore } from "../mail/store.ts";
 import { createShipping, type Shipping } from "../builder/shipping.ts";
 import { PostgresStorage } from "../pi/postgres-storage.ts";
+import { createNewsletterExtension } from "../newsletter/agent.ts";
+import { NewsletterService } from "../newsletter/service.ts";
 import { createSocialExtension } from "../social/agent.ts";
 import { SocialService } from "../social/service.ts";
-import { Agent } from "./agent.ts";
+import { Agent, NEWSLETTER_INSTRUCTIONS, SOCIAL_INSTRUCTIONS } from "./agent.ts";
 import { createBuilder } from "./builder.ts";
 import { createSandbox } from "./sandbox.ts";
 import {
@@ -40,6 +42,7 @@ export async function openAgent(
     previews?: Previews;
     mailService?: MailService;
     socialService?: SocialService;
+    newsletterService?: NewsletterService;
   } = {},
 ) {
   const { previews } = options;
@@ -86,6 +89,10 @@ export async function openAgent(
   const socialService = options.socialService ?? new SocialService(sql);
   const social = createSocialExtension(sql, socialService);
   install(social.extension, false);
+  // Newsletter: a Substack publication's copilot drafts, revises and schedules its posts and Notes.
+  const newsletterService = options.newsletterService ?? new NewsletterService(sql);
+  const newsletter = createNewsletterExtension(sql, newsletterService);
+  install(newsletter.extension, false);
   const harness = await Harness.open(
     await PostgresStorage.open(sql, {
       schema: "pi",
@@ -99,7 +106,10 @@ export async function openAgent(
     },
     context,
   );
-  const agent = new Agent(sql, harness, context, store, social.extension);
+  const agent = new Agent(sql, harness, context, store, {
+    social: { instructions: SOCIAL_INSTRUCTIONS, extensions: [social.extension] },
+    newsletter: { instructions: NEWSLETTER_INSTRUCTIONS, extensions: [newsletter.extension] },
+  });
   const assistant = new MailAssistant(
     sql,
     harness,
@@ -115,8 +125,10 @@ export async function openAgent(
     shipping,
     mailService,
     socialService,
+    newsletterService,
     async close() {
       await agent.stop();
+      newsletterService.close();
       await assistant.stop();
       await harness.close(context);
     },

@@ -31,7 +31,13 @@ const SWEEP_INTERVAL_MS = 30_000;
 const INSTRUCTIONS = `You are Richelieu, an AI app builder: you turn what the user describes into a working web app, and change it as they ask. Answer in the user's language. Use Markdown when it helps.`;
 
 /** A brand's social copilot: its own instructions and only the social tools. */
-const SOCIAL_INSTRUCTIONS = `You are Richelieu, a social media manager working for one brand with its team: you plan its calendar, write its posts in its voice, read its numbers, and keep an eye on its competitors. Answer in the user's language. Use Markdown when it helps.`;
+export const SOCIAL_INSTRUCTIONS = `You are Richelieu, a social media manager working for one brand with its team: you plan its calendar, write its posts in its voice, read its numbers, and keep an eye on its competitors. Answer in the user's language. Use Markdown when it helps.`;
+
+/** A newsletter's copilot: its own instructions and only the newsletter tools. */
+export const NEWSLETTER_INSTRUCTIONS = `You are Richelieu, the editor and co-writer of one Substack newsletter, working with its author: you plan its issues, write and revise its drafts in the author's voice, read what readers open and share, and draft its Notes. Answer in the user's language. Use Markdown when it helps.`;
+
+/** The conversations of a thread kind other than a project: their instructions and their only extensions. */
+export type Copilot = { instructions: string; extensions: Extension[] };
 
 /** The text parts of an assistant message as pi-ai represents it. */
 function textOf(message: unknown): string {
@@ -57,7 +63,8 @@ export class Agent {
     private readonly harness: Harness,
     private readonly context: Context,
     private readonly store?: WorkspaceStore,
-    private readonly social?: Extension,
+    /** By thread kind ('social', 'newsletter'): a project's conversations take the Harness's defaults. */
+    private readonly copilots: Record<string, Copilot> = {},
   ) {
     this.supabase = createClient(config.supabaseUrl, config.serviceRoleKey, {
       auth: { persistSession: false, autoRefreshToken: false },
@@ -138,8 +145,8 @@ export class Agent {
 
     const [thread] = await this.sql<{ kind: string }[]>`
       SELECT kind FROM public.threads WHERE id = ${message.thread_id}`;
-    // A new project starts from the app template, before the agent sees it; a brand's copilot has no files.
-    if (thread?.kind !== "social")
+    // A new project starts from the app template, before the agent sees it; a copilot has no files.
+    if ((thread?.kind ?? "project") === "project")
       await this.store?.seed({ id: message.thread_id, user_id: message.user_id });
     const conversation = await this.conversationOf(message.thread_id);
     const [reply] = await this.sql<{ id: string }[]>`
@@ -212,15 +219,15 @@ export class Agent {
       );
       if (existing !== undefined) return existing;
     }
-    const social = thread.kind === "social" && this.social;
+    const copilot = this.copilots[thread.kind];
     const conversation = await this.harness.createConversation(
       {
         ownership: { kind: "ownerless" },
-        agent: social
+        agent: copilot
           ? {
               model: config.model,
-              instructions: SOCIAL_INSTRUCTIONS,
-              extensions: [social],
+              instructions: copilot.instructions,
+              extensions: copilot.extensions,
             }
           : { model: config.model, instructions: INSTRUCTIONS },
       },

@@ -5,7 +5,7 @@
 <h2 align="center">Describe an app. Richelieu builds it while you watch.</h2>
 
 <p align="center">
-  <a href="#everything-you-need">Features</a> · <a href="#development">Development</a> · <a href="#the-app-builder">The app builder</a> · <a href="#mail">Mail</a> · <a href="#social">Social</a>
+  <a href="#everything-you-need">Features</a> · <a href="#development">Development</a> · <a href="#the-app-builder">The app builder</a> · <a href="#mail">Mail</a> · <a href="#social">Social</a> · <a href="#newsletter">Newsletter</a>
 </p>
 
 <p align="center">
@@ -209,6 +209,19 @@ never publishes on its own.
 Set `ZERNIO_API_KEY` (publishing and analytics, [zernio.com](https://zernio.com)) and `SCRAPECREATORS_API_KEY`
 (public accounts, [scrapecreators.com](https://scrapecreators.com)) in `.env`, then open **Social**. See
 [docs/social.md](docs/social.md).
+
+## Newsletter
+
+Richelieu runs a Substack newsletter: posts, drafts and scheduling, a Markdown editor with a live preview of what
+Substack receives, an ideas backlog, Notes, analytics and a copilot. You can write by hand, let the copilot draft,
+or work together: the editor's AI rewrites a selection, writes on from the cursor, turns notes into a draft, proposes
+titles and reviews the draft, and each change waits for your Accept. The copilot drafts and revises freely,
+schedules only when asked, and never publishes or emails on its own.
+
+Open **Newsletter** and paste your Substack session cookie (`substack.sid`). It is stored encrypted, and only the
+server reads it. Set `SUBSTACK_MCP=true` to also give the copilot the tools of
+[substack-mcp](https://github.com/marcomoauro/substack-mcp) (subscriber lists, detailed analytics, the reader feed).
+See [docs/newsletter.md](docs/newsletter.md).
 
 ## Deploying to Vercel and Supabase
 

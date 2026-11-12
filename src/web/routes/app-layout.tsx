@@ -13,6 +13,7 @@ import { Button } from "twenty-ui/primitives/input";
 import { ListItem } from "twenty-ui/primitives/navigation";
 import { AlertDialog } from "twenty-ui/primitives/surfaces";
 import {
+  IconNews,
   IconSpeakerphone,
   IconSquareRoundedPlusFilled,
 } from "@tabler/icons-react";
@@ -87,6 +88,7 @@ export function AppLayout() {
   const unread = useUnreadCount();
   const inMail = useLocation().pathname.startsWith("/mail");
   const inSocial = useLocation().pathname.startsWith("/social");
+  const inNewsletter = useLocation().pathname.startsWith("/newsletter");
   const isMobile = useIsMobile();
   const [open, setOpen] = useState(true);
   // On a phone the drawer covers the page, starts closed, and closes on each navigation.
@@ -160,7 +162,7 @@ export function AppLayout() {
                   <IconSquareRoundedPlusFilled />
                 </IconTile>
               }
-              selected={!threadId && !inMail && !inSocial}
+              selected={!threadId && !inMail && !inSocial && !inNewsletter}
             >
               New project
             </ListItem>
@@ -193,6 +195,17 @@ export function AppLayout() {
               selected={inSocial}
             >
               Social
+            </ListItem>
+            <ListItem
+              render={<Link to="/newsletter" />}
+              startIcon={
+                <IconTile color="orange">
+                  <IconNews />
+                </IconTile>
+              }
+              selected={inNewsletter}
+            >
+              Newsletter
             </ListItem>
 
             <SectionLabel>Projects</SectionLabel>
