@@ -18,6 +18,17 @@ import {
   IconTrash,
 } from "twenty-ui/icon";
 
+import {
+  IconBinoculars,
+  IconCalendarEvent,
+  IconCalendarPlus,
+  IconCalendarTime,
+  IconChartBar,
+  IconEyeSearch,
+  IconId,
+  IconWorldSearch,
+} from "@tabler/icons-react";
+
 import type { Step } from "@/lib/chat";
 
 type Icon = ComponentType<{ size?: number; className?: string }>;
@@ -101,6 +112,45 @@ function describe(step: Step): { icon: Icon; running: string; done: string } {
         running: "Restoring a version",
         done: "Restored a version",
       };
+    case "social_overview":
+      return { icon: IconChartBar, running: "Looking at the accounts and the calendar", done: "Looked at the accounts and the calendar" };
+    case "social_performance":
+      return { icon: IconChartBar, running: "Reading what worked", done: "Read what worked" };
+    case "list_social_posts":
+      return { icon: IconCalendarEvent, running: "Reading the calendar", done: "Read the calendar" };
+    case "draft_social_post": {
+      const content = arg(step, "content").replace(/\s+/g, " ");
+      const short = content.length > 48 ? `${content.slice(0, 48)}…` : content;
+      return { icon: IconCalendarPlus, running: `Drafting “${short}”`, done: `Drafted “${short}”` };
+    }
+    case "update_social_post":
+      return { icon: IconPencil, running: "Editing a post", done: "Edited a post" };
+    case "schedule_social_post":
+      return { icon: IconCalendarTime, running: "Scheduling a post", done: "Scheduled a post" };
+    case "delete_social_post":
+      return { icon: IconTrash, running: "Deleting a post", done: "Deleted a post" };
+    case "update_brand_brief":
+      return { icon: IconId, running: "Updating the brand brief", done: "Updated the brand brief" };
+    case "research_social_account": {
+      const handle = arg(step, "handle");
+      return { icon: IconEyeSearch, running: `Looking at ${handle}`, done: `Looked at ${handle}` };
+    }
+    case "list_watchlist":
+      return { icon: IconBinoculars, running: "Reading the watchlist", done: "Read the watchlist" };
+    case "watch_social_account": {
+      const handle = arg(step, "handle");
+      return { icon: IconBinoculars, running: `Adding ${handle} to the watchlist`, done: `Added ${handle} to the watchlist` };
+    }
+    case "import_social_post":
+      return { icon: IconCalendarPlus, running: "Importing a published post", done: "Imported a published post" };
+    case "read_website": {
+      const url = arg(step, "url").replace(/^https?:\/\//, "");
+      return { icon: IconWorldSearch, running: `Reading ${url}`, done: `Read ${url}` };
+    }
+    case "list_mail":
+    case "search_mail":
+    case "read_mail":
+      return { icon: IconEye, running: "Reading mail", done: "Read mail" };
     default:
       return { icon: IconCheck, running: step.tool, done: step.tool };
   }

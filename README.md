@@ -5,7 +5,7 @@
 <h2 align="center">Describe an app. Richelieu builds it while you watch.</h2>
 
 <p align="center">
-  <a href="#everything-you-need">Features</a> · <a href="#development">Development</a> · <a href="#the-app-builder">The app builder</a> · <a href="#mail">Mail</a>
+  <a href="#everything-you-need">Features</a> · <a href="#development">Development</a> · <a href="#the-app-builder">The app builder</a> · <a href="#mail">Mail</a> · <a href="#social">Social</a>
 </p>
 
 <p align="center">
@@ -196,6 +196,19 @@ That one command sets up a VPS: Supabase, HTTPS from Let's Encrypt, the agent an
 systemd service, and the DNS records to publish. Everything after that can be done from the terminal (`bun run
 mail setup`, `doctor`, `dns`, `account`, `password`…) or from **Mail settings** in the browser. See
 [docs/mail.md](docs/mail.md).
+
+## Social
+
+Richelieu runs a brand's social media with an agent. It keeps a calendar of drafts and scheduled posts across
+LinkedIn, X, Instagram, Threads, Facebook, TikTok, YouTube and Pinterest, and a composer with a preview per platform.
+It also shows analytics (follower growth, engagement, the best hours to post) and a watchlist of competitors. Each
+brand has a copilot beside its calendar: it learns the brand from its website, plans the week from what worked,
+writes drafts in the brand's voice, and studies other accounts. It drafts freely, schedules only when asked, and
+never publishes on its own.
+
+Set `ZERNIO_API_KEY` (publishing and analytics, [zernio.com](https://zernio.com)) and `SCRAPECREATORS_API_KEY`
+(public accounts, [scrapecreators.com](https://scrapecreators.com)) in `.env`, then open **Social**. See
+[docs/social.md](docs/social.md).
 
 ## Deploying to Vercel and Supabase
 

@@ -49,6 +49,7 @@ export function Composer({
   onClearPicked,
   value: controlledValue,
   onValueChange,
+  modes = true,
 }: {
   onSend: (message: Outgoing) => Promise<void>;
   disabled?: boolean;
@@ -58,6 +59,8 @@ export function Composer({
   onClearPicked?: () => void;
   value?: string;
   onValueChange?: (value: string) => void;
+  /** Offer the build and chat modes: a project's conversation does, a brand's copilot does not. */
+  modes?: boolean;
 }) {
   const [ownValue, setOwnValue] = useState("");
   const value = controlledValue ?? ownValue;
@@ -257,6 +260,7 @@ export function Composer({
                 event.target.value = "";
               }}
             />
+            {modes && (
             <SegmentedControl<Mode>
               aria-label="Mode"
               size="sm"
@@ -277,6 +281,7 @@ export function Composer({
                 },
               ]}
             />
+            )}
           </div>
           <IconButton
             type="submit"

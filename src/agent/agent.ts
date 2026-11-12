@@ -11,7 +11,7 @@ import {
   type Harness,
   type JsonObject,
 } from "@earendil-works/pi-durable";
-import type { UserInput } from "@earendil-works/pi-durable";
+import type { Extension, UserInput } from "@earendil-works/pi-durable";
 import { config } from "../config.ts";
 import type { WorkspaceStore } from "./workspace.ts";
 
@@ -29,6 +29,9 @@ const STREAM_INTERVAL_MS = 150;
 const SWEEP_INTERVAL_MS = 30_000;
 
 const INSTRUCTIONS = `You are Richelieu, an AI app builder: you turn what the user describes into a working web app, and change it as they ask. Answer in the user's language. Use Markdown when it helps.`;
+
+/** A brand's social copilot: its own instructions and only the social tools. */
+const SOCIAL_INSTRUCTIONS = `You are Richelieu, a social media manager working for one brand with its team: you plan its calendar, write its posts in its voice, read its numbers, and keep an eye on its competitors. Answer in the user's language. Use Markdown when it helps.`;
 
 /** The text parts of an assistant message as pi-ai represents it. */
 function textOf(message: unknown): string {
@@ -54,6 +57,7 @@ export class Agent {
     private readonly harness: Harness,
     private readonly context: Context,
     private readonly store?: WorkspaceStore,
+    private readonly social?: Extension,
   ) {
     this.supabase = createClient(config.supabaseUrl, config.serviceRoleKey, {
       auth: { persistSession: false, autoRefreshToken: false },
@@ -132,8 +136,11 @@ export class Agent {
       .sql`SELECT status FROM public.messages WHERE id = ${message.id}`;
     if (current?.status !== "pending") return;
 
-    // A new project starts from the app template, before the agent sees it.
-    await this.store?.seed({ id: message.thread_id, user_id: message.user_id });
+    const [thread] = await this.sql<{ kind: string }[]>`
+      SELECT kind FROM public.threads WHERE id = ${message.thread_id}`;
+    // A new project starts from the app template, before the agent sees it; a brand's copilot has no files.
+    if (thread?.kind !== "social")
+      await this.store?.seed({ id: message.thread_id, user_id: message.user_id });
     const conversation = await this.conversationOf(message.thread_id);
     const [reply] = await this.sql<{ id: string }[]>`
       INSERT INTO public.messages (thread_id, user_id, role, status, reply_to)
@@ -194,8 +201,9 @@ export class Agent {
 
   /** The thread's Pi conversation, created with the thread's first message. */
   private async conversationOf(threadId: string): Promise<Conversation> {
-    const [thread] = await this.sql<{ conversation_id: string | null }[]>`
-      SELECT conversation_id FROM public.threads WHERE id = ${threadId}`;
+    const [thread] = await this.sql<
+      { conversation_id: string | null; kind: string }[]
+    >`SELECT conversation_id, kind FROM public.threads WHERE id = ${threadId}`;
     if (thread === undefined) throw new Error(`Unknown thread ${threadId}`);
     if (thread.conversation_id !== null) {
       const existing = await this.harness.conversation(
@@ -204,10 +212,17 @@ export class Agent {
       );
       if (existing !== undefined) return existing;
     }
+    const social = thread.kind === "social" && this.social;
     const conversation = await this.harness.createConversation(
       {
         ownership: { kind: "ownerless" },
-        agent: { model: config.model, instructions: INSTRUCTIONS },
+        agent: social
+          ? {
+              model: config.model,
+              instructions: SOCIAL_INSTRUCTIONS,
+              extensions: [social],
+            }
+          : { model: config.model, instructions: INSTRUCTIONS },
       },
       this.context,
     );

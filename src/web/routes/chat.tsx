@@ -55,7 +55,7 @@ import type { LayoutContext } from "@/routes/app-layout";
 const supabase = createClient();
 
 /** A thread's messages, the agent's streamed answers included, kept current through Realtime. */
-function useMessages(threadId: string) {
+export function useMessages(threadId: string) {
   const [messages, setMessages] = useState<ChatMessage[] | null>(null);
 
   useEffect(() => {
@@ -152,7 +152,7 @@ function splitPicked(content: string) {
   };
 }
 
-function ChatBubble({ message }: { message: ChatMessage }) {
+export function ChatBubble({ message }: { message: ChatMessage }) {
   if (message.role === "user") {
     const { picked, text } = splitPicked(message.content);
     return (

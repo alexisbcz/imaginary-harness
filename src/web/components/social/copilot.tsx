@@ -1,0 +1,128 @@
+// A brand's copilot: the conversation beside the calendar. It is a thread of its own (kind 'social'), answered by the
+// agent with the social tools only; what it drafts lands on the calendar, which reloads as its answers move along.
+
+import { useEffect } from "react";
+import { AssistantAvatar } from "twenty-ui/components/data-display";
+import { LightIconButton } from "twenty-ui/components/input";
+import { IconX } from "twenty-ui/icon";
+
+import { Shimmer } from "@/components/ai-elements/shimmer";
+import { Suggestion, Suggestions } from "@/components/ai-elements/suggestion";
+import { Composer } from "@/components/composer";
+import {
+  MessageScroller,
+  MessageScrollerButton,
+  MessageScrollerContent,
+  MessageScrollerItem,
+  MessageScrollerProvider,
+  MessageScrollerViewport,
+} from "@/components/ui/message-scroller";
+import { sendMessage } from "@/lib/chat";
+import type { Brand, SocialAccount } from "@/lib/social";
+import { ChatBubble, useMessages } from "@/routes/chat";
+
+/** What a new copilot offers to do, depending on what the brand has yet. */
+function suggestionsFor(brand: Brand, accounts: SocialAccount[] | null) {
+  const thin = !brand.description && !brand.voice;
+  return [
+    thin && brand.website
+      ? `Read ${brand.website} and fill in our brand brief`
+      : thin
+        ? "Interview me to write our brand brief"
+        : null,
+    accounts?.length ? "Plan next week's posts on the calendar" : null,
+    accounts?.length ? "What worked best for us lately, and why?" : null,
+    "Write a LinkedIn post about something we shipped recently",
+    "Find 3 competitors worth watching",
+    "Turn one idea into posts for each of our platforms",
+  ].filter((s): s is string => Boolean(s));
+}
+
+export function Copilot({
+  brand,
+  accounts,
+  onActivity,
+  onClose,
+}: {
+  brand: Brand;
+  accounts: SocialAccount[] | null;
+  /** Called as the copilot's answers change, so the views can reload what it touched. */
+  onActivity: (revision: string) => void;
+  onClose?: () => void;
+}) {
+  const threadId = brand.thread_id!;
+  const messages = useMessages(threadId);
+  const last = messages?.at(-1);
+  const waiting = last?.role === "user" && last.status === "pending";
+  const done = last?.role === "assistant" ? last.steps.filter((s) => s.status !== "running").length : 0;
+
+  // Each finished step may have drafted or moved a post; so may the answer's end.
+  useEffect(() => {
+    if (last) onActivity(`${last.id}:${last.status}:${done}`);
+  }, [last?.id, last?.status, done, onActivity, last]);
+
+  const send = (content: string) => sendMessage(threadId, { content });
+
+  return (
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="flex h-10 shrink-0 items-center gap-2 border-b border-t-border-light px-3">
+        <AssistantAvatar size={16} shape="cookie" color="red" face="happy" />
+        <span className="min-w-0 flex-1 truncate font-medium text-t-text">Copilot</span>
+        {onClose && (
+          <LightIconButton aria-label="Close the copilot" size="sm" onClick={onClose}>
+            <IconX size={16} />
+          </LightIconButton>
+        )}
+      </div>
+      <MessageScrollerProvider>
+        <MessageScroller className="flex-1">
+          <MessageScrollerViewport>
+            <MessageScrollerContent className="mx-auto w-full max-w-2xl gap-6 px-4 py-5">
+              {messages?.length === 0 && (
+                <MessageScrollerItem>
+                  <div className="flex flex-col gap-4 pt-6">
+                    <AssistantAvatar size={40} shape="cookie" color="red" face="happy" />
+                    <div className="flex flex-col gap-1">
+                      <p className="text-[15px] font-semibold text-t-text">{brand.name}'s social copilot</p>
+                      <p className="leading-[1.55] text-t-text-secondary">
+                        I plan the calendar, write posts in your voice, read your numbers and watch your
+                        competitors. Everything I write lands as a draft: nothing goes out until you say so.
+                      </p>
+                    </div>
+                    <Suggestions className="items-start">
+                      {suggestionsFor(brand, accounts).map((suggestion) => (
+                        <Suggestion
+                          key={suggestion}
+                          suggestion={suggestion}
+                          onClick={(text) => void send(text)}
+                          className="h-auto min-h-8 py-1.5 text-left whitespace-normal"
+                        />
+                      ))}
+                    </Suggestions>
+                  </div>
+                </MessageScrollerItem>
+              )}
+              {messages?.map((message, index) => (
+                <MessageScrollerItem key={message.id} scrollAnchor={index === messages.length - 1}>
+                  <ChatBubble message={message} />
+                </MessageScrollerItem>
+              ))}
+              {waiting && (
+                <MessageScrollerItem>
+                  <div className="flex items-center gap-2.5">
+                    <AssistantAvatar size={20} shape="cookie" color="red" face="happy" isAnimated />
+                    <Shimmer>Thinking…</Shimmer>
+                  </div>
+                </MessageScrollerItem>
+              )}
+            </MessageScrollerContent>
+          </MessageScrollerViewport>
+          <MessageScrollerButton />
+        </MessageScroller>
+      </MessageScrollerProvider>
+      <div className="mx-auto w-full max-w-2xl px-3 pb-3">
+        <Composer modes={false} placeholder="Ask your copilot…" onSend={(message) => sendMessage(threadId, message)} />
+      </div>
+    </div>
+  );
+}

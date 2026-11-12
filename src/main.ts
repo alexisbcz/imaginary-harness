@@ -16,6 +16,8 @@ import { MailStore } from "./mail/store.ts";
 import { challengeResponse } from "./mail/tls/acme.ts";
 import { createBuilderApi } from "./server/builder-api.ts";
 import { createMailApi } from "./server/mail-api.ts";
+import { createSocialApi } from "./server/social-api.ts";
+import { SocialService } from "./social/service.ts";
 import { createSupabaseProxy } from "./server/supabase-proxy.ts";
 import { createServices, FORGE_PATH } from "./server/services.ts";
 import index from "./web/index.html";
@@ -82,10 +84,20 @@ async function boot() {
   opened.agent.start();
   opened.assistant.start();
 
+  // Watched social accounts are read again once a day; the check runs every hour, and once shortly after start.
+  const refreshWatchlist = () =>
+    void opened.socialService
+      .refreshStale()
+      .then((count) => count && console.log(`[social] refreshed ${count} watched accounts`))
+      .catch((error) => console.warn("[social] watchlist:", error));
+  const watchTimer = setInterval(refreshWatchlist, 60 * 60_000);
+  setTimeout(refreshWatchlist, 30_000);
+
   let stopping = false;
   async function shutdown() {
     if (stopping) return;
     stopping = true;
+    clearInterval(watchTimer);
     await globalThis.richelieuServer?.stop();
     await http?.stop();
     await opened.close();
@@ -114,6 +126,7 @@ async function boot() {
     store: opened.store,
     shipping: opened.shipping,
     mailService,
+    socialService: opened.socialService,
     certificates: mail?.certificates,
   };
 }
@@ -137,6 +150,9 @@ const mailService =
     systemResolver(mailConfig.dnsServers),
   );
 const mailApi = createMailApi({ sql, service: mailService, certificates });
+// Stateless but for a cache: made again on each `bun --hot` reload, so the API runs the latest code. The copilot's
+// service is the boot's; restart to reload it.
+const socialApi = createSocialApi({ service: new SocialService(sql) });
 const tls = config.https ? certificates?.pem : undefined;
 if (config.https && !tls)
   console.warn(
@@ -155,6 +171,7 @@ const server = Bun.serve({
     "/api/agent": () => new Response(null, { status: 202 }),
     ...createBuilderApi({ sql, store, previews, shipping }),
     ...mailApi.api,
+    ...socialApi,
     ...mailApi.wellKnown,
     ...(config.supabaseProxy ? proxy.routes : {}),
     "/*": index,

@@ -6,6 +6,7 @@ import {
   IconLayoutSidebarLeftExpandFilled,
   IconMoonFilled,
   IconPaletteFilled,
+  IconSpeakerphone,
   IconSquareRoundedPlusFilled,
   IconSunFilled,
 } from "@tabler/icons-react";
@@ -168,6 +169,14 @@ export function CommandMenu({
             icon: <IconSquareRoundedPlusFilled />,
             color: "pink",
             run: close(() => void navigate("/")),
+          },
+          {
+            value: "social",
+            label: "Social: calendar and copilot",
+            keywords: "social media posts calendar schedule linkedin twitter instagram analytics",
+            icon: <IconSpeakerphone />,
+            color: "violet",
+            run: close(() => void navigate("/social")),
           },
           {
             value: "sidebar",

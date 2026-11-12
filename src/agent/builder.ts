@@ -34,7 +34,7 @@ const text = (value: string, isError = false) => ({
 });
 
 /** The answer the conversation is writing: its assistant row, and the mode of the message it answers. */
-async function currentReply(sql: SQL, conversationId: number) {
+export async function currentReply(sql: SQL, conversationId: number) {
   const [reply] = await sql<{ id: string; mode: string }[]>`
     SELECT m.id, u.mode FROM public.messages m
     JOIN public.threads t ON t.id = m.thread_id
@@ -45,7 +45,7 @@ async function currentReply(sql: SQL, conversationId: number) {
 }
 
 /** Adds a step to the reply, or updates the step of the same call: a rerun after a crash finds its step. */
-async function recordStep(
+export async function recordStep(
   sql: SQL,
   replyId: string,
   step: Record<string, unknown>,
@@ -63,7 +63,7 @@ async function recordStep(
 }
 
 /** The arguments worth showing: short strings and lists, without file contents. */
-function shownArguments(args: Record<string, unknown>) {
+export function shownArguments(args: Record<string, unknown>) {
   const shown: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(args)) {
     if (BULKY_ARGUMENTS.has(key)) continue;
@@ -75,7 +75,7 @@ function shownArguments(args: Record<string, unknown>) {
   return shown;
 }
 
-function resultSummary(result: { output?: unknown; isError?: boolean }) {
+export function resultSummary(result: { output?: unknown; isError?: boolean }) {
   const first = Array.isArray(result.output)
     ? (result.output[0] as { text?: string } | undefined)
     : undefined;

@@ -31,6 +31,7 @@ function useRecentProjects() {
     createClient()
       .from("threads")
       .select("id, title, updated_at")
+      .eq("kind", "project")
       .order("updated_at", { ascending: false })
       .limit(RECENT)
       .then(({ data }) => active && setProjects(data ?? []));

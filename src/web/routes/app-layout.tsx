@@ -9,8 +9,13 @@ import {
 } from "react-router";
 import { LightIconButton } from "twenty-ui/components/input";
 import { Skeleton } from "twenty-ui/primitives/feedback";
+import { Button } from "twenty-ui/primitives/input";
 import { ListItem } from "twenty-ui/primitives/navigation";
-import { IconSquareRoundedPlusFilled } from "@tabler/icons-react";
+import { AlertDialog } from "twenty-ui/primitives/surfaces";
+import {
+  IconSpeakerphone,
+  IconSquareRoundedPlusFilled,
+} from "@tabler/icons-react";
 import {
   IconLayoutSidebarLeftCollapse,
   IconLogout,
@@ -40,6 +45,7 @@ function useThreads() {
       const { data } = await supabase
         .from("threads")
         .select("id, title, updated_at")
+        .eq("kind", "project")
         .order("updated_at", { ascending: false });
       if (active && data) setThreads(data);
     };
@@ -80,6 +86,7 @@ export function AppLayout() {
   const [threads, setThreads] = useThreads();
   const unread = useUnreadCount();
   const inMail = useLocation().pathname.startsWith("/mail");
+  const inSocial = useLocation().pathname.startsWith("/social");
   const isMobile = useIsMobile();
   const [open, setOpen] = useState(true);
   // On a phone the drawer covers the page, starts closed, and closes on each navigation.
@@ -90,6 +97,9 @@ export function AppLayout() {
   useEffect(() => setMobileOpen(false), [pathname]);
   const [menuOpen, setMenuOpen] = useState(false);
   useCommandMenuShortcut(() => setMenuOpen((current) => !current));
+
+  // The project the user asked to delete, awaiting their confirmation.
+  const [deleting, setDeleting] = useState<Thread | null>(null);
 
   async function remove(id: string) {
     setThreads(
@@ -150,7 +160,7 @@ export function AppLayout() {
                   <IconSquareRoundedPlusFilled />
                 </IconTile>
               }
-              selected={!threadId && !inMail}
+              selected={!threadId && !inMail && !inSocial}
             >
               New project
             </ListItem>
@@ -172,6 +182,17 @@ export function AppLayout() {
               descriptionPlacement="end"
             >
               Mail
+            </ListItem>
+            <ListItem
+              render={<Link to="/social" />}
+              startIcon={
+                <IconTile color="violet">
+                  <IconSpeakerphone />
+                </IconTile>
+              }
+              selected={inSocial}
+            >
+              Social
             </ListItem>
 
             <SectionLabel>Projects</SectionLabel>
@@ -205,7 +226,7 @@ export function AppLayout() {
                       onClick={(event) => {
                         event.preventDefault();
                         event.stopPropagation();
-                        void remove(thread.id);
+                        setDeleting(thread);
                       }}
                     >
                       <IconTrash size={14} />
@@ -242,6 +263,39 @@ export function AppLayout() {
         )}
         <Outlet context={{ threads } satisfies LayoutContext} />
       </div>
+      <AlertDialog.Root
+        open={deleting !== null}
+        onOpenChange={(open) => {
+          if (!open) setDeleting(null);
+        }}
+      >
+        <AlertDialog.Portal>
+          <AlertDialog.Backdrop />
+          <AlertDialog.Viewport>
+            <AlertDialog.Popup size="sm">
+              <AlertDialog.Header>
+                <AlertDialog.Title>Delete “{deleting?.title}”?</AlertDialog.Title>
+              </AlertDialog.Header>
+              <AlertDialog.Body>
+                <AlertDialog.Description>
+                  The project and its conversation leave Richelieu for good. This cannot be undone.
+                </AlertDialog.Description>
+              </AlertDialog.Body>
+              <AlertDialog.Footer>
+                <AlertDialog.Close render={<Button variant="outline" />}>Cancel</AlertDialog.Close>
+                <AlertDialog.Close
+                  render={<Button variant="solid" color="danger" />}
+                  onClick={() => {
+                    if (deleting) void remove(deleting.id);
+                  }}
+                >
+                  Delete the project
+                </AlertDialog.Close>
+              </AlertDialog.Footer>
+            </AlertDialog.Popup>
+          </AlertDialog.Viewport>
+        </AlertDialog.Portal>
+      </AlertDialog.Root>
       <CommandMenu
         open={menuOpen}
         onOpenChange={setMenuOpen}
