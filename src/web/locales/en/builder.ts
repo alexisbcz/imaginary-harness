@@ -42,6 +42,7 @@ export default {
     },
     importSocialPost: { running: "Importing a published post", done: "Imported a published post" },
     readWebsite: { running: "Reading {{url}}", done: "Read {{url}}" },
+    readWebPage: { running: "Reading {{url}}", done: "Read {{url}}" },
     webResearch: { running: "Researching “{{question}}”", done: "Researched “{{question}}”" },
     newsletterOverview: { running: "Looking at the newsletter", done: "Looked at the newsletter" },
     newsletterPerformance: { running: "Reading what readers opened", done: "Read what readers opened" },

@@ -45,6 +45,7 @@ const fr: Messages<typeof en> = {
     },
     importSocialPost: { running: "Import d'une publication parue", done: "Publication parue importée" },
     readWebsite: { running: "Lecture de {{url}}", done: "{{url}} lu" },
+    readWebPage: { running: "Lecture de {{url}}", done: "{{url}} lu" },
     webResearch: { running: "Recherche sur le web : « {{question}} »", done: "Recherche sur le web : « {{question}} »" },
     newsletterOverview: { running: "Examen de la newsletter", done: "Newsletter examinée" },
     newsletterPerformance: { running: "Analyse de ce que les lecteurs ont ouvert", done: "Ouvertures des lecteurs analysées" },

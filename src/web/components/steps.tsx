@@ -161,6 +161,10 @@ function describe(step: Step, t: TFunction<"builder">): { icon: Icon; running: s
       const url = arg(step, "url").replace(/^https?:\/\//, "");
       return { icon: IconWorldSearch, running: t("steps.readWebsite.running", { url }), done: t("steps.readWebsite.done", { url }) };
     }
+    case "read_web_page": {
+      const url = arg(step, "url").replace(/^https?:\/\//, "");
+      return { icon: IconWorldSearch, running: t("steps.readWebPage.running", { url }), done: t("steps.readWebPage.done", { url }) };
+    }
     case "web_research": {
       const asked = arg(step, "question").replace(/\s+/g, " ");
       const question = asked.length > 60 ? `${asked.slice(0, 60)}…` : asked;
