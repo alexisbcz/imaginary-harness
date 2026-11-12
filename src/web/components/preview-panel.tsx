@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { cn } from "cn";
+import { useTranslation } from "react-i18next";
 import { LightIconButton, SegmentedControl } from "twenty-ui/components/input";
 import { Button, Input, InputGroup } from "twenty-ui/primitives/input";
 // Twenty UI's icons are Tabler's; it does not re-export these.
@@ -81,6 +82,7 @@ export function PreviewPanel({
   onPicked: (element: PickedElement) => void;
   onFix: (errors: PreviewError[]) => void;
 }) {
+  const { t } = useTranslation("builder");
   const [status, setStatus] = useState<Status>({ state: "stopped" });
   const [path, setPath] = useState("/");
   const [address, setAddress] = useState("/");
@@ -226,8 +228,8 @@ export function PreviewPanel({
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex h-10 shrink-0 items-center gap-1 border-b border-t-border-light px-2">
         <LightIconButton
-          aria-label="Reload"
-          tooltip="Reload"
+          aria-label={t("preview.reload")}
+          tooltip={t("preview.reload")}
           disabled={!url}
           onClick={() => setReloads((n) => n + 1)}
         >
@@ -261,7 +263,7 @@ export function PreviewPanel({
             }
           >
             <Input
-              aria-label="Page"
+              aria-label={t("preview.page")}
               value={address}
               disabled={!url}
               onValueChange={(value) => setAddress(value)}
@@ -270,7 +272,7 @@ export function PreviewPanel({
           </InputGroup>
         </form>
         <SegmentedControl<Device>
-          aria-label="Width"
+          aria-label={t("preview.width")}
           size="sm"
           value={device}
           onValueChange={(value) => setDevice(value)}
@@ -278,33 +280,33 @@ export function PreviewPanel({
             {
               value: "desktop",
               startIcon: <IconDeviceDesktop size={14} />,
-              "aria-label": "Desktop width",
+              "aria-label": t("preview.desktopWidth"),
             },
             {
               value: "tablet",
               startIcon: <IconDeviceTablet size={14} />,
-              "aria-label": "Tablet width",
+              "aria-label": t("preview.tabletWidth"),
             },
             {
               value: "phone",
               startIcon: <IconDeviceMobile size={14} />,
-              "aria-label": "Phone width",
+              "aria-label": t("preview.phoneWidth"),
             },
           ]}
         />
         <div className="mx-1 h-4 w-px bg-t-border" />
         <LightIconButton
-          aria-label={appTheme === "dark" ? "Show the app in light mode" : "Show the app in dark mode"}
-          tooltip={appTheme === "dark" ? "Light mode" : "Dark mode"}
+          aria-label={appTheme === "dark" ? t("preview.showLight") : t("preview.showDark")}
+          tooltip={appTheme === "dark" ? t("preview.lightMode") : t("preview.darkMode")}
           disabled={!url || appTheme === null}
           onClick={toggleTheme}
         >
           {appTheme === "dark" ? <IconSun size={16} /> : <IconMoon size={16} />}
         </LightIconButton>
         <LightIconButton
-          aria-label="Pick an element to change"
+          aria-label={t("preview.pick")}
           aria-pressed={picking}
-          tooltip="Pick an element to change"
+          tooltip={t("preview.pick")}
           disabled={!url}
           onClick={togglePicking}
           className={cn(
@@ -315,16 +317,16 @@ export function PreviewPanel({
           <IconClick size={16} />
         </LightIconButton>
         <LightIconButton
-          aria-label="Open in a new tab"
-          tooltip="Open in a new tab"
+          aria-label={t("preview.openTab")}
+          tooltip={t("preview.openTab")}
           disabled={!url}
           onClick={() => url && window.open(url + path, "_blank", "noopener")}
         >
           <IconExternalLink size={16} />
         </LightIconButton>
         <LightIconButton
-          aria-label="Restart the dev server"
-          tooltip="Restart the dev server"
+          aria-label={t("preview.restart")}
+          tooltip={t("preview.restart")}
           disabled={status.state === "starting" || !hasFiles}
           onClick={() => void start(true)}
         >
@@ -342,7 +344,7 @@ export function PreviewPanel({
           <iframe
             key={`${url}:${reloads}`}
             ref={frame}
-            title="Preview"
+            title={t("preview.frameTitle")}
             src={url + path}
             className={cn(
               "h-full bg-white",
@@ -354,10 +356,10 @@ export function PreviewPanel({
           />
         ) : status.state === "failed" ? (
           <EmptyState
-            title="The preview did not start"
+            title={t("preview.failed")}
             action={
               <Button size="sm" variant="outline" onClick={() => void start()}>
-                Try again
+                {t("preview.tryAgain")}
               </Button>
             }
           >
@@ -367,11 +369,11 @@ export function PreviewPanel({
           </EmptyState>
         ) : hasFiles ? (
           <div className="flex items-center">
-            <Shimmer>Starting the preview…</Shimmer>
+            <Shimmer>{t("preview.starting")}</Shimmer>
           </div>
         ) : (
-          <EmptyState title="Your app shows here">
-            It runs live as Richelieu builds it, and updates with each change.
+          <EmptyState title={t("preview.emptyTitle")}>
+            {t("preview.emptyBody")}
           </EmptyState>
         )}
 
@@ -382,9 +384,7 @@ export function PreviewPanel({
             </span>
             <div className="min-w-0 flex-1">
               <p className="font-medium text-t-text">
-                {errors.length === 1
-                  ? "The app hit an error"
-                  : `The app hit ${errors.length} errors`}
+                {t("preview.errors", { count: errors.length })}
               </p>
               <p className="truncate font-mono text-[11px] text-t-text-tertiary">
                 {errors.at(-1)!.message}
@@ -400,10 +400,10 @@ export function PreviewPanel({
                 setErrors([]);
               }}
             >
-              Fix it
+              {t("preview.fix")}
             </Button>
             <LightIconButton
-              aria-label="Dismiss the errors"
+              aria-label={t("preview.dismissErrors")}
               size="sm"
               onClick={() => setErrors([])}
             >

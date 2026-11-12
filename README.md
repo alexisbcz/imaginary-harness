@@ -86,9 +86,16 @@ bun install
 bun run forge:org richelieu --write-env # once: the forge organization the app signs its tokens as
 bun dev                                 # app on http://localhost:3000, forge under /forge, sites on :3001
 bun test                                # needs Supabase running
+bun run i18n:lint                       # every string people read is translated (English and French)
 ```
 
+The web app speaks English and French. See [docs/i18n.md](docs/i18n.md) for how to write translated text.
+
 `.env` needs `ANTHROPIC_API_KEY`. Every other setting has a local default (see `src/config.ts` and `compose.yml`).
+
+`BLADE_API_KEY` turns on web research for every agent: the `web_research` tool asks [Blade](https://blade.sh) to search the
+web and read pages, and returns a cited answer. `BLADE_RESEARCH_MODEL` picks the Blade model (default
+`qwen3.6-35b-a3b`; it must support Blade's built-in `web_search` tool).
 
 How it fits together:
 

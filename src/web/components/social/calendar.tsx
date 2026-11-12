@@ -4,6 +4,7 @@
 
 import { useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from "react";
 import { Link } from "react-router";
+import { useTranslation } from "react-i18next";
 import { cn } from "cn";
 import { LightIconButton, SegmentedControl } from "twenty-ui/components/input";
 import { Skeleton } from "twenty-ui/primitives/feedback";
@@ -28,11 +29,12 @@ import {
   importPost,
   platformInfo,
   reschedulePost,
-  STATUS_LABELS,
+  statusLabel,
   usePosts,
   type BrandViewProps,
   type SocialPost,
 } from "@/lib/social";
+import i18n, { intlLocale } from "@/lib/i18n";
 
 // Time in a time zone -----------------------------------------------------------------------------------------
 
@@ -99,7 +101,7 @@ const startOfWeek = (day: Day) => addDays(day, -weekdayOf(day));
 
 function dayLabel(day: Day, options: Intl.DateTimeFormatOptions) {
   const [y, m, d] = day.split("-").map(Number) as [number, number, number];
-  return new Intl.DateTimeFormat("en-GB", { ...options, timeZone: "UTC" }).format(new Date(Date.UTC(y, m - 1, d, 12)));
+  return new Intl.DateTimeFormat(intlLocale(), { ...options, timeZone: "UTC" }).format(new Date(Date.UTC(y, m - 1, d, 12)));
 }
 
 /** When a new post on `day` should go out: 09:00 if that is still ahead, else the next full hour. */
@@ -119,13 +121,8 @@ const movable = (post: SocialPost) => ["draft", "scheduled", "failed"].includes(
 
 type StatusFilter = "all" | "draft" | "scheduled" | "published" | "failed";
 
-const STATUS_FILTERS: { value: StatusFilter; label: string }[] = [
-  { value: "all", label: "All" },
-  { value: "draft", label: "Drafts" },
-  { value: "scheduled", label: "Scheduled" },
-  { value: "published", label: "Published" },
-  { value: "failed", label: "Failed" },
-];
+/** The status filters; their labels are `calendar.filters.<value>`. */
+const STATUS_FILTERS: StatusFilter[] = ["all", "draft", "scheduled", "published", "failed"];
 
 function matchesStatus(post: SocialPost, filter: StatusFilter) {
   if (filter === "all") return true;
@@ -154,7 +151,8 @@ function StatusMark({ post }: { post: SocialPost }) {
   return null;
 }
 
-const firstLine = (text: string) => text.split("\n").find((line) => line.trim())?.trim() || "(no text)";
+const firstLine = (text: string) =>
+  text.split("\n").find((line) => line.trim())?.trim() || i18n.t("social:calendar.noText");
 
 /** A post on the calendar: its time, platforms and first line, styled by status. */
 function PostChip({
@@ -182,7 +180,7 @@ function PostChip({
         event.stopPropagation();
         onOpen();
       }}
-      title={`${STATUS_LABELS[post.status]}${at ? ` · ${timeOf(new Date(at), timeZone)}` : ""}\n${post.content.slice(0, 280)}`}
+      title={`${statusLabel(post.status)}${at ? ` · ${timeOf(new Date(at), timeZone)}` : ""}\n${post.content.slice(0, 280)}`}
       className={cn(
         "flex w-full min-w-0 items-center gap-1 overflow-hidden rounded-[5px] border px-1.5 text-left text-[11px] leading-none transition-colors outline-none hover:brightness-[0.97] focus-visible:ring-2 focus-visible:ring-ring dark:hover:brightness-110",
         compact ? "h-[20px]" : "h-[22px]",
@@ -207,6 +205,7 @@ function PostChip({
 
 /** Adds a post published outside Richelieu, from its link: Zernio only knows the posts that went through it. */
 function ImportButton({ brandId, onImported }: { brandId: string; onImported: (post: SocialPost) => void }) {
+  const { t } = useTranslation("social");
   const [open, setOpen] = useState(false);
   const [url, setUrl] = useState("");
   const [busy, setBusy] = useState(false);
@@ -237,14 +236,13 @@ function ImportButton({ brandId, onImported }: { brandId: string; onImported: (p
       }}
     >
       <PopoverTrigger render={<Button size="sm" variant="outline" startIcon={<IconLink size={14} />} />}>
-        Import a post
+        {t("calendar.import.button")}
       </PopoverTrigger>
       <PopoverContent align="end" className="w-[360px] gap-3 rounded-lg border border-t-border bg-t-primary p-3 text-t-text shadow-lg">
         <div className="flex flex-col gap-1">
-          <span className="font-medium">Import a published post</span>
+          <span className="font-medium">{t("calendar.import.title")}</span>
           <span className="text-[12px] leading-[1.45] text-t-text-tertiary">
-            Posts published straight on a platform don't go through Zernio. Paste one's link to add it to the
-            calendar and the analytics, with its likes and comments, read again every day.
+            {t("calendar.import.body")}
           </span>
         </div>
         <form
@@ -256,17 +254,17 @@ function ImportButton({ brandId, onImported }: { brandId: string; onImported: (p
         >
           <Input
             autoFocus
-            aria-label="Post link"
-            placeholder="https://www.linkedin.com/posts/… or lnkd.in/…"
+            aria-label={t("calendar.import.link")}
+            placeholder={t("calendar.import.placeholder")}
             value={url}
             onChange={(event) => setUrl(event.target.value)}
           />
           {error && <span className="text-[12px] text-t-text-danger">{error}</span>}
           <Button type="submit" size="sm" variant="solid" color="accent" loading={busy} disabled={!url.trim()}>
-            {busy ? "Reading the post…" : "Import"}
+            {busy ? t("calendar.import.reading") : t("calendar.import.submit")}
           </Button>
         </form>
-        <span className="text-[11px] text-t-text-light">LinkedIn, X, Instagram, TikTok and YouTube.</span>
+        <span className="text-[11px] text-t-text-light">{t("calendar.import.supported")}</span>
       </PopoverContent>
     </Popover>
   );
@@ -278,18 +276,16 @@ type Mode = "month" | "week";
 const HOUR_HEIGHT = 52;
 const MAX_CHIPS = 3;
 
-function planPrompt(brandName: string) {
-  return `Plan next week's posts for ${brandName}.
+const planPrompt = (brandName: string) => i18n.t("social:calendar.planPrompt", { brand: brandName });
 
-1. Start with social_overview to see what is already planned, and social_performance to see which topics, formats and hours worked best.
-2. Fill the gaps for next week (Monday to Sunday) up to the posting goal in our brief; if there is none, aim for 3 to 5 posts across our connected accounts.
-3. Put each post on the calendar as a draft (draft_social_post) at one of our best times, spread over the week, mixing our content pillars. Write each one for its platform, in our voice.
-4. Do not schedule anything: I will review the drafts on the calendar.
-
-Then give me a short summary: one line per post with its day, platform and angle.`;
-}
+/** The short weekday names, Monday first, in the current language. */
+const weekdayNames = () =>
+  Array.from({ length: 7 }, (_, i) =>
+    new Intl.DateTimeFormat(intlLocale(), { weekday: "short", timeZone: "UTC" }).format(new Date(Date.UTC(2024, 0, 1 + i, 12))),
+  );
 
 export function SocialCalendar({ brand, accounts, revision, onCompose, onAsk }: BrandViewProps) {
+  const { t } = useTranslation(["social", "common"]);
   const timeZone = brand.timezone || "UTC";
   const isMobile = useIsMobile();
   const today = dayOf(new Date(), timeZone);
@@ -384,7 +380,7 @@ export function SocialCalendar({ brand, accounts, revision, onCompose, onAsk }: 
     if (!post || !movable(post)) return;
     if (post.scheduled_for && Math.abs(Date.parse(post.scheduled_for) - at.getTime()) < 60_000) return;
     if (post.status === "scheduled" && at.getTime() < Date.now() + 60_000) {
-      setNotice("A scheduled post can only move to the future.");
+      setNotice(t("calendar.futureOnly"));
       return;
     }
     setMoved((current) => ({ ...current, [postId]: at.toISOString() }));
@@ -446,29 +442,29 @@ export function SocialCalendar({ brand, accounts, revision, onCompose, onAsk }: 
       <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-t-border-light px-3 py-2">
         {!isMobile && (
           <SegmentedControl<Mode>
-            aria-label="Calendar view"
+            aria-label={t("calendar.view")}
             size="sm"
             value={mode}
             onValueChange={setMode}
             options={[
-              { value: "month", label: "Month" },
-              { value: "week", label: "Week" },
+              { value: "month", label: t("calendar.month") },
+              { value: "week", label: t("calendar.week") },
             ]}
           />
         )}
         <div className="flex items-center gap-0.5">
-          <LightIconButton aria-label="Previous" size="sm" onClick={() => step(-1)}>
+          <LightIconButton aria-label={t("common:previous")} size="sm" onClick={() => step(-1)}>
             <IconChevronLeft size={16} />
           </LightIconButton>
-          <LightIconButton aria-label="Next" size="sm" onClick={() => step(1)}>
+          <LightIconButton aria-label={t("common:next")} size="sm" onClick={() => step(1)}>
             <IconChevronRight size={16} />
           </LightIconButton>
         </div>
         <Button size="sm" variant="outline" onClick={() => setAnchor(today)}>
-          Today
+          {t("calendar.today")}
         </Button>
         <span className="min-w-0 truncate font-medium text-t-text tabular-nums">{label}</span>
-        {loading && data && <span className="text-[11px] text-t-text-light">Updating…</span>}
+        {loading && data && <span className="text-[11px] text-t-text-light">{t("calendar.updating")}</span>}
         <div className="flex-1" />
         <ImportButton
           brandId={brand.id}
@@ -484,19 +480,15 @@ export function SocialCalendar({ brand, accounts, revision, onCompose, onAsk }: 
           startIcon={<IconSparkles size={14} />}
           onClick={() => onAsk(planPrompt(brand.name))}
         >
-          Plan my week
+          {t("calendar.planWeek")}
         </Button>
       </div>
 
       {/* Filters */}
       <div className="flex shrink-0 items-center gap-1.5 overflow-x-auto border-b border-t-border-light px-3 py-1.5">
         {STATUS_FILTERS.map((filter) => (
-          <FilterChip
-            key={filter.value}
-            active={statusFilter === filter.value}
-            onClick={() => setStatusFilter(filter.value)}
-          >
-            {filter.label}
+          <FilterChip key={filter} active={statusFilter === filter} onClick={() => setStatusFilter(filter)}>
+            {t(`calendar.filters.${filter}`)}
           </FilterChip>
         ))}
         {platforms.length > 1 && <span className="mx-1 h-4 w-px shrink-0 bg-t-border" />}
@@ -517,10 +509,10 @@ export function SocialCalendar({ brand, accounts, revision, onCompose, onAsk }: 
         <div className="flex shrink-0 items-center gap-2 border-b border-t-border-light bg-t-secondary px-3 py-2 text-t-text-secondary">
           <IconPlugConnected size={15} className="shrink-0 text-t-text-tertiary" />
           <span className="min-w-0 flex-1">
-            No account is connected yet: drafts can wait here, but nothing can be scheduled.
+            {t("calendar.noAccount")}
           </span>
           <Link to={`/social/${brand.id}/brand`} className="shrink-0 font-medium text-t-text underline-offset-2 hover:underline">
-            Connect accounts
+            {t("calendar.connect")}
           </Link>
         </div>
       )}
@@ -530,12 +522,12 @@ export function SocialCalendar({ brand, accounts, revision, onCompose, onAsk }: 
           <IconAlertTriangle size={14} className="shrink-0" />
           <span className="min-w-0 flex-1">{notice ?? error}</span>
           {notice ? (
-            <LightIconButton aria-label="Dismiss" size="xs" onClick={() => setNotice(null)}>
+            <LightIconButton aria-label={t("common:dismiss")} size="xs" onClick={() => setNotice(null)}>
               <IconX size={13} />
             </LightIconButton>
           ) : (
             <Button size="sm" variant="ghost" onClick={() => void reload()}>
-              Retry
+              {t("common:retry")}
             </Button>
           )}
         </div>
@@ -633,8 +625,6 @@ function useDropTarget(onDrop: (event: DragEvent) => void) {
   };
 }
 
-const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-
 function MonthGrid({
   days,
   month,
@@ -661,7 +651,7 @@ function MonthGrid({
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="grid shrink-0 grid-cols-7 border-b border-t-border-light">
-        {WEEKDAYS.map((name) => (
+        {weekdayNames().map((name) => (
           <div key={name} className="px-2 py-1.5 text-[11px] font-medium text-t-text-tertiary">
             {name}
           </div>
@@ -717,6 +707,7 @@ function MonthDay({
   onDrop: (event: DragEvent) => void;
   onShowWeek: () => void;
 }) {
+  const { t } = useTranslation("social");
   const drop = useDropTarget(onDrop);
   const shown = posts.slice(0, posts.length > MAX_CHIPS ? MAX_CHIPS - 1 : MAX_CHIPS);
   const hidden = posts.length - shown.length;
@@ -745,7 +736,7 @@ function MonthDay({
         </span>
         {!isPast && (
           <LightIconButton
-            aria-label={`New post on ${day}`}
+            aria-label={t("calendar.newPostOn", { day: dayLabel(day, { weekday: "long", day: "numeric", month: "long" }) })}
             size="xs"
             onClick={onCompose}
             className="opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
@@ -767,7 +758,7 @@ function MonthDay({
               onClick={onShowWeek}
               className="self-start rounded px-1 text-[11px] font-medium text-t-text-tertiary hover:bg-t-hover hover:text-t-text"
             >
-              +{hidden} more
+              {t("calendar.more", { count: hidden })}
             </button>
           )}
         </>
@@ -801,13 +792,14 @@ function WeekGrid({
   }, []);
   const now = new Date();
   const nowParts = zonedParts(now, timeZone);
+  const weekdays = weekdayNames();
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="grid shrink-0 grid-cols-[48px_repeat(7,minmax(0,1fr))] border-b border-t-border-light">
         <div />
         {days.map((day, index) => (
           <div key={day} className="flex items-baseline gap-1.5 px-2 py-1.5">
-            <span className="text-[11px] font-medium text-t-text-tertiary">{WEEKDAYS[index]}</span>
+            <span className="text-[11px] font-medium text-t-text-tertiary">{weekdays[index]}</span>
             <span
               className={cn(
                 "flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[12px] tabular-nums",
@@ -883,6 +875,7 @@ function WeekSlot({
   onCompose: () => void;
   onDrop: (event: DragEvent) => void;
 }) {
+  const { t } = useTranslation("social");
   const drop = useDropTarget(onDrop);
   const shown = posts.slice(0, 2);
   return (
@@ -890,7 +883,7 @@ function WeekSlot({
       {...drop.props}
       role={past ? undefined : "button"}
       tabIndex={past ? undefined : -1}
-      aria-label={past ? undefined : "New post at this time"}
+      aria-label={past ? undefined : t("calendar.newPostAt")}
       onClick={past ? undefined : onCompose}
       style={{ height: HOUR_HEIGHT }}
       className={cn(
@@ -904,7 +897,7 @@ function WeekSlot({
         <PostChip key={post.id} post={post} timeZone={timeZone} compact onOpen={() => onOpen(post)} />
       ))}
       {posts.length > 2 && (
-        <span className="px-1 text-[10px] text-t-text-tertiary">+{posts.length - 2} more</span>
+        <span className="px-1 text-[10px] text-t-text-tertiary">{t("calendar.more", { count: posts.length - 2 })}</span>
       )}
       {!past && posts.length === 0 && (
         <IconPlus
@@ -934,6 +927,7 @@ function Agenda({
   onOpen: (post: SocialPost) => void;
   onCompose: (day: Day) => void;
 }) {
+  const { t } = useTranslation("social");
   const withPosts = days.filter((day) => (byDay.get(day)?.length ?? 0) > 0 || day === today);
   if (loading)
     return (
@@ -949,11 +943,12 @@ function Agenda({
         <section key={day} className="py-2">
           <div className="flex items-center justify-between pb-1.5">
             <h3 className={cn("text-[12px] font-semibold", day === today ? "text-[var(--t-color-blue11)]" : "text-t-text-secondary")}>
-              {day === today ? "Today · " : ""}
-              {dayLabel(day, { weekday: "long", day: "numeric", month: "long" })}
+              {day === today
+                ? t("calendar.todayIs", { day: dayLabel(day, { weekday: "long", day: "numeric", month: "long" }) })
+                : dayLabel(day, { weekday: "long", day: "numeric", month: "long" })}
             </h3>
             {day >= today && (
-              <LightIconButton aria-label="New post on this day" size="xs" onClick={() => onCompose(day)}>
+              <LightIconButton aria-label={t("calendar.newPostThisDay")} size="xs" onClick={() => onCompose(day)}>
                 <IconPlus size={13} />
               </LightIconButton>
             )}
@@ -962,7 +957,7 @@ function Agenda({
             {(byDay.get(day) ?? []).map((post) => (
               <AgendaRow key={post.id} post={post} timeZone={timeZone} onOpen={() => onOpen(post)} />
             ))}
-            {(byDay.get(day)?.length ?? 0) === 0 && <p className="text-t-text-light">Nothing planned.</p>}
+            {(byDay.get(day)?.length ?? 0) === 0 && <p className="text-t-text-light">{t("calendar.nothingPlanned")}</p>}
           </div>
         </section>
       ))}
@@ -971,6 +966,7 @@ function Agenda({
 }
 
 function AgendaRow({ post, timeZone, onOpen }: { post: SocialPost; timeZone: string; onOpen: () => void }) {
+  const { t } = useTranslation("social");
   const at = momentOf(post);
   return (
     <button
@@ -982,12 +978,12 @@ function AgendaRow({ post, timeZone, onOpen }: { post: SocialPost; timeZone: str
         {at ? timeOf(new Date(at), timeZone) : ""}
       </span>
       <span className="min-w-0 flex-1">
-        <span className="line-clamp-2 leading-[1.4]">{post.content || "(no text)"}</span>
+        <span className="line-clamp-2 leading-[1.4]">{post.content || t("calendar.noText")}</span>
         <span className="mt-1 flex items-center gap-1.5 text-[11px] text-t-text-tertiary">
           {[...new Set(post.platforms.map((p) => p.platform))].map((platform) => (
             <PlatformGlyph key={platform} platform={platform} size={12} />
           ))}
-          {STATUS_LABELS[post.status]}
+          {statusLabel(post.status)}
         </span>
       </span>
     </button>
@@ -1008,10 +1004,11 @@ function DraftTray({
   onOpen: (post: SocialPost) => void;
   onNew: () => void;
 }) {
+  const { t } = useTranslation("social");
   if (isMobile && !loading && drafts.length === 0) return null;
   return (
     <aside
-      aria-label="Unscheduled drafts"
+      aria-label={t("calendar.tray.title")}
       className={cn(
         "flex shrink-0 flex-col bg-t-secondary/50",
         isMobile ? "max-h-[40%] border-t border-t-border-light" : "w-[232px] border-l border-t-border-light",
@@ -1019,10 +1016,10 @@ function DraftTray({
     >
       <div className="flex h-9 shrink-0 items-center gap-2 px-3">
         <span className="flex-1 text-[12px] font-semibold text-t-text-secondary">
-          Unscheduled drafts
+          {t("calendar.tray.title")}
           {drafts.length > 0 && <span className="ml-1.5 font-normal text-t-text-light tabular-nums">{drafts.length}</span>}
         </span>
-        <LightIconButton aria-label="New draft" size="xs" onClick={onNew}>
+        <LightIconButton aria-label={t("calendar.tray.new")} size="xs" onClick={onNew}>
           <IconPlus size={13} />
         </LightIconButton>
       </div>
@@ -1031,7 +1028,7 @@ function DraftTray({
           Array.from({ length: 3 }, (_, i) => <Skeleton key={i} width="100%" height={64} borderRadius={8} />)}
         {!loading && drafts.length === 0 && (
           <p className="px-1 py-2 text-[12px] leading-[1.5] text-t-text-light">
-            Ideas without a date land here. Drag one onto a day to plan it.
+            {t("calendar.tray.empty")}
           </p>
         )}
         {drafts.map((post) => (
@@ -1046,15 +1043,15 @@ function DraftTray({
             onClick={() => onOpen(post)}
             className="flex cursor-grab flex-col gap-1.5 rounded-md border border-dashed border-t-border bg-t-primary p-2 text-left transition-colors hover:border-t-text-light active:cursor-grabbing"
           >
-            <span className="line-clamp-3 text-[12px] leading-[1.45] text-t-text">{post.content || "(no text)"}</span>
+            <span className="line-clamp-3 text-[12px] leading-[1.45] text-t-text">{post.content || t("calendar.noText")}</span>
             <span className="flex items-center gap-1 text-t-text-tertiary">
               {[...new Set(post.platforms.map((p) => p.platform))].map((platform) => (
                 <PlatformGlyph key={platform} platform={platform} size={12} />
               ))}
-              {post.platforms.length === 0 && <span className="text-[11px]">No account</span>}
+              {post.platforms.length === 0 && <span className="text-[11px]">{t("calendar.tray.noAccount")}</span>}
               {post.media.length > 0 && (
                 <span className="ml-auto text-[11px] tabular-nums">
-                  {post.media.length} media
+                  {t("calendar.tray.media", { count: post.media.length })}
                 </span>
               )}
             </span>

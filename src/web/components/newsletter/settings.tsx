@@ -2,6 +2,7 @@
 // the copilot and the AI assists write from), and deleting it from Richelieu.
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { Trans, useTranslation } from "react-i18next";
 import { Button, Input, Textarea } from "twenty-ui/primitives/input";
 import { IconAlertTriangle, IconCircleCheck, IconExternalLink, IconSparkles } from "@tabler/icons-react";
 
@@ -35,23 +36,24 @@ function Section({ title, description, actions, children }: { title: string; des
 
 /** How to find the session cookie: Substack has no API keys. */
 export function CookieHelp() {
+  const { t } = useTranslation(["newsletter", "common"]);
   return (
     <details className="rounded-md border border-t-border bg-t-secondary px-3 py-2 text-[12px] leading-[1.6] text-t-text-secondary">
-      <summary className="cursor-pointer font-medium text-t-text">Where do I find it?</summary>
+      <summary className="cursor-pointer font-medium text-t-text">{t("settings.cookieHelp.title")}</summary>
       <ol className="mt-1 list-decimal pl-5">
-        <li>Sign in to substack.com in your browser.</li>
-        <li>Open the developer tools (⌥⌘I or F12) → Application (Storage in Firefox) → Cookies → https://substack.com.</li>
-        <li>Copy the value of <code>substack.sid</code> and paste it here.</li>
+        <li>{t("settings.cookieHelp.signIn")}</li>
+        <li>{t("settings.cookieHelp.devTools")}</li>
+        <li>
+          <Trans t={t} i18nKey="settings.cookieHelp.copy" components={{ code: <code /> }} />
+        </li>
       </ol>
-      <p className="mt-1">
-        Substack has no public API, so Richelieu acts as you with this session. It is stored encrypted, only the server
-        reads it, and it stops working when you sign out of Substack.
-      </p>
+      <p className="mt-1">{t("settings.cookieHelp.why")}</p>
     </details>
   );
 }
 
 export function ConnectForm({ newsletter, onConnected }: { newsletter: Newsletter; onConnected?: () => void }) {
+  const { t } = useTranslation(["newsletter", "common"]);
   const [publication, setPublication] = useState(newsletter.publication_url ?? "");
   const [cookie, setCookie] = useState("");
   const [busy, setBusy] = useState(false);
@@ -74,16 +76,17 @@ export function ConnectForm({ newsletter, onConnected }: { newsletter: Newslette
         }
       }}
     >
-      <Field label="Publication" hint="name.substack.com or your custom domain. Leave empty for your first publication.">
-        <Input value={publication} placeholder="yourname.substack.com" onChange={(e) => setPublication(e.target.value)} />
+      <Field label={t("settings.connect.publication")} hint={t("settings.connect.publicationHint")}>
+        <Input value={publication} placeholder={t("settings.connect.publicationPlaceholder")} onChange={(e) => setPublication(e.target.value)} />
       </Field>
-      <Field label="Substack session (substack.sid cookie)">
+      <Field label={t("settings.connect.session")}>
+        {/* i18n-ignore: the shape of a cookie value, not text */}
         <Input type="password" autoComplete="off" value={cookie} placeholder="s%3A…" onChange={(e) => setCookie(e.target.value)} />
       </Field>
       <CookieHelp />
       <div className="flex items-center gap-3">
         <Button type="submit" size="sm" variant="solid" color="accent" loading={busy} disabled={!cookie.trim()}>
-          {newsletter.connected_at ? "Reconnect" : "Connect to Substack"}
+          {newsletter.connected_at ? t("settings.connect.reconnect") : t("settings.connect.connect")}
         </Button>
         {error && <span className="text-t-text-danger">{error}</span>}
       </div>
@@ -138,6 +141,7 @@ export function NewsletterSettings({
   onAsk: (message: string) => void;
   onDeleted: () => void;
 }) {
+  const { t } = useTranslation(["newsletter", "common"]);
   const initial = useMemo(() => draftOf(newsletter), [newsletter]);
   const [draft, setDraft] = useState(initial);
   const [touched, setTouched] = useState(false);
@@ -182,7 +186,7 @@ export function NewsletterSettings({
       <div className="mx-auto flex w-full max-w-[760px] flex-col gap-10 px-5 py-6">
         <Section
           title="Substack"
-          description="Richelieu writes drafts, publishes and reads your stats through your Substack session."
+          description={t("settings.substack.description")}
         >
           {newsletter.connected_at ? (
             <div className="flex flex-col gap-3">
@@ -195,11 +199,13 @@ export function NewsletterSettings({
                 <div className="min-w-0 flex-1">
                   <div className="truncate font-medium text-t-text">{newsletter.publication_url?.replace(/^https:\/\//, "")}</div>
                   <div className="truncate text-[12px] text-t-text-tertiary">
-                    As {newsletter.substack_user_name ?? "you"}
-                    {newsletter.paid ? " · paid subscriptions on" : ""}
+                    {newsletter.substack_user_name
+                      ? t("settings.substack.as", { name: newsletter.substack_user_name })
+                      : t("settings.substack.asYou")}
+                    {newsletter.paid ? ` · ${t("settings.substack.paidOn")}` : ""}
                   </div>
                 </div>
-                <a href={`${newsletter.publication_url}/publish/home`} target="_blank" rel="noreferrer" className="rounded p-1 text-t-text-tertiary hover:bg-t-hover hover:text-t-text" aria-label="Open the Substack dashboard">
+                <a href={`${newsletter.publication_url}/publish/home`} target="_blank" rel="noreferrer" className="rounded p-1 text-t-text-tertiary hover:bg-t-hover hover:text-t-text" aria-label={t("settings.substack.dashboard")}>
                   <IconExternalLink size={15} />
                 </a>
                 {confirm === "disconnect" ? (
@@ -212,27 +218,27 @@ export function NewsletterSettings({
                         setBusy(false);
                         setConfirm(null);
                       }
-                    }}>Disconnect</Button>
-                    <Button size="sm" variant="ghost" onClick={() => setConfirm(null)}>Keep</Button>
+                    }}>{t("settings.substack.disconnect")}</Button>
+                    <Button size="sm" variant="ghost" onClick={() => setConfirm(null)}>{t("settings.substack.keep")}</Button>
                   </span>
                 ) : (
-                  <Button size="sm" variant="ghost" onClick={() => setConfirm("disconnect")}>Disconnect</Button>
+                  <Button size="sm" variant="ghost" onClick={() => setConfirm("disconnect")}>{t("settings.substack.disconnect")}</Button>
                 )}
               </div>
               {newsletter.connection_error && (
                 <div className="flex items-start gap-2 rounded-md border border-t-border bg-t-secondary px-3 py-2 text-t-text">
                   <IconAlertTriangle size={16} className="mt-0.5 shrink-0 text-[var(--t-color-orange9)]" />
-                  <span>{newsletter.connection_error}. Paste a fresh cookie below.</span>
+                  <span>{t("settings.substack.connectionError", { error: newsletter.connection_error })}</span>
                 </div>
               )}
               <details>
-                <summary className="cursor-pointer text-[12px] text-t-text-secondary">Change the publication or the session</summary>
+                <summary className="cursor-pointer text-[12px] text-t-text-secondary">{t("settings.substack.change")}</summary>
                 <div className="mt-3">
                   <ConnectForm newsletter={newsletter} />
                 </div>
               </details>
               <p className="text-[12px] text-t-text-light">
-                Substack MCP: {status.mcp ? "on, the copilot also reaches substack-mcp's tools (subscribers, detailed analytics, the reader feed)." : "off. Set SUBSTACK_MCP=true on the server to give the copilot substack-mcp's tools too."}
+                {status.mcp ? t("settings.substack.mcpOn") : t("settings.substack.mcpOff")}
               </p>
             </div>
           ) : (
@@ -241,17 +247,15 @@ export function NewsletterSettings({
         </Section>
 
         <Section
-          title="Brief"
-          description="What every draft is written from. The copilot fills it from your past posts and keeps it up to date."
+          title={t("settings.brief.title")}
+          description={t("settings.brief.description")}
           actions={
             <Button size="sm" variant="outline" startIcon={<IconSparkles size={14} />} onClick={() =>
               onAsk(
-                newsletter.connected_at
-                  ? "Read my last published posts and how they performed, then write our brief: what the newsletter is about, who reads it, my voice, recurring themes, the format of an issue, what to avoid, and two short passages that sound like me. Tell me what you changed."
-                  : "Interview me to write our newsletter's brief (what it is about, readers, voice, themes, format), then save it.",
+                newsletter.connected_at ? t("settings.brief.fillFromPostsPrompt") : t("settings.brief.interviewPrompt"),
               )
             }>
-              Fill with the copilot
+              {t("settings.brief.fill")}
             </Button>
           }
         >
@@ -260,36 +264,36 @@ export function NewsletterSettings({
             void save();
           }}>
             <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Name">
+              <Field label={t("settings.brief.name")}>
                 <Input value={draft.name} onChange={(e) => set("name", e.target.value)} />
               </Field>
-              <Field label="Issues a week" hint="The copilot plans towards it. 0.5 is every other week.">
+              <Field label={t("settings.brief.cadence")} hint={t("settings.brief.cadenceHint")}>
                 <Input type="number" min={0} max={14} step={0.5} value={draft.cadence} onChange={(e) => set("cadence", e.target.value)} />
               </Field>
             </div>
-            <Field label="What it is about" hint="The subject, the promise to readers, what makes it different.">
+            <Field label={t("settings.brief.about")} hint={t("settings.brief.aboutHint")}>
               <Textarea rows={3} value={draft.description} onChange={(e) => set("description", e.target.value)} />
             </Field>
-            <Field label="Readers" hint="Who they are, what they already know, why they subscribe.">
+            <Field label={t("settings.brief.readers")} hint={t("settings.brief.readersHint")}>
               <Textarea rows={2} value={draft.audience} onChange={(e) => set("audience", e.target.value)} />
             </Field>
-            <Field label="Voice" hint="e.g. “first person, candid, dry humour, short paragraphs, no jargon”.">
+            <Field label={t("settings.brief.voice")} hint={t("settings.brief.voiceHint")}>
               <Textarea rows={2} value={draft.voice} onChange={(e) => set("voice", e.target.value)} />
             </Field>
-            <Field label="Recurring themes" hint="One per line.">
+            <Field label={t("settings.brief.themes")} hint={t("settings.brief.themesHint")}>
               <Textarea rows={4} value={draft.pillars} onChange={(e) => set("pillars", e.target.value)} />
             </Field>
-            <Field label="Format of an issue" hint="Sections, recurring segments, typical length, how it ends.">
+            <Field label={t("settings.brief.format")} hint={t("settings.brief.formatHint")}>
               <Textarea rows={3} value={draft.format} onChange={(e) => set("format", e.target.value)} />
             </Field>
-            <Field label="Never" hint="Topics, words or habits to avoid.">
+            <Field label={t("settings.brief.avoid")} hint={t("settings.brief.avoidHint")}>
               <Textarea rows={2} value={draft.avoid} onChange={(e) => set("avoid", e.target.value)} />
             </Field>
-            <Field label="Passages that sound like you" hint="Two or three short excerpts.">
+            <Field label={t("settings.brief.examples")} hint={t("settings.brief.examplesHint")}>
               <Textarea rows={5} value={draft.examples} onChange={(e) => set("examples", e.target.value)} />
             </Field>
             <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Time zone" hint="Scheduling and dates use it.">
+              <Field label={t("settings.brief.timeZone")} hint={t("settings.brief.timeZoneHint")}>
                 <Input list="newsletter-zones" value={draft.timezone} onChange={(e) => set("timezone", e.target.value)} />
                 <datalist id="newsletter-zones">
                   {ZONES.map((zone) => (
@@ -297,21 +301,26 @@ export function NewsletterSettings({
                   ))}
                 </datalist>
               </Field>
-              <Field label="New drafts are for">
-                <SimpleSelect<Audience> label="Default audience" value={draft.default_audience} onValueChange={(v) => set("default_audience", v)} options={AUDIENCES} />
+              <Field label={t("settings.brief.defaultAudience")}>
+                <SimpleSelect<Audience>
+                  label={t("settings.brief.defaultAudienceLabel")}
+                  value={draft.default_audience}
+                  onValueChange={(v) => set("default_audience", v)}
+                  options={AUDIENCES.map((a) => ({ value: a.value, label: t(`audiences.${a.value}`) }))}
+                />
               </Field>
             </div>
             <div className="flex items-center gap-3">
               <Button type="submit" variant="solid" color="accent" size="sm" loading={saving} disabled={!dirty}>
-                Save the brief
+                {t("settings.brief.save")}
               </Button>
-              {saved && !dirty && <span className="text-[12px] text-t-text-tertiary">Saved</span>}
+              {saved && !dirty && <span className="text-[12px] text-t-text-tertiary">{t("common:saved")}</span>}
               {error && <span className="text-t-text-danger">{error}</span>}
             </div>
           </form>
         </Section>
 
-        <Section title="Remove from Richelieu" description="Removes its brief, ideas, notes and copilot conversation. Your posts and subscribers stay on Substack.">
+        <Section title={t("settings.remove.title")} description={t("settings.remove.description")}>
           <div className="flex items-center gap-2">
             {confirm === "delete" ? (
               <>
@@ -325,13 +334,13 @@ export function NewsletterSettings({
                     setBusy(false);
                   }
                 }}>
-                  Remove {newsletter.name}
+                  {t("settings.remove.confirm", { name: newsletter.name })}
                 </Button>
-                <Button size="sm" variant="ghost" onClick={() => setConfirm(null)}>Cancel</Button>
+                <Button size="sm" variant="ghost" onClick={() => setConfirm(null)}>{t("common:cancel")}</Button>
               </>
             ) : (
               <Button size="sm" variant="outline" color="danger" onClick={() => setConfirm("delete")}>
-                Remove the newsletter…
+                {t("settings.remove.start")}
               </Button>
             )}
           </div>

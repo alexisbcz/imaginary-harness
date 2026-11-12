@@ -3,6 +3,8 @@
 // open views reload as its answers move along.
 
 import { useEffect } from "react";
+import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import { AssistantAvatar } from "twenty-ui/components/data-display";
 import { LightIconButton } from "twenty-ui/components/input";
 import { IconX } from "twenty-ui/icon";
@@ -22,22 +24,23 @@ import { sendMessage } from "@/lib/chat";
 import type { Newsletter } from "@/lib/newsletter";
 import { ChatBubble, useMessages } from "@/routes/chat";
 
-function suggestionsFor(newsletter: Newsletter, postId: number | null) {
+function suggestionsFor(t: TFunction<"newsletter">, newsletter: Newsletter, postId: number | null) {
   if (postId)
     return [
-      `Review my draft ${postId} like a demanding editor`,
-      `Write a stronger opening for draft ${postId}`,
-      `Suggest where a paywall would fit in draft ${postId}`,
-      `Draft three Notes to promote draft ${postId}`,
+      t("copilot.suggestions.review", { id: postId }),
+      t("copilot.suggestions.opening", { id: postId }),
+      t("copilot.suggestions.paywall", { id: postId }),
+      t("copilot.suggestions.notesFor", { id: postId }),
     ];
   const thin = !newsletter.description && !newsletter.voice;
-  return [
-    thin && newsletter.connected_at ? "Read my past posts and write our brief" : thin ? "Interview me to write our brief" : null,
-    newsletter.connected_at ? "Which of my posts did readers open and share most, and why?" : null,
-    "Brainstorm my next five issues",
-    "Write a draft of my next issue",
-    "Draft this week's Notes",
-  ].filter((s): s is string => Boolean(s));
+  const suggestions: (string | null)[] = [
+    thin && newsletter.connected_at ? t("copilot.suggestions.briefFromPosts") : thin ? t("copilot.suggestions.briefInterview") : null,
+    newsletter.connected_at ? t("copilot.suggestions.bestPosts") : null,
+    t("copilot.suggestions.brainstorm"),
+    t("copilot.suggestions.nextDraft"),
+    t("copilot.suggestions.weekNotes"),
+  ];
+  return suggestions.filter((s): s is string => Boolean(s));
 }
 
 export function NewsletterCopilot({
@@ -52,6 +55,7 @@ export function NewsletterCopilot({
   onActivity: (revision: string) => void;
   onClose?: () => void;
 }) {
+  const { t } = useTranslation("newsletter");
   const threadId = newsletter.thread_id!;
   const messages = useMessages(threadId);
   const last = messages?.at(-1);
@@ -68,9 +72,9 @@ export function NewsletterCopilot({
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex h-10 shrink-0 items-center gap-2 border-b border-t-border-light px-3">
         <AssistantAvatar size={16} shape="cookie" color="orange" face="happy" />
-        <span className="min-w-0 flex-1 truncate font-medium text-t-text">Copilot</span>
+        <span className="min-w-0 flex-1 truncate font-medium text-t-text">{t("copilot.title")}</span>
         {onClose && (
-          <LightIconButton aria-label="Close the copilot" size="sm" onClick={onClose}>
+          <LightIconButton aria-label={t("copilot.close")} size="sm" onClick={onClose}>
             <IconX size={16} />
           </LightIconButton>
         )}
@@ -84,19 +88,18 @@ export function NewsletterCopilot({
                   <div className="flex flex-col gap-4 pt-6">
                     <AssistantAvatar size={40} shape="cookie" color="orange" face="happy" />
                     <div className="flex flex-col gap-1">
-                      <p className="text-[15px] font-semibold text-t-text">{newsletter.name}'s editor</p>
+                      <p className="text-[15px] font-semibold text-t-text">{t("copilot.heading", { name: newsletter.name })}</p>
                       <p className="leading-[1.55] text-t-text-secondary">
-                        I plan issues, write and revise drafts in your voice, read what your readers open, and draft
-                        your Notes. I write drafts; only you publish or email them.
+                        {t("copilot.intro")}
                       </p>
                     </div>
                     <Suggestions className="items-start">
-                      {suggestionsFor(newsletter, postId).map((suggestion) => (
+                      {suggestionsFor(t, newsletter, postId).map((suggestion) => (
                         <Suggestion
                           key={suggestion}
                           suggestion={suggestion}
                           onClick={(text) => void send(text)}
-                          className="h-auto min-h-8 py-1.5 text-left whitespace-normal"
+                          className="h-auto min-h-8 max-w-full py-1.5 text-left whitespace-normal"
                         />
                       ))}
                     </Suggestions>
@@ -112,7 +115,7 @@ export function NewsletterCopilot({
                 <MessageScrollerItem>
                   <div className="flex items-center gap-2.5">
                     <AssistantAvatar size={20} shape="cookie" color="orange" face="happy" isAnimated />
-                    <Shimmer>Thinking…</Shimmer>
+                    <Shimmer>{t("copilot.thinking")}</Shimmer>
                   </div>
                 </MessageScrollerItem>
               )}
@@ -124,7 +127,7 @@ export function NewsletterCopilot({
       <div className="mx-auto w-full max-w-2xl px-3 pb-3">
         <Composer
           modes={false}
-          placeholder={postId ? `Ask about draft ${postId}…` : "Ask your copilot…"}
+          placeholder={postId ? t("copilot.askAboutDraft", { id: postId }) : t("copilot.ask")}
           onSend={(message) => sendMessage(threadId, message)}
         />
       </div>

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Trans, useTranslation } from "react-i18next";
 import { Link, useNavigate, useParams, useRouteLoaderData } from "react-router";
 import { format, isThisYear, isToday } from "date-fns";
 import { cn } from "cn";
@@ -29,8 +30,11 @@ import { Page } from "@/components/page";
 import { SimpleSelect } from "@/components/simple-select";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { api } from "@/lib/api";
+import i18n, { dateLocale, intlLocale } from "@/lib/i18n";
 import {
+  categoryLabel,
   deleteMessages,
+  folderName,
   formatAddress,
   isFlagged,
   isUnread,
@@ -60,12 +64,20 @@ const FOLDER_ICONS: Record<string, React.ReactNode> = {
 
 const shortDate = (iso: string) => {
   const date = new Date(iso);
+  const locale = dateLocale();
   return isToday(date)
-    ? format(date, "HH:mm")
+    ? format(date, "HH:mm", { locale })
     : isThisYear(date)
-      ? format(date, "d MMM")
-      : format(date, "d MMM yyyy");
+      ? format(date, "d MMM", { locale })
+      : format(date, "d MMM yyyy", { locale });
 };
+
+/** A message's date as quote and forward headers write it, in the app's language. */
+const longDate = (iso: string) =>
+  new Date(iso).toLocaleString(intlLocale(), {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
 
 function MessageRow({
   message,
@@ -78,9 +90,12 @@ function MessageRow({
   sent: boolean;
   onOpen: () => void;
 }) {
+  const { t } = useTranslation("mail");
   const unread = isUnread(message);
   const who = sent
-    ? `To ${message.to_addresses.map((a) => a.name || a.address).join(", ")}`
+    ? t("inbox.to", {
+        names: message.to_addresses.map((a) => a.name || a.address).join(", "),
+      })
     : senderName(message);
   return (
     <button
@@ -112,14 +127,14 @@ function MessageRow({
           <IconFlag
             size={12}
             className="shrink-0 fill-current text-[var(--t-color-orange10)]"
-            aria-label="Flagged"
+            aria-label={t("inbox.flagged")}
           />
         )}
         {message.attachments.length > 0 && (
           <IconPaperclip
             size={12}
             className="shrink-0 text-t-text-tertiary"
-            aria-label="Has attachments"
+            aria-label={t("inbox.hasAttachments")}
           />
         )}
         <time className="shrink-0 text-[11px] text-t-text-tertiary tabular-nums">
@@ -132,14 +147,14 @@ function MessageRow({
           unread ? "font-medium text-t-text" : "text-t-text-secondary",
         )}
       >
-        {message.subject || "(no subject)"}
+        {message.subject || t("noSubject")}
       </div>
       <div className="flex items-center gap-1.5 pl-3.5">
         {message.summary && (
           <IconSparkles
             size={12}
             className="shrink-0 text-[var(--t-color-blue10)]"
-            aria-label="Summary"
+            aria-label={t("inbox.summary")}
           />
         )}
         <span className="line-clamp-1 min-w-0 flex-1 text-[12px] text-t-text-tertiary">
@@ -147,7 +162,7 @@ function MessageRow({
         </span>
         {message.category && message.category !== "other" && (
           <Tag color="gray" variant="soft" className="shrink-0 text-[10px]">
-            {message.category}
+            {categoryLabel(message.category)}
           </Tag>
         )}
       </div>
@@ -157,6 +172,7 @@ function MessageRow({
 
 /** First visit: take an address on one of the server's open domains, or bring your own domain. */
 function Onboarding({ name }: { name: string }) {
+  const { t } = useTranslation("mail");
   const [domains, setDomains] = useState<{ id: string; name: string }[] | null>(
     null,
   );
@@ -203,13 +219,9 @@ function Onboarding({ name }: { name: string }) {
         </IconTile>
         <div className="flex flex-col gap-1.5">
           <h1 className="text-[22px] leading-tight font-semibold text-t-text">
-            Your inbox, with an assistant
+            {t("onboarding.title")}
           </h1>
-          <p className="text-t-text-tertiary">
-            Mail lives in Richelieu&rsquo;s database. The agent summarizes what
-            arrives and can draft replies, and any mail app can connect over
-            IMAP.
-          </p>
+          <p className="text-t-text-tertiary">{t("onboarding.body")}</p>
         </div>
         {domains === null ? (
           <Skeleton width="100%" height={32} />
@@ -218,7 +230,7 @@ function Onboarding({ name }: { name: string }) {
             <div className="flex items-center gap-1.5">
               <Input
                 size="md"
-                aria-label="Address"
+                aria-label={t("onboarding.address")}
                 value={local}
                 onChange={(e) => setLocal(e.target.value.toLowerCase())}
                 placeholder="ada"
@@ -228,7 +240,7 @@ function Onboarding({ name }: { name: string }) {
               <span className="text-t-text-tertiary">@</span>
               {domains.length > 1 ? (
                 <SimpleSelect
-                  label="Domain"
+                  label={t("onboarding.domain")}
                   value={domain}
                   onValueChange={setDomain}
                   options={domains.map((d) => ({
@@ -250,20 +262,23 @@ function Onboarding({ name }: { name: string }) {
               color="accent"
               loading={creating}
             >
-              Create my address
+              {t("onboarding.create")}
             </Button>
           </form>
         ) : (
           <p className="rounded-md bg-t-tertiary px-3 py-2 text-t-text-secondary">
-            This server has no mail domain yet. Add your own below, or ask its
-            operator to run <code>bun run mail setup</code>.
+            <Trans
+              t={t}
+              i18nKey="onboarding.noDomain"
+              components={{ code: <code /> }}
+            />
           </p>
         )}
         <Link
           to="/mail/settings"
           className="text-t-text-secondary underline decoration-t-border-strong underline-offset-[3px] hover:text-t-text"
         >
-          Use your own domain instead
+          {t("onboarding.ownDomain")}
         </Link>
       </div>
     </div>
@@ -271,11 +286,14 @@ function Onboarding({ name }: { name: string }) {
 }
 
 function quoted(message: MailMessage) {
-  const when = format(
-    new Date(message.sent_at ?? message.internal_date),
-    "d MMM yyyy 'at' HH:mm",
-  );
-  return `\n\nOn ${when}, ${formatAddress({ name: message.from_name, address: message.from_address })} wrote:\n${message.text_body
+  const wrote = i18n.t("mail:quote.wrote", {
+    date: longDate(message.sent_at ?? message.internal_date),
+    name: formatAddress({
+      name: message.from_name,
+      address: message.from_address,
+    }),
+  });
+  return `\n\n${wrote}\n${message.text_body
     .replace(/\r\n/g, "\n")
     .split("\n")
     .map((l) => `> ${l}`)
@@ -283,6 +301,7 @@ function quoted(message: MailMessage) {
 }
 
 export function Mail() {
+  const { t } = useTranslation("mail");
   const { name } = useRouteLoaderData("app") as { name: string };
   const { folderId, messageId } = useParams();
   const navigate = useNavigate();
@@ -346,7 +365,15 @@ export function Mail() {
         subject: /^fwd?:/i.test(message.subject)
           ? message.subject
           : `Fwd: ${message.subject}`,
-        text: `\n\n---------- Forwarded message ----------\nFrom: ${formatAddress({ name: message.from_name, address: message.from_address })}\nDate: ${format(new Date(message.sent_at ?? message.internal_date), "d MMM yyyy, HH:mm")}\nSubject: ${message.subject}\nTo: ${message.to_addresses.map(formatAddress).join(", ")}\n\n${message.text_body}`,
+        text: `\n\n${t("quote.forwarded", {
+          from: formatAddress({
+            name: message.from_name,
+            address: message.from_address,
+          }),
+          date: longDate(message.sent_at ?? message.internal_date),
+          subject: message.subject,
+          to: message.to_addresses.map(formatAddress).join(", "),
+        })}\n\n${message.text_body}`,
       });
     const own = new Set(accounts?.map((a) => a.address));
     const sentByMe = own.has(message.from_address);
@@ -389,6 +416,8 @@ export function Mail() {
       cc: draft.cc_addresses.map(formatAddress).join(", "),
       subject: draft.subject,
       text: draft.text_body.replace(/\r\n/g, "\n").trimEnd(),
+      // The draft's formatting, unless it shows inline images (cid:), which the editor cannot reach: then its text.
+      html: draft.html_body && !/cid:/i.test(draft.html_body) ? draft.html_body : undefined,
       draftId: draft.id,
     });
   }
@@ -396,7 +425,7 @@ export function Mail() {
   if (accounts === null)
     return (
       <Page
-        title="Mail"
+        title={t("title")}
         icon={
           <IconTile color="blue">
             <IconMail />
@@ -411,7 +440,7 @@ export function Mail() {
   if (accounts.length === 0)
     return (
       <Page
-        title="Mail"
+        title={t("title")}
         icon={
           <IconTile color="blue">
             <IconMail />
@@ -429,7 +458,7 @@ export function Mail() {
 
   return (
     <Page
-      title={account?.address ?? "Mail"}
+      title={account?.address ?? t("title")}
       icon={
         <IconTile color="blue">
           <IconMail />
@@ -439,7 +468,7 @@ export function Mail() {
         <>
           {accounts.length > 1 && (
             <SimpleSelect
-              label="Address"
+              label={t("inbox.address")}
               value={account!.id}
               onValueChange={(id) => {
                 setAccountId(id);
@@ -456,7 +485,7 @@ export function Mail() {
             shortcut={isMobile ? undefined : ["C"]}
             onClick={() => setComposing({ from: account?.id })}
           >
-            Write
+            {t("inbox.write")}
           </Button>
           <SettingsLink />
         </>
@@ -465,7 +494,7 @@ export function Mail() {
     >
       {!isMobile && (
         <nav
-          aria-label="Folders"
+          aria-label={t("inbox.foldersLabel")}
           className="flex w-[188px] shrink-0 flex-col gap-px overflow-y-auto border-r border-t-border-light p-2"
         >
           {folders === null
@@ -491,7 +520,7 @@ export function Mail() {
                   }
                   descriptionPlacement="end"
                 >
-                  {f.special_use === "inbox" ? "Inbox" : f.name}
+                  {folderName(f)}
                 </ListItem>
               ))}
         </nav>
@@ -499,7 +528,7 @@ export function Mail() {
 
       {showList && (
         <section
-          aria-label="Messages"
+          aria-label={t("inbox.messagesLabel")}
           className={cn(
             "flex min-h-0 flex-col border-r border-t-border-light",
             isMobile ? "flex-1" : "w-[min(380px,36%)] shrink-0",
@@ -508,25 +537,25 @@ export function Mail() {
           <div className="flex h-11 shrink-0 items-center gap-2 border-b border-t-border-light px-2">
             {isMobile && folders && (
               <SimpleSelect
-                label="Folder"
+                label={t("inbox.folder")}
                 value={folder?.id ?? ""}
                 onValueChange={(id) => go(id)}
                 options={folders.map((f) => ({
                   value: f.id,
                   label:
                     f.special_use === "inbox"
-                      ? `Inbox${unread[f.id] ? ` (${unread[f.id]})` : ""}`
-                      : f.name,
+                      ? `${folderName(f)}${unread[f.id] ? ` (${unread[f.id]})` : ""}`
+                      : folderName(f),
                 }))}
               />
             )}
             <SearchInput
               size="sm"
-              placeholder="Search"
+              placeholder={t("inbox.search")}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               className="min-w-0 flex-1"
-              aria-label="Search mail"
+              aria-label={t("inbox.searchLabel")}
             />
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto">
@@ -543,10 +572,10 @@ export function Mail() {
             {messages?.length === 0 && (
               <p className="px-4 py-10 text-center text-t-text-tertiary">
                 {query
-                  ? "Nothing matches."
+                  ? t("inbox.nothingMatches")
                   : folder?.special_use === "inbox"
-                    ? `Nothing here yet. Mail sent to ${account?.address} lands here.`
-                    : "No messages."}
+                    ? t("inbox.emptyInbox", { address: account?.address ?? "" })
+                    : t("inbox.noMessages")}
               </p>
             )}
             {messages?.map((m) => (
@@ -568,7 +597,7 @@ export function Mail() {
       )}
 
       {showReader && (
-        <section aria-label="Message" className="flex min-w-0 flex-1 flex-col">
+        <section aria-label={t("inbox.messageLabel")} className="flex min-w-0 flex-1 flex-col">
           {messageId ? (
             <MailReader
               message={message}
@@ -579,17 +608,17 @@ export function Mail() {
               onMove={(target) =>
                 void act(
                   () => moveMessages([messageId], target.id),
-                  `Moved to ${target.special_use === "inbox" ? "Inbox" : target.name}`,
+                  t("notices.movedTo", { folder: folderName(target) }),
                 )
               }
               onDelete={() => {
                 const trash = folders?.find((f) => f.special_use === "trash");
                 if (folder?.special_use === "trash" || !trash)
-                  void act(() => deleteMessages([messageId]), "Deleted");
+                  void act(() => deleteMessages([messageId]), t("notices.deleted"));
                 else
                   void act(
                     () => moveMessages([messageId], trash.id),
-                    "Moved to Trash",
+                    t("notices.movedTo", { folder: folderName(trash) }),
                   );
               }}
               onToggleFlag={() =>
@@ -603,14 +632,14 @@ export function Mail() {
               onMarkUnread={() =>
                 void act(
                   () => setFlags([messageId], [], ["\\Seen"]),
-                  "Marked as unread",
+                  t("notices.markedUnread"),
                 )
               }
             />
           ) : (
             <div className="flex flex-1 flex-col items-center justify-center gap-2 text-t-text-tertiary">
               <IconMail size={28} className="opacity-40" />
-              {messages?.length ? "Pick a message to read it." : ""}
+              {messages?.length ? t("inbox.pick") : ""}
             </div>
           )}
         </section>
@@ -623,7 +652,7 @@ export function Mail() {
         initial={composing ?? {}}
         onSent={(result) =>
           setNotice(
-            result.queued.length ? "Sent. Delivery shows in Sent." : "Sent",
+            result.queued.length ? t("notices.sentQueued") : t("notices.sent"),
           )
         }
       />
@@ -644,10 +673,11 @@ export function Mail() {
 }
 
 function SettingsLink() {
+  const { t } = useTranslation("mail");
   return (
     <LightIconButton
-      aria-label="Mail settings"
-      tooltip="Mail settings"
+      aria-label={t("inbox.settings")}
+      tooltip={t("inbox.settings")}
       nativeButton={false}
       render={<Link to="/mail/settings" />}
     >

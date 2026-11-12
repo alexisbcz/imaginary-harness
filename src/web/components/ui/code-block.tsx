@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "cn";
 
@@ -93,6 +94,7 @@ function CodeBlockCopyButton({
   onClick,
   ...props
 }: React.ComponentProps<typeof Button> & { value: string }) {
+  const { t } = useTranslation("common");
   const [copied, setCopied] = React.useState(false);
 
   React.useEffect(() => {
@@ -111,7 +113,7 @@ function CodeBlockCopyButton({
         data-copied={copied || undefined}
         variant={variant}
         size={size}
-        aria-label={copied ? "Copied" : "Copy"}
+        aria-label={copied ? t("copied") : t("copy")}
         className={cn(className)}
         onClick={(event) => {
           onClick?.(event);
@@ -129,7 +131,7 @@ function CodeBlockCopyButton({
         )}
       </Button>
       <span aria-live="polite" className="sr-only">
-        {copied ? "Copied" : ""}
+        {copied ? t("copied") : ""}
       </span>
     </>
   );

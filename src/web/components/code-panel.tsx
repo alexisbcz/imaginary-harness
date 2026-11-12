@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import CodeMirror from "@uiw/react-codemirror";
+import { useTranslation } from "react-i18next";
 import { css } from "@codemirror/lang-css";
 import { html } from "@codemirror/lang-html";
 import { javascript } from "@codemirror/lang-javascript";
@@ -45,6 +46,8 @@ export function CodePanel({
   threadId: string;
   files: WorkspaceFile[];
 }) {
+  const { t } = useTranslation("builder");
+  const { t: tc } = useTranslation("common");
   const scheme = useColorScheme();
   const paths = useMemo(() => files.map((file) => file.path), [files]);
   const { model } = useFileTree({ paths, flattenEmptyDirectories: true });
@@ -85,7 +88,7 @@ export function CodePanel({
       });
       setDraft(null);
     } catch (error) {
-      setError(error instanceof Error ? error.message : "Could not save");
+      setError(error instanceof Error ? error.message : t("code.saveFailed"));
     } finally {
       setSaving(false);
     }
@@ -117,7 +120,7 @@ export function CodePanel({
                   size="sm"
                   onClick={() => setDraft(null)}
                 >
-                  Discard
+                  {t("code.discard")}
                 </Button>
                 <Button
                   size="sm"
@@ -127,12 +130,12 @@ export function CodePanel({
                   shortcut={["⌘", "S"]}
                   onClick={() => void save()}
                 >
-                  Save
+                  {tc("save")}
                 </Button>
               </>
             )}
             <SegmentedControl<"code" | "diff">
-              aria-label="View"
+              aria-label={t("code.view")}
               size="sm"
               value={showDiff ? "diff" : "code"}
               onValueChange={(value) => setView(value)}
@@ -140,12 +143,12 @@ export function CodePanel({
                 {
                   value: "code",
                   startIcon: <IconCode size={14} />,
-                  "aria-label": "Edit the file",
+                  "aria-label": t("code.editFile"),
                 },
                 {
                   value: "diff",
                   startIcon: <IconFileDiff size={14} />,
-                  "aria-label": "Its latest change",
+                  "aria-label": t("code.latestChange"),
                   disabled: !canDiff,
                 },
               ]}
@@ -186,7 +189,7 @@ export function CodePanel({
         </div>
       ) : (
         <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
-          No files yet
+          {t("code.empty")}
         </div>
       )}
     </div>

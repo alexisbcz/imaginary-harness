@@ -1,7 +1,7 @@
 # Newsletter
 
-Richelieu runs a Substack newsletter from end to end. It keeps posts, drafts and scheduling, a Markdown editor with
-a live preview, a backlog of ideas, Notes and analytics, plus a copilot that plans, writes and revises with you.
+Richelieu runs a Substack newsletter from end to end. It keeps posts, drafts and scheduling, a rich editor that
+edits Substack's own document, a backlog of ideas, Notes and analytics, plus a copilot that plans, writes and revises with you.
 You can write by hand, let the copilot draft, or work together in the editor. Nothing is published or emailed until
 you click.
 
@@ -41,13 +41,17 @@ You can also start without connecting. Ideas, Notes drafts, the brief and the co
 
 ## Three ways to write
 
-- **By hand.** **New draft** opens the editor: a title, a subtitle and a Markdown body, with a toolbar for headings,
-  marks, links, quotes, lists, images, buttons, YouTube, dividers and the paywall. Images you add (button, drag or
-  paste) go to Substack's CDN. The draft saves itself to Substack as you type. Write, Split and Preview show the
-  document exactly as Substack will receive it.
+- **By hand.** **New draft** opens the editor, on [TipTap](https://tiptap.dev). It edits Substack's own document,
+  since both are ProseMirror, so what you see is what Substack receives. It has a toolbar, a menu over the selection,
+  `/` for blocks (headings, lists, quotes, images, buttons, YouTube, the paywall, dividers, code) and a handle to drag
+  any block. Images go to Substack's CDN as you drop, paste or pick them, and show their upload in place. Each image
+  has a size (S, M, L), alternative text and a caption. Blocks Substack has but Richelieu does not edit (post embeds,
+  polls…) are kept as they are. The draft saves itself to Substack as you type, and **Preview** shows it as readers
+  will.
 - **By the copilot.** Ask it for the next issue, or press **Copilot writes it** on an idea. It writes the draft
   straight into Substack, and you review it in the editor.
-- **Together.** The editor's **AI** menu works on the selection, or on the whole post when nothing is selected. It
+- **Together.** The **AI** button in the selection menu, and the **AI** menu in the header, work on the selection,
+  or on the whole post when nothing is selected. It
   can improve, make punchier, shorten, develop, simplify, fix the spelling, or change the text your way. It can also
   continue writing from the cursor, turn your notes into a draft, suggest titles with subtitles, and review the
   draft like an editor. Each change shows as a proposal next to the current text, and only **Accept** applies it.
@@ -57,7 +61,8 @@ When you and the copilot edit the same draft, the editor reloads the copilot's c
 edits. In that case it asks whether to keep yours or load theirs. Saves compare Substack's `draft_updated_at`, so
 neither side silently overwrites the other.
 
-Substack blocks are written as directives on a line of their own:
+The copilot writes Markdown, and Richelieu turns it into Substack's document. Substack blocks are written as
+directives on a line of their own:
 
 | Markdown                       | In Substack                                 |
 | ------------------------------ | ------------------------------------------- |
@@ -108,6 +113,7 @@ same Pi Durable agent with its own tools (`src/newsletter/agent.ts`):
 | `draft_substack_note`, `schedule_substack_note`      | Notes; scheduling only when asked                                 |
 | `add_newsletter_image`                               | puts a public image on Substack's CDN                             |
 | `update_newsletter_brief`, `read_website`            | the brief, and pages to research                                  |
+| `web_research`                                       | searches the web and reads pages: a cited answer (blade.sh)      |
 
 What keeps it safe:
 
@@ -138,6 +144,7 @@ The editor and every page work without it. The MCP adds reach for the copilot, n
 | ------------------------------------------ | ------------------------------------------------------------------------ |
 | `src/newsletter/substack.ts`               | the Substack client: drafts, publishing, images, comments, stats, Notes |
 | `src/newsletter/document.ts`               | Markdown ⇄ Substack's ProseMirror document, shared with the web app      |
+| `src/web/components/rich-editor/`          | the editor (shared with mail), and TipTap ⇄ Substack's document         |
 | `src/newsletter/service.ts`                | newsletters, the sealed sessions, drafts, releases, ideas, Notes        |
 | `src/newsletter/writer.ts`                 | the brief as the model reads it, and the editor's assists               |
 | `src/newsletter/agent.ts`                  | the copilot's tools and instructions                                     |

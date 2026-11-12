@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import { createClient } from "@/lib/supabase/client";
 import { cleanName, NAME_MAX_LENGTH, pathAfterName } from "@/lib/profile";
@@ -10,6 +11,7 @@ import {
 } from "@/components/auth-ui";
 
 export function NameForm() {
+  const { t } = useTranslation("auth");
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -19,7 +21,7 @@ export function NameForm() {
     setError(null);
     const cleaned = cleanName(name);
     if (!cleaned) {
-      setError("Enter your name");
+      setError(t("enterName"));
       return;
     }
     setIsLoading(true);
@@ -31,13 +33,13 @@ export function NameForm() {
       // 23505: the row was already created, for example by sign-up.
       if (error && error.code !== "23505") {
         throw new Error(
-          error.code === "23514" ? "Enter your name" : error.message,
+          error.code === "23514" ? t("enterName") : error.message,
         );
       }
       const next = new URLSearchParams(window.location.search).get("next");
       location.href = pathAfterName(next);
     } catch (error: unknown) {
-      setError(error instanceof Error ? error.message : "An error occurred");
+      setError(error instanceof Error ? error.message : t("error"));
     } finally {
       setIsLoading(false);
     }
@@ -46,14 +48,14 @@ export function NameForm() {
   return (
     <form onSubmit={handleName} className="flex flex-col">
       <AuthHeader
-        title="What is your name?"
-        description="Your name shows at the bottom of the sidebar."
+        title={t("nameForm.title")}
+        description={t("nameForm.description")}
       />
       <div className="flex flex-col gap-4">
         <AuthField
-          label="Name"
+          label={t("name")}
           type="text"
-          placeholder="Ada Lovelace"
+          placeholder={t("namePlaceholder")}
           autoComplete="name"
           required
           maxLength={NAME_MAX_LENGTH}
@@ -61,7 +63,7 @@ export function NameForm() {
           onValueChange={setName}
         />
         {error && <AuthError>{error}</AuthError>}
-        <AuthSubmit loading={isLoading}>Save your name</AuthSubmit>
+        <AuthSubmit loading={isLoading}>{t("nameForm.submit")}</AuthSubmit>
       </div>
       <p className="mt-6 text-center">
         <button
@@ -69,7 +71,7 @@ export function NameForm() {
           className="text-t-text-secondary underline decoration-t-border-strong underline-offset-[3px] hover:text-t-text hover:decoration-current"
           onClick={() => void createClient().auth.signOut()}
         >
-          Sign out
+          {t("signOut")}
         </button>
       </p>
     </form>

@@ -1,11 +1,12 @@
-// Writing a post, alone or with the AI: a title, a subtitle and a Markdown body with a toolbar for Substack's
-// blocks (paywall, buttons, images uploaded to Substack), and a preview of the document Substack receives. Saves
-// itself to Substack as you type. The AI rewrites a selection, writes on from the cursor, turns an outline into a
+// Writing a post, alone or with the AI: a title, a subtitle and the rich editor, which edits Substack's own document
+// (paywall, buttons, YouTube, images uploaded to Substack), and a preview of what readers get. Saves itself to
+// Substack as you type. The AI rewrites a selection, writes on from the cursor, turns an outline into a
 // draft, proposes titles and reviews the draft, and each of its changes waits for Accept. Publishing and
 // scheduling ask first; published posts open read-only, with their comments.
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { cn } from "cn";
+import { useTranslation } from "react-i18next";
 import { LightIconButton, SegmentedControl } from "twenty-ui/components/input";
 import { Loader } from "twenty-ui/primitives/feedback";
 import { Button, Input, Switch, Textarea } from "twenty-ui/primitives/input";
@@ -40,9 +41,13 @@ import {
   IconX,
 } from "@tabler/icons-react";
 
+import type { Editor } from "@tiptap/core";
 import { Markdown } from "@/components/markdown";
+import { RichEditor, type RichEditorHandle } from "@/components/rich-editor/rich-editor";
+import { markdownToTiptap, tiptapToMarkdown } from "@/components/rich-editor/substack";
 import { PostPreview } from "@/components/newsletter/preview";
 import { SimpleSelect } from "@/components/simple-select";
+import { intlLocale } from "@/lib/i18n";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -75,7 +80,7 @@ import {
   type SubstackComment,
 } from "@/lib/newsletter";
 
-type View = "write" | "split" | "preview";
+type View = "edit" | "preview";
 type SaveState = "saved" | "dirty" | "saving" | "error";
 type Fields = { title: string; subtitle: string; markdown: string };
 
@@ -102,6 +107,7 @@ export function Modal({
   footer?: ReactNode;
   wide?: boolean;
 }) {
+  const { t } = useTranslation("common");
   return (
     <Dialog.Root open onOpenChange={(open) => !open && onClose()}>
       <Dialog.Portal>
@@ -110,7 +116,7 @@ export function Modal({
           <Dialog.Popup className={cn("flex max-h-[90svh] flex-col overflow-hidden p-0", wide ? "w-[min(720px,calc(100vw-16px))]" : "w-[min(480px,calc(100vw-16px))]")}>
             <div className="flex h-11 shrink-0 items-center gap-2 border-b border-t-border-light pr-2 pl-4">
               <Dialog.Title className="flex-1 text-[14px] font-semibold">{title}</Dialog.Title>
-              <Dialog.Close render={<LightIconButton aria-label="Close"><IconX size={16} /></LightIconButton>} />
+              <Dialog.Close render={<LightIconButton aria-label={t("close")}><IconX size={16} /></LightIconButton>} />
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">{children}</div>
             {footer && <div className="flex shrink-0 items-center justify-end gap-2 border-t border-t-border-light px-4 py-3">{footer}</div>}
@@ -133,45 +139,8 @@ export function Field({ label, hint, children }: { label: string; hint?: ReactNo
 
 const errorText = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
-// The toolbar ----------------------------------------------------------------------------------------------------
-
-type Edit = { text: string; selectionStart: number; selectionEnd: number };
-
-/** Wraps the selection in a mark, or inserts it with a placeholder. */
-function wrap(value: string, start: number, end: number, before: string, after = before, placeholder = "text"): Edit {
-  const selected = value.slice(start, end) || placeholder;
-  const text = value.slice(0, start) + before + selected + after + value.slice(end);
-  return { text, selectionStart: start + before.length, selectionEnd: start + before.length + selected.length };
-}
-
-/** Prefixes each selected line (a heading, a quote, a list). */
-function prefixLines(value: string, start: number, end: number, prefix: (index: number) => string): Edit {
-  const lineStart = value.lastIndexOf("\n", start - 1) + 1;
-  const lineEnd = value.indexOf("\n", end);
-  const stop = lineEnd < 0 ? value.length : lineEnd;
-  const lines = value.slice(lineStart, stop).split("\n");
-  const replaced = lines.map((line, i) => prefix(i) + line.replace(/^(#{1,6}\s|>\s?|[-*]\s|\d+\.\s)/, "")).join("\n");
-  const text = value.slice(0, lineStart) + replaced + value.slice(stop);
-  return { text, selectionStart: lineStart, selectionEnd: lineStart + replaced.length };
-}
-
-/** Inserts a block on lines of its own at the cursor. */
-function insertBlock(value: string, at: number, block: string): Edit {
-  const before = value.slice(0, at).replace(/\s*$/, "");
-  const after = value.slice(at).replace(/^\s*/, "");
-  const head = before ? `${before}\n\n` : "";
-  const text = `${head}${block}${after ? `\n\n${after}` : "\n\n"}`;
-  const cursor = head.length + block.length + 2;
-  return { text, selectionStart: cursor, selectionEnd: cursor };
-}
-
-function ToolButton({ label, onClick, children, disabled }: { label: string; onClick: () => void; children: ReactNode; disabled?: boolean }) {
-  return (
-    <LightIconButton aria-label={label} tooltip={label} size="sm" onClick={onClick} disabled={disabled}>
-      {children}
-    </LightIconButton>
-  );
-}
+/** A post's audience as a known value, to pick its phrase in a sentence ("to paid subscribers"). */
+const knownAudience = (value: string) => AUDIENCES.find((a) => a.value === value)?.value;
 
 // Published posts ------------------------------------------------------------------------------------------------
 
@@ -181,7 +150,7 @@ function Comment({ comment, depth = 0 }: { comment: SubstackComment; depth?: num
       <div className="flex items-center gap-2 text-[12px]">
         {comment.photo_url && <img src={comment.photo_url} alt="" className="size-5 rounded-full" />}
         <span className="font-medium text-t-text">{comment.name}</span>
-        <span className="text-t-text-tertiary">{comment.date ? new Date(comment.date).toLocaleDateString() : ""}</span>
+        <span className="text-t-text-tertiary">{comment.date ? new Date(comment.date).toLocaleDateString(intlLocale()) : ""}</span>
         {comment.reactions > 0 && <span className="text-t-text-tertiary">· {comment.reactions} ♥</span>}
       </div>
       <p className="leading-[1.5] whitespace-pre-wrap text-t-text-secondary">{comment.body}</p>
@@ -197,6 +166,7 @@ function Comment({ comment, depth = 0 }: { comment: SubstackComment; depth?: num
 }
 
 function PublishedPost({ newsletter, post, onAsk }: { newsletter: Newsletter; post: PostDetail; onAsk: (message: string) => void }) {
+  const { t } = useTranslation(["newsletter", "common"]);
   const [comments, setComments] = useState<SubstackComment[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
@@ -205,22 +175,22 @@ function PublishedPost({ newsletter, post, onAsk }: { newsletter: Newsletter; po
   return (
     <div className="h-full overflow-y-auto">
       <div className="mx-auto flex max-w-[760px] flex-wrap items-center gap-2 px-6 pt-5 text-[12px] text-t-text-tertiary">
-        <span>Published {formatMoment(post.post_date, newsletter.timezone)} · {audienceLabel(post.audience)}</span>
+        <span>{t("editor.published.meta", { time: formatMoment(post.post_date, newsletter.timezone), audience: audienceLabel(post.audience) })}</span>
         <span className="flex-1" />
-        <Button size="sm" variant="outline" startIcon={<IconSparkles size={14} />} onClick={() => onAsk(`Read my post ${post.id} (“${post.title}”), its numbers and its comments. What worked, what didn't, and what should my next issue be to follow up on it?`)}>
-          Learn from it
+        <Button size="sm" variant="outline" startIcon={<IconSparkles size={14} />} onClick={() => onAsk(t("editor.published.learnPrompt", { id: post.id, title: post.title }))}>
+          {t("editor.published.learn")}
         </Button>
-        <Button size="sm" variant="outline" startIcon={<IconSparkles size={14} />} onClick={() => onAsk(`Draft three Substack Notes to bring readers to my post ${post.id} (“${post.title}”).`)}>
-          Notes for it
+        <Button size="sm" variant="outline" startIcon={<IconSparkles size={14} />} onClick={() => onAsk(t("editor.published.notesPrompt", { id: post.id, title: post.title }))}>
+          {t("editor.published.notes")}
         </Button>
         {post.url && (
           <Button size="sm" variant="outline" startIcon={<IconExternalLink size={14} />} render={<a href={post.url} target="_blank" rel="noreferrer" />}>
-            Open on Substack
+            {t("posts.openOnSubstack")}
           </Button>
         )}
       </div>
       <p className="mx-auto max-w-[760px] px-6 pt-2 text-[12px] text-t-text-light">
-        A published post changes in Substack's editor, where saving updates the live post.
+        {t("editor.published.readOnly")}
       </p>
       <PostPreview
         doc={markdownToDoc(post.markdown)}
@@ -232,14 +202,14 @@ function PublishedPost({ newsletter, post, onAsk }: { newsletter: Newsletter; po
       />
       <section className="mx-auto max-w-[680px] px-6 pb-10">
         <h2 className="mb-3 flex items-center gap-2 text-[15px] font-semibold text-t-text">
-          <IconMessageCircle size={16} /> Comments
+          <IconMessageCircle size={16} /> {t("editor.published.comments")}
         </h2>
         {error ? (
           <p className="text-t-text-danger">{error}</p>
         ) : comments === null ? (
           <Loader />
         ) : comments.length === 0 ? (
-          <p className="text-t-text-tertiary">No comments yet.</p>
+          <p className="text-t-text-tertiary">{t("editor.published.noComments")}</p>
         ) : (
           <ul className="flex flex-col gap-4">
             {comments.map((c) => (
@@ -253,6 +223,71 @@ function PublishedPost({ newsletter, post, onAsk }: { newsletter: Newsletter; po
 }
 
 // The editor -----------------------------------------------------------------------------------------------------
+
+/** The AI's actions, in the menu over a selection: kept open inside the menu, so the selection stays. */
+function AiBubble({ onRun, onCustom, busy }: { onRun: (action: string) => void; onCustom: () => void; busy: boolean }) {
+  const { t } = useTranslation(["newsletter", "common"]);
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onMouseDown={(e) => e.preventDefault()}
+        onClick={() => setOpen((v) => !v)}
+        className={cn(
+          "flex h-8 items-center gap-1 rounded-md px-2 text-[13px] font-medium text-[var(--t-color-purple10)] transition-colors hover:bg-t-hover",
+          open && "bg-t-hover",
+        )}
+      >
+        {busy ? <Loader /> : <IconSparkles size={15} />} {t("assist.ai")} <IconChevronDown size={12} />
+      </button>
+      {open && (
+        <div className="rich-pop absolute top-full right-0 z-40 mt-2 w-56 rounded-xl border border-t-border bg-t-primary p-1 shadow-2xl">
+          {ASSIST_ACTIONS.map((action) => (
+            <button
+              key={action.value}
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => {
+                setOpen(false);
+                onRun(action.value);
+              }}
+              className="flex w-full items-center rounded-md px-2 py-1.5 text-left text-[13px] text-t-text hover:bg-t-hover"
+            >
+              {t(`assist.actions.${action.value}`)}
+            </button>
+          ))}
+          <div className="my-1 h-px bg-t-border-light" />
+          <button
+            type="button"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => {
+              setOpen(false);
+              onCustom();
+            }}
+            className="flex w-full items-center rounded-md px-2 py-1.5 text-left text-[13px] text-t-text hover:bg-t-hover"
+          >
+            {t("assist.custom")}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** The selection's content as Markdown, and what it reads as, to find it again. */
+function selectionOf(editor: Editor) {
+  const { from, to, empty } = editor.state.selection;
+  if (empty) return null;
+  const markdown = tiptapToMarkdown({ type: "doc", content: editor.state.doc.slice(from, to).content.toJSON() });
+  return { from, to, text: editor.state.doc.textBetween(from, to, "\n"), markdown };
+}
+
+/** Markdown as content to insert: a lone paragraph goes in as its text, so it stays inline. */
+function insertable(markdown: string) {
+  const content = markdownToTiptap(markdown).content ?? [];
+  return content.length === 1 && content[0]!.type === "paragraph" ? (content[0]!.content ?? []) : content;
+}
 
 export function PostEditor({
   newsletter,
@@ -270,19 +305,21 @@ export function PostEditor({
   onAsk: (message: string) => void;
   onChanged: () => void;
 }) {
+  const { t } = useTranslation(["newsletter", "common"]);
   const [post, setPost] = useState<PostDetail | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [fields, setFields] = useState<Fields>({ title: "", subtitle: "", markdown: "" });
+  // Remounts the editor on content that comes from elsewhere (a load, the copilot, the AI's whole-post drafts).
+  const [generation, setGeneration] = useState(0);
   const [save, setSave] = useState<SaveState>("saved");
   const [saveError, setSaveError] = useState<string | null>(null);
   const [conflict, setConflict] = useState(false);
-  const [view, setView] = useState<View>(() => (window.innerWidth >= 1280 ? "split" : "write"));
+  const [view, setView] = useState<View>("edit");
   const [busy, setBusy] = useState<string | null>(null);
   const [proposal, setProposal] = useState<Proposal | null>(null);
-  const [dialog, setDialog] = useState<null | "publish" | "schedule" | "settings" | "delete" | "custom" | "link" | "button" | "youtube">(null);
+  const [dialog, setDialog] = useState<null | "publish" | "schedule" | "settings" | "delete" | "custom">(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const textarea = useRef<HTMLTextAreaElement>(null);
-  const fileInput = useRef<HTMLInputElement>(null);
+  const rich = useRef<RichEditorHandle>(null);
   const revisionRef = useRef<string | null>(null);
   const timer = useRef<Timer | undefined>(undefined);
   const latest = useRef(fields);
@@ -290,11 +327,14 @@ export function PostEditor({
   const saving = useRef<Promise<void> | null>(null);
   const saveRef = useRef<SaveState>("saved");
   saveRef.current = save;
+  // The selection an AI action was asked about, kept while the menu that asks takes the focus.
+  const pendingSelection = useRef<ReturnType<typeof selectionOf>>(null);
 
   const adopt = useCallback((loaded: PostDetail) => {
     setPost(loaded);
     revisionRef.current = loaded.revision;
     setFields({ title: loaded.title, subtitle: loaded.subtitle, markdown: loaded.markdown });
+    setGeneration((g) => g + 1);
     setSave("saved");
     setConflict(false);
   }, []);
@@ -361,7 +401,11 @@ export function PostEditor({
 
   function change(next: Partial<Fields>) {
     if (!editable) return;
-    setFields((current) => ({ ...current, ...next }));
+    setFields((current) => {
+      const merged = { ...current, ...next };
+      latest.current = merged;
+      return merged;
+    });
     setSave("dirty");
     clearTimeout(timer.current);
     if (!conflict) timer.current = setTimeout(() => void flush(), SAVE_DELAY_MS);
@@ -376,92 +420,66 @@ export function PostEditor({
     return () => window.removeEventListener("beforeunload", warn);
   }, [save]);
   useEffect(() => () => clearTimeout(timer.current), []);
+  // ⌘S saves now.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "s") {
+        e.preventDefault();
+        void flush();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [flush]);
 
   const doc = useMemo(() => markdownToDoc(fields.markdown), [fields.markdown]);
-  const words = useMemo(() => wordCount(fields.markdown), [fields.markdown]);
+  const initialContent = useMemo(() => markdownToTiptap(fields.markdown), [generation]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  function applyEdit(edit: Edit) {
-    change({ markdown: edit.text });
-    requestAnimationFrame(() => {
-      const el = textarea.current;
-      if (!el) return;
-      el.focus();
-      el.setSelectionRange(edit.selectionStart, edit.selectionEnd);
-    });
-  }
-
-  const selection = () => {
-    const el = textarea.current;
-    return { start: el?.selectionStart ?? fields.markdown.length, end: el?.selectionEnd ?? fields.markdown.length };
+  const setDocument = (markdown: string) => {
+    change({ markdown });
+    setGeneration((g) => g + 1);
   };
-
-  const tool = {
-    bold: () => {
-      const { start, end } = selection();
-      applyEdit(wrap(fields.markdown, start, end, "**"));
-    },
-    italic: () => {
-      const { start, end } = selection();
-      applyEdit(wrap(fields.markdown, start, end, "*"));
-    },
-    heading: (level: 2 | 3) => {
-      const { start, end } = selection();
-      applyEdit(prefixLines(fields.markdown, start, end, () => `${"#".repeat(level)} `));
-    },
-    quote: () => {
-      const { start, end } = selection();
-      applyEdit(prefixLines(fields.markdown, start, end, () => "> "));
-    },
-    list: (ordered: boolean) => {
-      const { start, end } = selection();
-      applyEdit(prefixLines(fields.markdown, start, end, (i) => (ordered ? `${i + 1}. ` : "- ")));
-    },
-    block: (block: string) => applyEdit(insertBlock(fields.markdown, selection().end, block)),
-  };
-
-  async function uploadFiles(files: FileList | File[]) {
-    const images = [...files].filter((f) => f.type.startsWith("image/"));
-    if (images.length === 0) return;
-    setBusy("upload");
-    try {
-      for (const file of images) {
-        const url = await uploadImage(newsletter.id, file, postId);
-        tool.block(`![${file.name.replace(/\.[^.]+$/, "").replace(/[[\]]/g, "")}](${url})`);
-      }
-    } catch (e) {
-      setNotice(errorText(e));
-    } finally {
-      setBusy(null);
-    }
-  }
 
   // The AI ---------------------------------------------------------------------------------------------------
 
   async function runAssist(action: string, options: { instruction?: string; label?: string } = {}) {
-    const { start, end } = selection();
-    const selected = fields.markdown.slice(start, end);
-    const whole = !selected.trim();
+    const editor = rich.current?.editor;
+    if (!editor) return;
+    const selected = pendingSelection.current ?? selectionOf(editor);
+    pendingSelection.current = null;
+    const known = ASSIST_ACTIONS.find((a) => a.value === action);
+    const label = options.label ?? (known ? t(`assist.actions.${known.value}`) : t("assist.ai"));
     setBusy(`ai:${action}`);
     setNotice(null);
     try {
+      let text = fields.markdown;
+      let after: string | undefined;
+      if (action === "continue") {
+        const at = editor.state.selection.to;
+        const $at = editor.state.doc.resolve(at);
+        const end = $at.depth >= 1 ? $at.after(1) : at;
+        text = tiptapToMarkdown({ type: "doc", content: editor.state.doc.slice(0, end).content.toJSON() });
+        after = tiptapToMarkdown({ type: "doc", content: editor.state.doc.slice(end).content.toJSON() });
+        const result = await assist(newsletter.id, { action: "continue", text, after, title: fields.title, subtitle: fields.subtitle });
+        if (result.kind !== "titles") setProposal({ kind: "insert", label: t("assist.continue"), at: end, text: result.text });
+        return;
+      }
+      if (selected && !["expand", "titles", "review"].includes(action)) text = selected.markdown;
       const result = await assist(newsletter.id, {
         action: action as never,
-        text: action === "continue" ? fields.markdown.slice(0, end) : whole ? fields.markdown : selected,
-        after: action === "continue" ? fields.markdown.slice(end) : undefined,
+        text,
         instruction: options.instruction,
         title: fields.title,
         subtitle: fields.subtitle,
       });
-      const label = options.label ?? ASSIST_ACTIONS.find((a) => a.value === action)?.label ?? "AI";
       if (result.kind === "titles") setProposal({ kind: "titles", titles: result.titles });
       else if (result.kind === "feedback") setProposal({ kind: "feedback", text: result.text });
       else if (result.kind === "document") setProposal({ kind: "document", label, text: result.text });
-      else if (result.kind === "insert") setProposal({ kind: "insert", label, at: end, text: result.text });
       else if (result.kind === "replace")
         setProposal(
-          whole
-            ? { kind: "replace", label, from: 0, to: fields.markdown.length, original: fields.markdown, text: result.text }
-            : { kind: "replace", label, from: start, to: end, original: selected, text: result.text },
+          selected
+            ? { kind: "replace", label, from: selected.from, to: selected.to, original: selected.text, text: result.text }
+            : { kind: "document", label, text: result.text },
         );
     } catch (e) {
       setNotice(errorText(e));
@@ -471,23 +489,21 @@ export function PostEditor({
   }
 
   function accept() {
-    if (!proposal) return;
-    const md = fields.markdown;
+    const editor = rich.current?.editor;
+    if (!proposal || !editor) return;
     if (proposal.kind === "replace") {
-      // The text may have moved while the AI wrote: replace where the original still is.
-      const at = md.slice(proposal.from, proposal.to) === proposal.original ? proposal.from : md.indexOf(proposal.original);
-      if (at < 0) {
-        setNotice("The passage changed meanwhile: select it again and retry.");
+      // The text may have moved while the AI wrote: replace it only where it still is.
+      const size = editor.state.doc.content.size;
+      const still = proposal.to <= size && editor.state.doc.textBetween(proposal.from, proposal.to, "\n") === proposal.original;
+      if (!still) {
+        setNotice(t("assist.passageChanged"));
         return;
       }
-      applyEdit({
-        text: md.slice(0, at) + proposal.text + md.slice(at + proposal.original.length),
-        selectionStart: at,
-        selectionEnd: at + proposal.text.length,
-      });
-    } else if (proposal.kind === "insert") applyEdit(insertBlock(md, Math.min(proposal.at, md.length), proposal.text));
-    else if (proposal.kind === "document")
-      applyEdit({ text: proposal.text, selectionStart: 0, selectionEnd: 0 });
+      editor.chain().focus().insertContentAt({ from: proposal.from, to: proposal.to }, insertable(proposal.text)).run();
+    } else if (proposal.kind === "insert") {
+      const at = Math.min(proposal.at, editor.state.doc.content.size);
+      editor.chain().focus().insertContentAt(at, markdownToTiptap(proposal.text).content ?? []).run();
+    } else if (proposal.kind === "document") setDocument(proposal.text);
     setProposal(null);
   }
 
@@ -497,7 +513,7 @@ export function PostEditor({
     return (
       <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center">
         <p className="text-t-text-danger">{loadError}</p>
-        <Button size="sm" variant="outline" onClick={onBack}>Back to the posts</Button>
+        <Button size="sm" variant="outline" onClick={onBack}>{t("editor.back")}</Button>
       </div>
     );
   if (!post)
@@ -509,23 +525,36 @@ export function PostEditor({
 
   const header = (
     <div className="flex h-11 shrink-0 items-center gap-1.5 overflow-x-auto border-b border-t-border-light px-2">
-      <LightIconButton aria-label="Back to the posts" tooltip="Back to the posts" onClick={async () => {
+      <LightIconButton aria-label={t("editor.back")} tooltip={t("editor.back")} onClick={async () => {
         if (save === "dirty") await flush();
         onBack();
       }}>
         <IconArrowLeft size={16} />
       </LightIconButton>
-      <span className="shrink-0 text-[12px] text-t-text-tertiary tabular-nums">
+      <span className="flex shrink-0 items-center gap-1.5 text-[12px] text-t-text-tertiary tabular-nums">
+        <span
+          className={cn(
+            "size-1.5 rounded-full",
+            post.state === "published" ? "bg-[var(--t-color-green9)]" : post.state === "scheduled" ? "bg-[var(--t-color-blue9)]" : "bg-[var(--t-color-gray8)]",
+          )}
+        />
         {post.state === "published"
-          ? "Published"
+          ? t("editor.state.published")
           : post.state === "scheduled"
-            ? `Scheduled · ${formatMoment(post.scheduled_for, newsletter.timezone)}`
-            : "Draft"}
+            ? t("editor.state.scheduled", { time: formatMoment(post.scheduled_for, newsletter.timezone) })
+            : t("editor.state.draft")}
         {editable && (
           <>
             {" · "}
-            {save === "saving" ? "Saving…" : save === "dirty" ? "Unsaved" : save === "error" ? <span className="text-t-text-danger">Not saved</span> : "Saved to Substack"}
-            {` · ${words} words`}
+            {save === "saving" ? (
+              t("common:saving")
+            ) : save === "dirty" ? (
+              t("editor.save.dirty")
+            ) : save === "error" ? (
+              <span className="text-t-text-danger">{t("editor.save.error")}</span>
+            ) : (
+              t("editor.save.saved")
+            )}
           </>
         )}
       </span>
@@ -533,44 +562,47 @@ export function PostEditor({
       {editable && (
         <>
           <SegmentedControl<View>
-            aria-label="View"
+            aria-label={t("editor.view.label")}
             size="sm"
             value={view}
             onValueChange={setView}
             options={[
-              { value: "write", label: "Write" },
-              { value: "split", label: "Split" },
-              { value: "preview", label: "Preview" },
+              { value: "edit", label: t("editor.view.edit") },
+              { value: "preview", label: t("editor.view.preview") },
             ]}
           />
           <DropdownMenu>
             <DropdownMenuTrigger
               render={
                 <Button size="sm" variant="ghost" startIcon={busy?.startsWith("ai:") ? <Loader /> : <IconWand size={14} />} endIcon={<IconChevronDown size={12} />} disabled={busy !== null}>
-                  AI
+                  {t("assist.ai")}
                 </Button>
               }
+              onMouseDown={() => {
+                const editor = rich.current?.editor;
+                pendingSelection.current = editor ? selectionOf(editor) : null;
+              }}
             />
             <DropdownMenuContent align="end" className="w-64">
-              <div className="px-2 py-1 text-[11px] text-t-text-tertiary">On the selection (or the whole post)</div>
+              <div className="px-2 py-1 text-[11px] text-t-text-tertiary">{t("assist.onSelection")}</div>
               {ASSIST_ACTIONS.map((option) => (
                 <DropdownMenuItem key={option.value} onClick={() => void runAssist(option.value)}>
-                  {option.label}
+                  {t(`assist.actions.${option.value}`)}
                 </DropdownMenuItem>
               ))}
-              <DropdownMenuItem onClick={() => setDialog("custom")}>Change it my way…</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setDialog("custom")}>{t("assist.custom")}</DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => void runAssist("continue", { label: "Continue writing" })}>Continue writing from the cursor</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => void runAssist("expand", { label: "Draft from the outline" })}>Turn my notes into a draft</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => void runAssist("titles")}>Suggest titles</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => void runAssist("review")}>Review the draft</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => void runAssist("continue", { label: t("assist.continue") })}>{t("assist.continueFromCursor")}</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => void runAssist("expand", { label: t("assist.expand") })}>{t("assist.expandMenu")}</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => void runAssist("titles")}>{t("assist.titles")}</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => void runAssist("review")}>{t("assist.review")}</DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => onAsk(`Let's work on my draft ${post.id} (“${fields.title || "Untitled"}”). Read it, then tell me what you would change before I publish it.`)}>
-                Work on it with the copilot
+              <DropdownMenuItem onClick={() => onAsk(t("assist.copilotPrompt", { id: post.id, title: fields.title || t("common:untitled") }))}>
+                {t("assist.copilot")}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-          <LightIconButton aria-label="Post settings" tooltip="Audience, description, SEO" onClick={() => setDialog("settings")}>
+          <LightIconButton aria-label={t("editor.settings.label")} tooltip={t("editor.settings.tooltip")} onClick={() => setDialog("settings")}>
             <IconSettings size={16} />
           </LightIconButton>
           {post.state === "scheduled" && post.scheduled_by === "richelieu" ? (
@@ -586,18 +618,18 @@ export function PostEditor({
                 setBusy(null);
               }
             }} loading={busy === "unschedule"}>
-              Unschedule
+              {t("notes.unschedule")}
             </Button>
           ) : (
             <Button size="sm" variant="outline" startIcon={<IconClock size={14} />} onClick={() => setDialog("schedule")}>
-              Schedule
+              {t("notes.schedule")}
             </Button>
           )}
           <Button size="sm" variant="solid" color="accent" startIcon={<IconSend size={14} />} onClick={async () => {
             if (save !== "saved") await flush();
             setDialog("publish");
           }}>
-            Publish
+            {t("notes.publish")}
           </Button>
         </>
       )}
@@ -614,113 +646,7 @@ export function PostEditor({
       </div>
     );
 
-  const writer = (
-    <div
-      className="flex h-full min-h-0 flex-col overflow-y-auto"
-      onDragOver={(e) => e.preventDefault()}
-      onDrop={(e) => {
-        if (e.dataTransfer.files.length) {
-          e.preventDefault();
-          void uploadFiles(e.dataTransfer.files);
-        }
-      }}
-    >
-      <div className="mx-auto flex w-full max-w-[760px] flex-1 flex-col px-5 pt-6 pb-10">
-        <textarea
-          aria-label="Title"
-          rows={1}
-          placeholder="Title"
-          value={fields.title}
-          onChange={(e) => change({ title: e.target.value.replace(/\n/g, " ") })}
-          className="field-sizing-content w-full resize-none bg-transparent font-serif text-[30px] leading-tight font-bold text-t-text outline-none placeholder:text-t-text-light"
-          style={{ fontFamily: "Georgia, 'Iowan Old Style', serif" }}
-        />
-        <textarea
-          aria-label="Subtitle"
-          rows={1}
-          placeholder="Add a subtitle…"
-          value={fields.subtitle}
-          onChange={(e) => change({ subtitle: e.target.value.replace(/\n/g, " ") })}
-          className="field-sizing-content mt-2 w-full resize-none bg-transparent font-serif text-[18px] text-t-text-secondary outline-none placeholder:text-t-text-light"
-          style={{ fontFamily: "Georgia, 'Iowan Old Style', serif" }}
-        />
-        <div className="sticky top-0 z-10 -mx-2 mt-4 mb-2 flex flex-wrap items-center gap-0.5 rounded-md border border-t-border-light bg-t-primary/95 px-1 py-0.5 backdrop-blur">
-          <ToolButton label="Section heading" onClick={() => tool.heading(2)}><IconH2 size={16} /></ToolButton>
-          <ToolButton label="Subheading" onClick={() => tool.heading(3)}><IconH3 size={16} /></ToolButton>
-          <ToolButton label="Bold (⌘B)" onClick={tool.bold}><IconBold size={16} /></ToolButton>
-          <ToolButton label="Italic (⌘I)" onClick={tool.italic}><IconItalic size={16} /></ToolButton>
-          <ToolButton label="Link (⌘K)" onClick={() => setDialog("link")}><IconLink size={16} /></ToolButton>
-          <ToolButton label="Quote" onClick={tool.quote}><IconQuote size={16} /></ToolButton>
-          <ToolButton label="Bulleted list" onClick={() => tool.list(false)}><IconList size={16} /></ToolButton>
-          <ToolButton label="Numbered list" onClick={() => tool.list(true)}><IconListNumbers size={16} /></ToolButton>
-          <span className="mx-1 h-4 w-px bg-t-border" />
-          <ToolButton label="Image (uploaded to Substack)" onClick={() => fileInput.current?.click()} disabled={busy === "upload"}>
-            {busy === "upload" ? <Loader /> : <IconPhoto size={16} />}
-          </ToolButton>
-          <ToolButton label="Subscribe button" onClick={() => tool.block("::subscribe")}><IconUserPlus size={16} /></ToolButton>
-          <ToolButton label="Button" onClick={() => setDialog("button")}><IconClick size={16} /></ToolButton>
-          <ToolButton label="YouTube video" onClick={() => setDialog("youtube")}><IconBrandYoutube size={16} /></ToolButton>
-          <ToolButton label="Divider" onClick={() => tool.block("---")}><IconSeparatorHorizontal size={16} /></ToolButton>
-          <ToolButton label="Paywall: paid subscribers only below" onClick={() => tool.block("::paywall")}><IconLock size={16} /></ToolButton>
-          <input
-            ref={fileInput}
-            type="file"
-            accept="image/png,image/jpeg,image/gif,image/webp"
-            multiple
-            hidden
-            onChange={(e) => {
-              if (e.target.files) void uploadFiles(e.target.files);
-              e.target.value = "";
-            }}
-          />
-        </div>
-        <textarea
-          ref={textarea}
-          aria-label="Post"
-          value={fields.markdown}
-          placeholder={"Start writing, or jot an outline and ask the AI to turn it into a draft.\n\n## Sections start like this\n\nMarkdown works: **bold**, *italic*, [links](https://…), > quotes, - lists."}
-          onChange={(e) => change({ markdown: e.target.value })}
-          onPaste={(e) => {
-            if (e.clipboardData.files.length) {
-              e.preventDefault();
-              void uploadFiles(e.clipboardData.files);
-            }
-          }}
-          onKeyDown={(e) => {
-            const mod = e.metaKey || e.ctrlKey;
-            if (mod && e.key === "b") {
-              e.preventDefault();
-              tool.bold();
-            } else if (mod && e.key === "i") {
-              e.preventDefault();
-              tool.italic();
-            } else if (mod && e.key === "k") {
-              e.preventDefault();
-              setDialog("link");
-            } else if (mod && e.key === "s") {
-              e.preventDefault();
-              void flush();
-            }
-          }}
-          className="field-sizing-content min-h-[50svh] w-full flex-1 resize-none bg-transparent font-serif text-[17px] leading-[1.7] text-t-text outline-none placeholder:text-t-text-light"
-          style={{ fontFamily: "Georgia, 'Iowan Old Style', serif" }}
-        />
-      </div>
-    </div>
-  );
-
-  const preview = (
-    <div className="h-full overflow-y-auto bg-t-secondary/40">
-      <PostPreview
-        doc={doc}
-        title={fields.title}
-        subtitle={fields.subtitle}
-        author={newsletter.substack_user_name}
-        publication={newsletter.name}
-        coverImage={post.cover_image}
-      />
-    </div>
-  );
+  const serif = { fontFamily: "Georgia, 'Iowan Old Style', serif" };
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -728,83 +654,130 @@ export function PostEditor({
       {conflict && (
         <div className="flex flex-wrap items-center gap-2 border-b border-t-border-light bg-t-secondary px-4 py-2">
           <IconAlertTriangle size={16} className="text-[var(--t-color-orange9)]" />
-          <span className="min-w-0 flex-1 text-t-text">This draft changed elsewhere (the copilot or Substack) while you had unsaved edits.</span>
+          <span className="min-w-0 flex-1 text-t-text">{t("editor.conflict.body")}</span>
           <Button size="sm" variant="outline" onClick={async () => adopt(await getPost(newsletter.id, post.id))}>
-            Load their version
+            {t("editor.conflict.theirs")}
           </Button>
           <Button size="sm" variant="solid" color="accent" onClick={() => void flush(true)}>
-            Keep mine
+            {t("editor.conflict.mine")}
           </Button>
         </div>
       )}
       {(notice || (saveError && !conflict)) && (
         <div className="flex items-center gap-2 border-b border-t-border-light px-4 py-2 text-t-text-danger">
           <span className="min-w-0 flex-1">{notice ?? saveError}</span>
-          {saveError && !notice && <Button size="sm" variant="ghost" onClick={() => void flush()}>Retry</Button>}
-          {notice && <Button size="sm" variant="ghost" onClick={() => setNotice(null)}>Dismiss</Button>}
+          {saveError && !notice && <Button size="sm" variant="ghost" onClick={() => void flush()}>{t("common:retry")}</Button>}
+          {notice && <Button size="sm" variant="ghost" onClick={() => setNotice(null)}>{t("common:dismiss")}</Button>}
         </div>
       )}
       {post.release_error && (
         <div className="flex items-center gap-2 border-b border-t-border-light px-4 py-2 text-t-text-danger">
-          <IconAlertTriangle size={16} /> The scheduled release failed: {post.release_error}
+          <IconAlertTriangle size={16} /> {t("editor.releaseFailed", { error: post.release_error })}
         </div>
       )}
-      <div className="flex min-h-0 flex-1">
-        {view !== "preview" && <div className={cn("min-w-0", view === "split" ? "w-1/2 border-r border-t-border-light" : "flex-1")}>{writer}</div>}
-        {view !== "write" && <div className={cn("min-w-0", view === "split" ? "w-1/2" : "flex-1")}>{preview}</div>}
+
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        {view === "preview" ? (
+          <div className="min-h-full bg-t-secondary/40">
+            <PostPreview doc={doc} title={fields.title} subtitle={fields.subtitle} author={newsletter.substack_user_name} publication={newsletter.name} coverImage={post.cover_image} />
+          </div>
+        ) : (
+          <RichEditor
+            key={generation}
+            ref={rich}
+            variant="newsletter"
+            initialContent={initialContent}
+            onChange={(editor) => {
+              // The editor may normalize what it loaded without a change to Substack's document: no save then.
+              const markdown = tiptapToMarkdown(editor.getJSON());
+              if (markdown !== latest.current.markdown) change({ markdown });
+            }}
+            uploadImage={(file) => uploadImage(newsletter.id, file, post.id)}
+            className="min-h-full"
+            contentClassName="mx-auto w-full max-w-[720px] px-6 pb-[30vh] sm:px-12"
+            header={
+              <div className="mx-auto w-full max-w-[720px] px-6 pt-10 pb-6 sm:px-12">
+                <textarea
+                  aria-label={t("preview.title")}
+                  rows={1}
+                  placeholder={t("preview.title")}
+                  value={fields.title}
+                  onChange={(e) => change({ title: e.target.value.replace(/\n/g, " ") })}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      (e.currentTarget.nextElementSibling as HTMLElement | null)?.focus();
+                    }
+                  }}
+                  className="field-sizing-content w-full resize-none bg-transparent text-[34px] leading-[1.15] font-bold tracking-[-0.015em] text-t-text outline-none placeholder:text-t-text-light"
+                  style={serif}
+                />
+                <textarea
+                  aria-label={t("editor.subtitle")}
+                  rows={1}
+                  placeholder={t("editor.subtitlePlaceholder")}
+                  value={fields.subtitle}
+                  onChange={(e) => change({ subtitle: e.target.value.replace(/\n/g, " ") })}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      rich.current?.editor?.commands.focus("start");
+                    }
+                  }}
+                  className="field-sizing-content mt-3 w-full resize-none bg-transparent text-[20px] leading-snug text-t-text-secondary outline-none placeholder:text-t-text-light"
+                  style={serif}
+                />
+                {post.cover_image && <img src={post.cover_image} alt="" className="mt-6 max-h-72 w-full rounded-md object-cover" />}
+                <div className="mt-6 flex items-center gap-2 font-sans text-[12px] text-t-text-tertiary">
+                  {newsletter.substack_user_name && <span>{newsletter.substack_user_name}</span>}
+                  {post.audience !== "everyone" && (
+                    <span className="rounded-full bg-[color-mix(in_oklab,#ff6719_14%,transparent)] px-2 py-0.5 font-medium text-[#c2410c]">
+                      {audienceLabel(post.audience)}
+                    </span>
+                  )}
+                </div>
+              </div>
+            }
+            bubbleActions={(editor) => (
+              <AiBubble
+                busy={busy?.startsWith("ai:") ?? false}
+                onRun={(action) => {
+                  pendingSelection.current = selectionOf(editor);
+                  void runAssist(action);
+                }}
+                onCustom={() => {
+                  pendingSelection.current = selectionOf(editor);
+                  setDialog("custom");
+                }}
+              />
+            )}
+            toolbarEnd={
+              <LightIconButton aria-label={t("editor.delete.confirm")} tooltip={t("editor.delete.confirm")} onClick={() => setDialog("delete")}>
+                <IconTrash size={15} />
+              </LightIconButton>
+            }
+          />
+        )}
       </div>
 
-      {proposal && <ProposalPanel proposal={proposal} onAccept={accept} onDiscard={() => setProposal(null)} onPickTitle={(t) => {
-        change({ title: t.title, subtitle: t.subtitle });
+      {proposal && <ProposalPanel proposal={proposal} onAccept={accept} onDiscard={() => setProposal(null)} onPickTitle={(picked) => {
+        change({ title: picked.title, subtitle: picked.subtitle });
         setProposal(null);
       }} />}
 
       {dialog === "custom" && (
         <PromptDialog
-          title="Change it my way"
-          label="What should the AI do with the selection (or the whole post)?"
-          placeholder="e.g. turn this into a numbered list of steps"
-          submit="Rewrite"
+          title={t("assist.customDialog.title")}
+          label={t("assist.customDialog.label")}
+          placeholder={t("assist.customDialog.placeholder")}
+          submit={t("assist.customDialog.submit")}
           onClose={() => setDialog(null)}
           onSubmit={(instruction) => {
             setDialog(null);
-            void runAssist("custom", { instruction, label: "Your change" });
+            void runAssist("custom", { instruction, label: t("assist.customDialog.proposal") });
           }}
         />
       )}
-      {dialog === "link" && (
-        <PromptDialog
-          title="Link"
-          label="Address"
-          placeholder="https://"
-          submit="Add the link"
-          onClose={() => setDialog(null)}
-          onSubmit={(url) => {
-            setDialog(null);
-            const { start, end } = selection();
-            applyEdit(wrap(fields.markdown, start, end, "[", `](${url.trim()})`, "link text"));
-          }}
-        />
-      )}
-      {dialog === "youtube" && (
-        <PromptDialog
-          title="YouTube video"
-          label="The video's address"
-          placeholder="https://www.youtube.com/watch?v=…"
-          submit="Embed"
-          onClose={() => setDialog(null)}
-          onSubmit={(url) => {
-            setDialog(null);
-            const id = /(?:v=|youtu\.be\/|embed\/|shorts\/)([\w-]{6,})/.exec(url)?.[1] ?? url.trim();
-            if (/^[\w-]{6,}$/.test(id)) tool.block(`::youtube[${id}]`);
-            else setNotice("That is not a YouTube address");
-          }}
-        />
-      )}
-      {dialog === "button" && <ButtonDialog onClose={() => setDialog(null)} onInsert={(text, url) => {
-        setDialog(null);
-        tool.block(`::button[${text.replace(/[[\]]/g, "")}](${url})`);
-      }} />}
       {dialog === "settings" && (
         <SettingsDialog newsletter={newsletter} post={post} onClose={() => setDialog(null)} onSaved={(saved) => {
           revisionRef.current = saved.revision;
@@ -815,7 +788,7 @@ export function PostEditor({
       {dialog === "schedule" && (
         <ScheduleDialog newsletter={newsletter} post={post} onClose={() => setDialog(null)} onScheduled={async (warnings) => {
           setDialog(null);
-          if (warnings.length) setNotice(`Scheduled. Fix before then: ${warnings.join("; ")}`);
+          if (warnings.length) setNotice(t("editor.schedule.warnings", { warnings: warnings.join("; ") }));
           adopt(await getPost(newsletter.id, post.id));
           onChanged();
         }} />
@@ -829,11 +802,11 @@ export function PostEditor({
       )}
       {dialog === "delete" && (
         <Modal
-          title="Delete this draft?"
+          title={t("editor.delete.title")}
           onClose={() => setDialog(null)}
           footer={
             <>
-              <Button size="sm" variant="ghost" onClick={() => setDialog(null)}>Cancel</Button>
+              <Button size="sm" variant="ghost" onClick={() => setDialog(null)}>{t("common:cancel")}</Button>
               <Button size="sm" variant="solid" color="danger" loading={busy === "delete"} onClick={async () => {
                 setBusy("delete");
                 try {
@@ -846,18 +819,13 @@ export function PostEditor({
                   setBusy(null);
                   setDialog(null);
                 }
-              }}>Delete the draft</Button>
+              }}>{t("editor.delete.confirm")}</Button>
             </>
           }
         >
-          <p className="text-t-text-secondary">“{fields.title || "Untitled"}” leaves Substack's drafts for good.</p>
+          <p className="text-t-text-secondary">{t("editor.delete.body", { title: fields.title || t("common:untitled") })}</p>
         </Modal>
       )}
-      <div className="flex shrink-0 justify-start border-t border-t-border-light px-3 py-1.5">
-        <Button size="sm" variant="ghost" color="danger" startIcon={<IconTrash size={14} />} onClick={() => setDialog("delete")}>
-          Delete draft
-        </Button>
-      </div>
     </div>
   );
 }
@@ -875,12 +843,13 @@ function ProposalPanel({
   onDiscard: () => void;
   onPickTitle: (title: { title: string; subtitle: string }) => void;
 }) {
+  const { t } = useTranslation(["newsletter", "common"]);
   const heading =
     proposal.kind === "titles"
-      ? "Title ideas"
+      ? t("assist.proposal.titles")
       : proposal.kind === "feedback"
-        ? "The editor's review"
-        : `${proposal.label}: the AI's proposal`;
+        ? t("assist.proposal.review")
+        : t("assist.proposal.heading", { label: proposal.label });
   return (
     <div className="flex max-h-[45svh] shrink-0 flex-col border-t border-t-border bg-t-secondary/60">
       <div className="flex items-center gap-2 px-4 pt-3 pb-2">
@@ -888,21 +857,25 @@ function ProposalPanel({
         <span className="flex-1 font-medium text-t-text">{heading}</span>
         {(proposal.kind === "replace" || proposal.kind === "insert" || proposal.kind === "document") && (
           <Button size="sm" variant="solid" color="accent" onClick={onAccept}>
-            {proposal.kind === "insert" ? "Insert" : proposal.kind === "document" ? "Replace the draft" : "Accept"}
+            {proposal.kind === "insert"
+              ? t("assist.proposal.insert")
+              : proposal.kind === "document"
+                ? t("assist.proposal.replaceDraft")
+                : t("assist.proposal.accept")}
           </Button>
         )}
         <Button size="sm" variant="ghost" onClick={onDiscard}>
-          {proposal.kind === "feedback" || proposal.kind === "titles" ? "Close" : "Discard"}
+          {proposal.kind === "feedback" || proposal.kind === "titles" ? t("common:close") : t("assist.proposal.discard")}
         </Button>
       </div>
       <div className="min-h-0 overflow-y-auto px-4 pb-4">
         {proposal.kind === "titles" ? (
           <ul className="flex flex-col gap-1.5">
-            {proposal.titles.map((t) => (
-              <li key={t.title}>
-                <button type="button" onClick={() => onPickTitle(t)} className="w-full rounded-md border border-t-border bg-t-primary px-3 py-2 text-left hover:bg-t-hover">
-                  <div className="font-medium text-t-text">{t.title}</div>
-                  {t.subtitle && <div className="text-[12px] text-t-text-secondary">{t.subtitle}</div>}
+            {proposal.titles.map((idea) => (
+              <li key={idea.title}>
+                <button type="button" onClick={() => onPickTitle(idea)} className="w-full rounded-md border border-t-border bg-t-primary px-3 py-2 text-left hover:bg-t-hover">
+                  <div className="font-medium text-t-text">{idea.title}</div>
+                  {idea.subtitle && <div className="text-[12px] text-t-text-secondary">{idea.subtitle}</div>}
                 </button>
               </li>
             ))}
@@ -915,12 +888,12 @@ function ProposalPanel({
           <div className={cn("grid gap-3", proposal.kind === "replace" && "md:grid-cols-2")}>
             {proposal.kind === "replace" && (
               <div className="rounded-md border border-t-border bg-t-primary px-3 py-2">
-                <div className="mb-1 text-[11px] font-medium text-t-text-tertiary uppercase">Now</div>
+                <div className="mb-1 text-[11px] font-medium text-t-text-tertiary uppercase">{t("assist.proposal.now")}</div>
                 <p className="whitespace-pre-wrap text-t-text-secondary line-through decoration-t-text-light/50">{proposal.original}</p>
               </div>
             )}
             <div className="rounded-md border border-[var(--t-color-green7)] bg-t-primary px-3 py-2">
-              <div className="mb-1 text-[11px] font-medium text-t-text-tertiary uppercase">{proposal.kind === "replace" ? "Proposed" : "To add"}</div>
+              <div className="mb-1 text-[11px] font-medium text-t-text-tertiary uppercase">{proposal.kind === "replace" ? t("assist.proposal.proposed") : t("assist.proposal.toAdd")}</div>
               <p className="whitespace-pre-wrap text-t-text">{proposal.text}</p>
             </div>
           </div>
@@ -947,6 +920,7 @@ function PromptDialog({
   onClose: () => void;
   onSubmit: (value: string) => void;
 }) {
+  const { t } = useTranslation("common");
   const [value, setValue] = useState("");
   return (
     <Modal title={title} onClose={onClose}>
@@ -961,55 +935,10 @@ function PromptDialog({
           <Input autoFocus value={value} placeholder={placeholder} onChange={(e) => setValue(e.target.value)} />
         </Field>
         <div className="flex justify-end gap-2">
-          <Button size="sm" variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button size="sm" variant="ghost" onClick={onClose}>{t("cancel")}</Button>
           <Button size="sm" type="submit" variant="solid" color="accent" disabled={!value.trim()}>{submit}</Button>
         </div>
       </form>
-    </Modal>
-  );
-}
-
-function ButtonDialog({ onClose, onInsert }: { onClose: () => void; onInsert: (text: string, url: string) => void }) {
-  const [text, setText] = useState("Read more");
-  const [kind, setKind] = useState("link");
-  const [url, setUrl] = useState("");
-  const target = kind === "link" ? url.trim() : kind;
-  return (
-    <Modal
-      title="Button"
-      onClose={onClose}
-      footer={
-        <>
-          <Button size="sm" variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button size="sm" variant="solid" color="accent" disabled={!text.trim() || !target} onClick={() => onInsert(text.trim(), target)}>
-            Insert
-          </Button>
-        </>
-      }
-    >
-      <div className="flex flex-col gap-3">
-        <Field label="What it does">
-          <SimpleSelect
-            label="What the button does"
-            value={kind}
-            onValueChange={setKind}
-            options={[
-              { value: "link", label: "Opens a link" },
-              { value: "%%share_url%%", label: "Shares the post" },
-              { value: "%%half_magic_comments_url%%", label: "Opens the comments" },
-              { value: "%%checkout_url%%", label: "Subscribes (paid plans)" },
-            ]}
-          />
-        </Field>
-        {kind === "link" && (
-          <Field label="Address">
-            <Input value={url} placeholder="https://" onChange={(e) => setUrl(e.target.value)} />
-          </Field>
-        )}
-        <Field label="Label">
-          <Input value={text} onChange={(e) => setText(e.target.value)} />
-        </Field>
-      </div>
     </Modal>
   );
 }
@@ -1025,6 +954,7 @@ function SettingsDialog({
   onClose: () => void;
   onSaved: (post: PostDetail) => void;
 }) {
+  const { t } = useTranslation(["newsletter", "common"]);
   const [values, setValues] = useState({
     audience: post.audience,
     write_comment_permissions: post.write_comment_permissions as "everyone" | "subscribers" | "only_paid" | "none",
@@ -1042,13 +972,13 @@ function SettingsDialog({
 
   return (
     <Modal
-      title="Post settings"
+      title={t("editor.settings.label")}
       onClose={onClose}
       wide
       footer={
         <>
           {error && <span className="mr-auto text-t-text-danger">{error}</span>}
-          <Button size="sm" variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button size="sm" variant="ghost" onClick={onClose}>{t("common:cancel")}</Button>
           <Button size="sm" variant="solid" color="accent" loading={busy === "save"} onClick={async () => {
             setBusy("save");
             setError(null);
@@ -1060,33 +990,38 @@ function SettingsDialog({
             } finally {
               setBusy(null);
             }
-          }}>Save</Button>
+          }}>{t("common:save")}</Button>
         </>
       }
     >
       <div className="flex flex-col gap-4">
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Who can read it" hint={!newsletter.paid ? "Paid audiences need paid subscriptions on Substack." : undefined}>
-            <SimpleSelect<Audience> label="Audience" value={values.audience} onValueChange={(v) => set("audience", v)} options={AUDIENCES} />
+          <Field label={t("editor.settings.readers")} hint={!newsletter.paid ? t("editor.settings.paidHint") : undefined}>
+            <SimpleSelect<Audience>
+              label={t("editor.settings.audience")}
+              value={values.audience}
+              onValueChange={(v) => set("audience", v)}
+              options={AUDIENCES.map((a) => ({ value: a.value, label: t(`audiences.${a.value}`) }))}
+            />
           </Field>
-          <Field label="Who can comment">
+          <Field label={t("editor.settings.commenters")}>
             <SimpleSelect
-              label="Comments"
+              label={t("editor.settings.comments")}
               value={values.write_comment_permissions}
               onValueChange={(v) => set("write_comment_permissions", v)}
               options={[
-                { value: "everyone", label: "Everyone" },
-                { value: "subscribers", label: "Subscribers" },
-                { value: "only_paid", label: "Paid subscribers" },
-                { value: "none", label: "No one" },
+                { value: "everyone", label: t("editor.settings.commentOptions.everyone") },
+                { value: "subscribers", label: t("editor.settings.commentOptions.subscribers") },
+                { value: "only_paid", label: t("editor.settings.commentOptions.only_paid") },
+                { value: "none", label: t("editor.settings.commentOptions.none") },
               ]}
             />
           </Field>
         </div>
-        <Field label="Cover image" hint="Shown in the post's previews and on social media.">
+        <Field label={t("editor.settings.cover")} hint={t("editor.settings.coverHint")}>
           <div className="flex gap-2">
             <Input className="flex-1" value={values.cover_image} placeholder="https://" onChange={(e) => set("cover_image", e.target.value)} />
-            <Button size="sm" variant="outline" loading={busy === "cover"} onClick={() => cover.current?.click()}>Upload</Button>
+            <Button size="sm" variant="outline" loading={busy === "cover"} onClick={() => cover.current?.click()}>{t("editor.settings.upload")}</Button>
             <input ref={cover} type="file" accept="image/*" hidden onChange={async (e) => {
               const file = e.target.files?.[0];
               e.target.value = "";
@@ -1103,7 +1038,7 @@ function SettingsDialog({
           </div>
           {values.cover_image && <img src={values.cover_image} alt="" className="mt-2 max-h-40 rounded-sm object-cover" />}
         </Field>
-        <Field label="Description" hint="The line under the title in previews.">
+        <Field label={t("editor.settings.description")} hint={t("editor.settings.descriptionHint")}>
           <div className="flex flex-col gap-1.5">
             <Textarea rows={2} value={values.description} onChange={(e) => set("description", e.target.value)} />
             <Button size="sm" variant="ghost" className="self-start" startIcon={busy === "summary" ? <Loader /> : <IconSparkles size={14} />} disabled={busy !== null} onClick={async () => {
@@ -1116,20 +1051,20 @@ function SettingsDialog({
               } finally {
                 setBusy(null);
               }
-            }}>Write it with AI</Button>
+            }}>{t("editor.settings.writeWithAi")}</Button>
           </div>
         </Field>
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Title on social media">
+          <Field label={t("editor.settings.socialTitle")}>
             <Input value={values.social_title} placeholder={post.title} onChange={(e) => set("social_title", e.target.value)} />
           </Field>
-          <Field label="Web address" hint={newsletter.publication_url ? `${newsletter.publication_url}/p/${values.slug || "…"}` : undefined}>
+          <Field label={t("editor.settings.slug")} hint={newsletter.publication_url ? `${newsletter.publication_url}/p/${values.slug || "…"}` : undefined}>
             <Input value={values.slug} onChange={(e) => set("slug", e.target.value.toLowerCase().replace(/[^a-z0-9-]+/g, "-"))} />
           </Field>
-          <Field label="Title for search engines">
+          <Field label={t("editor.settings.seoTitle")}>
             <Input value={values.search_engine_title} placeholder={post.title} onChange={(e) => set("search_engine_title", e.target.value)} />
           </Field>
-          <Field label="Description for search engines">
+          <Field label={t("editor.settings.seoDescription")}>
             <Input value={values.search_engine_description} onChange={(e) => set("search_engine_description", e.target.value)} />
           </Field>
         </div>
@@ -1149,6 +1084,7 @@ function ScheduleDialog({
   onClose: () => void;
   onScheduled: (warnings: string[]) => void;
 }) {
+  const { t } = useTranslation(["newsletter", "common"]);
   const tomorrow = new Date(Date.now() + 86_400_000);
   const initial = toLocalInput(tomorrow, newsletter.timezone).replace(/T\d\d:\d\d$/, "T08:00");
   const [when, setWhen] = useState(initial);
@@ -1158,12 +1094,12 @@ function ScheduleDialog({
   const at = fromLocalInput(when, newsletter.timezone);
   return (
     <Modal
-      title="Schedule the post"
+      title={t("editor.schedule.title")}
       onClose={onClose}
       footer={
         <>
           {error && <span className="mr-auto text-t-text-danger">{error}</span>}
-          <Button size="sm" variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button size="sm" variant="ghost" onClick={onClose}>{t("common:cancel")}</Button>
           <Button size="sm" variant="solid" color="accent" loading={busy} disabled={!at} onClick={async () => {
             if (!at) return;
             setBusy(true);
@@ -1175,23 +1111,24 @@ function ScheduleDialog({
               setError(errorText(e));
               setBusy(false);
             }
-          }}>Schedule</Button>
+          }}>{t("notes.schedule")}</Button>
         </>
       }
     >
       <div className="flex flex-col gap-4">
-        <Field label={`When (${newsletter.timezone})`}>
+        <Field label={t("notes.scheduleDialog.when", { timeZone: newsletter.timezone })}>
           <Input type="datetime-local" value={when} onChange={(e) => setWhen(e.target.value)} />
         </Field>
         <label className="flex items-center gap-2 text-t-text">
           <Switch.Root size="sm" checked={send} onCheckedChange={setSend}>
             <Switch.Thumb />
           </Switch.Root>
-          Also email it to {audienceLabel(post.audience).toLowerCase()}
+          {t("editor.schedule.email", {
+            audience: knownAudience(post.audience) ? t(`audienceTo.${knownAudience(post.audience)!}`) : post.audience,
+          })}
         </label>
         <p className="text-[12px] leading-[1.5] text-t-text-tertiary">
-          Richelieu publishes it at that minute, as it is then: you can keep editing until it goes out. The server must be
-          running at that time.
+          {t("editor.schedule.how")}
         </p>
       </div>
     </Modal>
@@ -1209,6 +1146,7 @@ function PublishDialog({
   onClose: () => void;
   onPublished: () => void;
 }) {
+  const { t } = useTranslation(["newsletter", "common"]);
   const [problems, setProblems] = useState<string[] | null>(null);
   const [send, setSend] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -1220,9 +1158,9 @@ function PublishDialog({
 
   if (done)
     return (
-      <Modal title="Published" onClose={onPublished} footer={<Button size="sm" variant="solid" color="accent" onClick={onPublished}>Done</Button>}>
+      <Modal title={t("editor.publish.doneTitle")} onClose={onPublished} footer={<Button size="sm" variant="solid" color="accent" onClick={onPublished}>{t("common:done")}</Button>}>
         <p className="text-t-text">
-          “{post.title}” is live{done.emailed ? " and on its way to your subscribers' inboxes" : " on the web"}.
+          {done.emailed ? t("editor.publish.liveEmailed", { title: post.title }) : t("editor.publish.liveWeb", { title: post.title })}
         </p>
         {done.url && (
           <a href={done.url} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1 text-t-text-secondary underline">
@@ -1234,12 +1172,12 @@ function PublishDialog({
 
   return (
     <Modal
-      title="Publish now?"
+      title={t("editor.publish.title")}
       onClose={onClose}
       footer={
         <>
           {error && <span className="mr-auto text-t-text-danger">{error}</span>}
-          <Button size="sm" variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button size="sm" variant="ghost" onClick={onClose}>{t("common:cancel")}</Button>
           <Button
             size="sm"
             variant="solid"
@@ -1258,27 +1196,30 @@ function PublishDialog({
               }
             }}
           >
-            {send ? "Publish and send the email" : "Publish on the web"}
+            {send ? t("editor.publish.confirmSend") : t("editor.publish.confirmWeb")}
           </Button>
         </>
       }
     >
       <div className="flex flex-col gap-4">
         <p className="text-t-text">
-          “{post.title || "Untitled"}” goes live on {newsletter.publication_url?.replace(/^https:\/\//, "")} for{" "}
-          {audienceLabel(post.audience).toLowerCase()}.
+          {t("editor.publish.body", {
+            title: post.title || t("common:untitled"),
+            site: newsletter.publication_url?.replace(/^https:\/\//, "") ?? "",
+            audience: knownAudience(post.audience) ? t(`audienceFor.${knownAudience(post.audience)!}`) : post.audience,
+          })}
         </p>
         <label className="flex items-center gap-2 text-t-text">
           <Switch.Root size="sm" checked={send} onCheckedChange={setSend}>
             <Switch.Thumb />
           </Switch.Root>
-          Email it to the subscribers{send ? ": this cannot be undone" : ""}
+          {send ? t("editor.publish.emailIrreversible") : t("editor.publish.email")}
         </label>
         {problems === null && !error ? (
-          <div className="flex items-center gap-2 text-t-text-tertiary"><Loader /> Checking the post…</div>
+          <div className="flex items-center gap-2 text-t-text-tertiary"><Loader /> {t("editor.publish.checking")}</div>
         ) : problems && problems.length > 0 ? (
           <div className="rounded-md border border-t-border bg-t-secondary px-3 py-2">
-            <div className="mb-1 flex items-center gap-1.5 font-medium text-t-text"><IconBulb size={14} /> Before publishing</div>
+            <div className="mb-1 flex items-center gap-1.5 font-medium text-t-text"><IconBulb size={14} /> {t("editor.publish.before")}</div>
             <ul className="list-disc pl-5 text-t-text-secondary">
               {problems.map((p) => (
                 <li key={p}>{p}</li>

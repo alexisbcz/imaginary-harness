@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { cn } from "cn";
+import { useTranslation } from "react-i18next";
 import { LightIconButton, SearchInput } from "twenty-ui/components/input";
 import { Tag } from "twenty-ui/primitives/data-display";
 import { Loader } from "twenty-ui/primitives/feedback";
@@ -30,21 +31,22 @@ import {
 import { SimpleSelect } from "@/components/simple-select";
 import { typeKind } from "@/lib/sql-types";
 import { api } from "@/lib/api";
+import { intlLocale } from "@/lib/i18n";
 
 export const OPERATORS = [
-  { value: "=", label: "is" },
-  { value: "!=", label: "is not" },
-  { value: "contains", label: "contains" },
-  { value: "not contains", label: "doesn't contain" },
-  { value: "starts with", label: "starts with" },
-  { value: "ends with", label: "ends with" },
-  { value: ">", label: "greater than" },
-  { value: ">=", label: "at least" },
-  { value: "<", label: "less than" },
-  { value: "<=", label: "at most" },
-  { value: "in", label: "is one of" },
-  { value: "is null", label: "is empty" },
-  { value: "is not null", label: "is not empty" },
+  { value: "=", key: "is" },
+  { value: "!=", key: "isNot" },
+  { value: "contains", key: "contains" },
+  { value: "not contains", key: "notContains" }, // i18n-ignore: an operator value, labelled at render
+  { value: "starts with", key: "startsWith" }, // i18n-ignore: an operator value, labelled at render
+  { value: "ends with", key: "endsWith" }, // i18n-ignore: an operator value, labelled at render
+  { value: ">", key: "greaterThan" },
+  { value: ">=", key: "atLeast" },
+  { value: "<", key: "lessThan" },
+  { value: "<=", key: "atMost" },
+  { value: "in", key: "isOneOf" },
+  { value: "is null", key: "isEmpty" }, // i18n-ignore: an operator value, labelled at render
+  { value: "is not null", key: "isNotEmpty" }, // i18n-ignore: an operator value, labelled at render
 ] as const;
 
 type Operator = (typeof OPERATORS)[number]["value"];
@@ -64,10 +66,10 @@ type BrowseResult =
   | { ok: false; message: string };
 
 const PAGE_SIZES = [
-  { value: "50", label: "50 rows" },
-  { value: "100", label: "100 rows" },
-  { value: "200", label: "200 rows" },
-  { value: "500", label: "500 rows" },
+  { value: "50" },
+  { value: "100" },
+  { value: "200" },
+  { value: "500" },
 ] as const;
 
 let nextFilterId = 1;
@@ -112,9 +114,11 @@ export function browseSql(
     const c = quoteName(f.column);
     switch (f.operator) {
       case "is null":
+        // i18n-ignore: SQL
         where.push(`${c} is null`);
         break;
       case "is not null":
+        // i18n-ignore: SQL
         where.push(`${c} is not null`);
         break;
       case "contains":
@@ -176,6 +180,7 @@ function FilterPill({
   onChange: (filter: Filter) => void;
   onRemove: () => void;
 }) {
+  const { t } = useTranslation("builder");
   const column = columns.find((c) => c.name === filter.column);
   const pending = !takesNoValue(filter.operator) && filter.value.trim() === "";
   return (
@@ -188,7 +193,7 @@ function FilterPill({
     >
       <SimpleSelect
         bare
-        label="Column"
+        label={t("table.column")}
         value={filter.column}
         onValueChange={(name) => onChange({ ...filter, column: name })}
         options={columns.map((c) => ({ value: c.name, label: c.name }))}
@@ -197,23 +202,23 @@ function FilterPill({
       <span aria-hidden className="w-px self-stretch bg-t-border-light" />
       <SimpleSelect<Operator>
         bare
-        label="Condition"
+        label={t("table.condition")}
         value={filter.operator}
         onValueChange={(operator) => onChange({ ...filter, operator })}
-        options={OPERATORS}
+        options={OPERATORS.map((o) => ({ value: o.value, label: t(`table.operators.${o.key}`) }))}
         className="text-t-text-tertiary"
       />
       {!takesNoValue(filter.operator) && (
         <>
           <span aria-hidden className="w-px self-stretch bg-t-border-light" />
           <input
-            aria-label="Value"
+            aria-label={t("table.value")}
             placeholder={
               filter.operator === "in"
-                ? "a, b, c"
+                ? t("table.valueList")
                 : column?.type.startsWith("bool")
-                  ? "true or false"
-                  : "value"
+                  ? t("table.valueBoolean")
+                  : t("table.valuePlaceholder")
             }
             value={filter.value}
             onChange={(event) =>
@@ -226,8 +231,8 @@ function FilterPill({
       )}
       <button
         type="button"
-        aria-label="Remove this filter"
-        title="Remove this filter"
+        aria-label={t("table.removeFilter")}
+        title={t("table.removeFilter")}
         onClick={onRemove}
         className="flex w-6 shrink-0 items-center justify-center border-l border-t-border-light text-t-text-light outline-none hover:bg-t-hover hover:text-t-text focus-visible:bg-t-hover"
       >
@@ -257,16 +262,18 @@ function RowInspector({
   onCopy: (text: string) => void;
   onFollow: (column: GridColumn, value: unknown) => void;
 }) {
+  const { t } = useTranslation("builder");
+  const { t: tc } = useTranslation("common");
   return (
     <aside
-      aria-label={`Row ${number}`}
+      aria-label={t("table.row", { number })}
       className="flex w-[340px] shrink-0 flex-col border-l border-t-border-light bg-t-primary"
     >
       <div className="flex h-10 shrink-0 items-center gap-1 border-b border-t-border-light pr-1.5 pl-3">
-        <span className="flex-1 font-medium text-t-text">Row {number}</span>
+        <span className="flex-1 font-medium text-t-text">{t("table.row", { number })}</span>
         <LightIconButton
-          aria-label="Previous row"
-          tooltip="Previous row"
+          aria-label={t("table.previousRow")}
+          tooltip={t("table.previousRow")}
           size="sm"
           disabled={!onPrevious}
           onClick={onPrevious}
@@ -274,8 +281,8 @@ function RowInspector({
           <IconChevronUp size={16} />
         </LightIconButton>
         <LightIconButton
-          aria-label="Next row"
-          tooltip="Next row"
+          aria-label={t("table.nextRow")}
+          tooltip={t("table.nextRow")}
           size="sm"
           disabled={!onNext}
           onClick={onNext}
@@ -283,8 +290,8 @@ function RowInspector({
           <IconChevronDown size={16} />
         </LightIconButton>
         <LightIconButton
-          aria-label="Close the row"
-          tooltip="Close"
+          aria-label={t("table.closeRow")}
+          tooltip={tc("close")}
           size="sm"
           onClick={onClose}
         >
@@ -313,8 +320,8 @@ function RowInspector({
                   column.referencesColumn &&
                   value !== null && (
                     <LightIconButton
-                      aria-label={`Open the ${column.references} row`}
-                      tooltip={`Open in ${column.references}`}
+                      aria-label={t("table.openReferenced", { table: column.references })}
+                      tooltip={t("table.openIn", { table: column.references })}
                       size="xs"
                       onClick={() => onFollow(column, value)}
                     >
@@ -322,8 +329,8 @@ function RowInspector({
                     </LightIconButton>
                   )}
                 <LightIconButton
-                  aria-label={`Copy ${column.name}`}
-                  tooltip="Copy"
+                  aria-label={t("table.copyField", { column: column.name })}
+                  tooltip={tc("copy")}
                   size="xs"
                   className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
                   onClick={() => onCopy(valueText(value))}
@@ -401,6 +408,8 @@ export function TableBrowser({
   onFollow: (table: string, filter: Filter) => void;
   onQuery: (sql: string) => void;
 }) {
+  const { t } = useTranslation("builder");
+  const { t: tc } = useTranslation("common");
   const [search, setSearch] = useState("");
   const [filters, setFilters] = useState<Filter[]>(initialFilters ?? []);
   const [sort, setSort] = useState<GridSort>(null);
@@ -460,7 +469,7 @@ export function TableBrowser({
         if (id !== requestId.current) return;
         setResult({
           ok: false,
-          message: error instanceof Error ? error.message : "Could not load",
+          message: error instanceof Error ? error.message : t("table.loadFailed"),
         });
       })
       .finally(() => {
@@ -488,9 +497,9 @@ export function TableBrowser({
   async function copy(text: string) {
     try {
       await navigator.clipboard.writeText(text);
-      setNotice("Copied");
+      setNotice(tc("copied"));
     } catch {
-      setNotice("The browser did not allow copying");
+      setNotice(t("table.copyBlocked"));
     }
   }
 
@@ -546,8 +555,8 @@ export function TableBrowser({
           <SearchInput
             ref={searchRef}
             size="sm"
-            aria-label={`Search ${table}`}
-            placeholder={`Search ${table}…`}
+            aria-label={t("table.searchLabel", { table })}
+            placeholder={t("table.searchPlaceholder", { table })}
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             onKeyDown={(event) => {
@@ -565,7 +574,7 @@ export function TableBrowser({
           onClick={addFilter}
           className="shrink-0"
         >
-          Filter
+          {t("table.filter")}
           {applied.length > 0 && (
             <span className="ml-0.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-t-blue px-1 text-[10px] font-semibold text-white tabular-nums">
               {applied.length}
@@ -574,8 +583,8 @@ export function TableBrowser({
         </Button>
         {narrowed && (
           <LightIconButton
-            aria-label="Clear the search and filters"
-            tooltip="Clear the search and filters"
+            aria-label={t("table.clearFilters")}
+            tooltip={t("table.clearFilters")}
             size="sm"
             onClick={() => {
               setSearch("");
@@ -591,16 +600,16 @@ export function TableBrowser({
           {loading && <Loader />}
         </span>
         <LightIconButton
-          aria-label="Reload"
-          tooltip="Reload"
+          aria-label={t("table.reload")}
+          tooltip={t("table.reload")}
           size="sm"
           onClick={() => setReload((n) => n + 1)}
         >
           <IconRefresh size={16} />
         </LightIconButton>
         <LightIconButton
-          aria-label="Open these rows in the SQL editor"
-          tooltip="Open in the SQL editor"
+          aria-label={t("table.openInSqlLabel")}
+          tooltip={t("table.openInSql")}
           size="sm"
           onClick={() =>
             onQuery(
@@ -644,7 +653,7 @@ export function TableBrowser({
             className="inline-flex h-7 items-center gap-1 rounded-md px-2 text-[12px] text-t-text-tertiary outline-none hover:bg-t-hover hover:text-t-text-secondary focus-visible:bg-t-hover"
           >
             <IconPlus size={12} />
-            Add filter
+            {t("table.addFilter")}
           </button>
         </div>
       )}
@@ -683,11 +692,9 @@ export function TableBrowser({
               highlight={debouncedSearch}
               empty={
                 narrowed ? (
-                  <span>
-                    No rows match. Try fewer filters or another search.
-                  </span>
+                  <span>{t("table.noMatchHint")}</span>
                 ) : (
-                  "This table has no rows yet"
+                  t("table.emptyTable")
                 )
               }
             />
@@ -717,13 +724,17 @@ export function TableBrowser({
         <span className="whitespace-nowrap tabular-nums">
           {count === 0
             ? narrowed
-              ? "No matches"
-              : "No rows"
-            : `${first.toLocaleString()}–${last.toLocaleString()} of ${count.toLocaleString()}`}
+              ? t("table.noMatches")
+              : t("table.noRows")
+            : t("table.range", {
+                first: first.toLocaleString(intlLocale()),
+                last: last.toLocaleString(intlLocale()),
+                total: count.toLocaleString(intlLocale()),
+              })}
           {narrowed && result?.ok && (
             <span className="text-t-text-light">
               {" "}
-              matching, {total.toLocaleString()} in all
+              {t("table.matchingOfTotal", { total: total.toLocaleString(intlLocale()) })}
             </span>
           )}
         </span>
@@ -735,15 +746,18 @@ export function TableBrowser({
         <span className="flex-1" />
         <SimpleSelect
           bare
-          label="Rows per page"
+          label={t("table.rowsPerPage")}
           value={String(pageSize) as (typeof PAGE_SIZES)[number]["value"]}
           onValueChange={(size) => setPageSize(Number(size))}
-          options={PAGE_SIZES}
+          options={PAGE_SIZES.map((size) => ({
+            value: size.value,
+            label: t("table.pageSize", { count: Number(size.value) }),
+          }))}
           className="h-7 shrink-0 rounded-sm text-[12px] text-t-text-tertiary"
         />
         <LightIconButton
-          aria-label="Previous page"
-          tooltip="Previous page"
+          aria-label={t("table.previousPage")}
+          tooltip={t("table.previousPage")}
           size="sm"
           disabled={page === 0}
           onClick={() => setPage(page - 1)}
@@ -754,8 +768,8 @@ export function TableBrowser({
           {page + 1} / {pages}
         </span>
         <LightIconButton
-          aria-label="Next page"
-          tooltip="Next page"
+          aria-label={t("table.nextPage")}
+          tooltip={t("table.nextPage")}
           size="sm"
           disabled={page >= pages - 1}
           onClick={() => setPage(page + 1)}

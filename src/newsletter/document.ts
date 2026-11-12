@@ -132,7 +132,7 @@ function decodeEmbed(value: string): PMNode | null {
   }
 }
 
-function imageNode(src: string, alt: string, caption: string): PMNode {
+export function imageNode(src: string, alt: string, caption: string): PMNode {
   const image: PMNode = {
     type: "image2",
     attrs: {
@@ -156,7 +156,7 @@ function imageNode(src: string, alt: string, caption: string): PMNode {
   return { type: "captionedImage", content };
 }
 
-const buttonNode = (text: string, url: string): PMNode => ({
+export const buttonNode = (text: string, url: string): PMNode => ({
   type: "button",
   attrs: { url, text, action: null, class: "button-wrapper" },
 });

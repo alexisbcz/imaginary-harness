@@ -5,6 +5,7 @@
 import { useEffect } from "react";
 import { api } from "@/lib/api";
 import { useLoad } from "@/lib/social";
+import i18n, { intlLocale } from "@/lib/i18n";
 import { createClient } from "@/lib/supabase/client";
 import type {
   Analytics,
@@ -31,13 +32,17 @@ export type Note = Dated<ServerNote, "publish_at" | "published_at" | "created_at
 export type Audience = Newsletter["default_audience"];
 export type NewsletterStatus = { mcp: boolean };
 
-export const AUDIENCES: { value: Audience; label: string }[] = [
-  { value: "everyone", label: "Everyone" },
-  { value: "only_free", label: "Free subscribers" },
-  { value: "only_paid", label: "Paid subscribers" },
-  { value: "founding", label: "Founding members" },
-];
-export const audienceLabel = (value: string) => AUDIENCES.find((a) => a.value === value)?.label ?? value;
+// The labels are translated where they show: `t(\`audiences.${value}\`)` in the "newsletter" namespace.
+export const AUDIENCES = [
+  { value: "everyone" },
+  { value: "only_free" },
+  { value: "only_paid" },
+  { value: "founding" },
+] as const satisfies readonly { value: Audience }[];
+export const audienceLabel = (value: string) => {
+  const audience = AUDIENCES.find((a) => a.value === value);
+  return audience ? i18n.t(`newsletter:audiences.${audience.value}`) : value;
+};
 
 const supabase = createClient();
 const base = (id: string) => `/api/newsletters/${id}`;
@@ -133,20 +138,21 @@ export async function uploadImage(id: string, file: File, postId?: number) {
     body: form,
   });
   const result = (await response.json().catch(() => ({}))) as { image?: { url: string }; error?: string };
-  if (!response.ok || !result.image) throw new Error(result.error ?? `Upload failed (${response.status})`);
+  if (!response.ok || !result.image) throw new Error(result.error ?? i18n.t("newsletter:errors.uploadFailed", { status: response.status }));
   return result.image.url;
 }
 
 export const assist = (id: string, input: AssistInput) =>
   api<{ result: AssistResult }>(`${base(id)}/assist`, { body: input }).then((r) => r.result);
 
+// Labels: `t(\`assist.actions.${value}\`)`.
 export const ASSIST_ACTIONS = [
-  { value: "improve", label: "Improve" },
-  { value: "punchier", label: "Make it punchier" },
-  { value: "shorter", label: "Shorter" },
-  { value: "longer", label: "Develop" },
-  { value: "simplify", label: "Simplify" },
-  { value: "fix", label: "Fix spelling and grammar" },
+  { value: "improve" },
+  { value: "punchier" },
+  { value: "shorter" },
+  { value: "longer" },
+  { value: "simplify" },
+  { value: "fix" },
 ] as const;
 
 // Analytics ---------------------------------------------------------------------------------------------------
@@ -177,13 +183,14 @@ export const deleteIdea = (id: string, ideaId: string) => api(`${base(id)}/ideas
 export const draftFromIdea = (id: string, ideaId: string) =>
   api<{ post: PostDetail }>(`${base(id)}/ideas/${ideaId}/draft`, { body: {} }).then((r) => r.post);
 
-export const IDEA_STATUSES: { value: Idea["status"]; label: string }[] = [
-  { value: "idea", label: "Idea" },
-  { value: "planned", label: "Planned" },
-  { value: "drafting", label: "Drafting" },
-  { value: "done", label: "Published" },
-  { value: "dropped", label: "Dropped" },
-];
+// Labels: `t(\`ideas.statuses.${value}\`)`.
+export const IDEA_STATUSES = [
+  { value: "idea" },
+  { value: "planned" },
+  { value: "drafting" },
+  { value: "done" },
+  { value: "dropped" },
+] as const satisfies readonly { value: Idea["status"] }[];
 
 // Notes -------------------------------------------------------------------------------------------------------
 
@@ -213,7 +220,7 @@ export const publishNote = (id: string, noteId: string) =>
 
 export function formatMoment(value: string | Date | null, timeZone: string, withTime = true) {
   if (!value) return "";
-  return new Intl.DateTimeFormat("en-GB", {
+  return new Intl.DateTimeFormat(intlLocale(), {
     timeZone,
     weekday: "short",
     day: "numeric",
@@ -257,9 +264,13 @@ export function fromLocalInput(value: string, timeZone: string): Date | null {
 
 export function compact(value: number | null | undefined) {
   if (value === null || value === undefined) return "—";
-  return new Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 }).format(value);
+  return new Intl.NumberFormat(intlLocale(), { notation: "compact", maximumFractionDigits: 1 }).format(value);
 }
 
 /** Substack's rates come as 0–1 or 0–100, depending on the endpoint. */
 export const rate = (value: number | null | undefined) =>
-  value === null || value === undefined ? "—" : `${(value <= 1 ? value * 100 : value).toFixed(1)}%`;
+  value === null || value === undefined
+    ? "—"
+    : new Intl.NumberFormat(intlLocale(), { style: "percent", minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(
+        value <= 1 ? value : value / 100,
+      );

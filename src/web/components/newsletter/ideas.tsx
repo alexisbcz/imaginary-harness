@@ -2,6 +2,7 @@
 // in a click: written by you from its notes, or by the copilot.
 
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Loader } from "twenty-ui/primitives/feedback";
 import { Button, Input, Textarea } from "twenty-ui/primitives/input";
 import { Tag } from "twenty-ui/primitives/data-display";
@@ -9,6 +10,7 @@ import { IconBulb, IconFilePencil, IconPlus, IconSparkles, IconTrash } from "@ta
 
 import { Field, Modal } from "@/components/newsletter/editor";
 import { SimpleSelect } from "@/components/simple-select";
+import { intlLocale } from "@/lib/i18n";
 import {
   createIdea,
   deleteIdea,
@@ -39,6 +41,7 @@ function IdeaDialog({
   onClose: () => void;
   onSaved: () => void;
 }) {
+  const { t } = useTranslation(["newsletter", "common"]);
   const [title, setTitle] = useState(idea?.title ?? "");
   const [notes, setNotes] = useState(idea?.notes ?? "");
   const [status, setStatus] = useState<Idea["status"]>(idea?.status ?? "idea");
@@ -47,13 +50,13 @@ function IdeaDialog({
   const [error, setError] = useState<string | null>(null);
   return (
     <Modal
-      title={idea ? "Idea" : "New idea"}
+      title={idea ? t("ideas.dialog.title") : t("ideas.new")}
       onClose={onClose}
       wide
       footer={
         <>
           {error && <span className="mr-auto text-t-text-danger">{error}</span>}
-          <Button size="sm" variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button size="sm" variant="ghost" onClick={onClose}>{t("common:cancel")}</Button>
           <Button size="sm" variant="solid" color="accent" loading={busy} disabled={!title.trim()} onClick={async () => {
             setBusy(true);
             setError(null);
@@ -67,22 +70,27 @@ function IdeaDialog({
               setError(e instanceof Error ? e.message : String(e));
               setBusy(false);
             }
-          }}>Save</Button>
+          }}>{t("common:save")}</Button>
         </>
       }
     >
       <div className="flex flex-col gap-4">
-        <Field label="Title">
-          <Input autoFocus value={title} onChange={(e) => setTitle(e.target.value)} placeholder="The angle, in a line" />
+        <Field label={t("ideas.dialog.titleLabel")}>
+          <Input autoFocus value={title} onChange={(e) => setTitle(e.target.value)} placeholder={t("ideas.dialog.titlePlaceholder")} />
         </Field>
-        <Field label="Notes" hint="Sources, points to make, an outline: the draft starts from them.">
+        <Field label={t("ideas.dialog.notes")} hint={t("ideas.dialog.notesHint")}>
           <Textarea rows={8} value={notes} onChange={(e) => setNotes(e.target.value)} />
         </Field>
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Status">
-            <SimpleSelect<Idea["status"]> label="Status" value={status} onValueChange={setStatus} options={IDEA_STATUSES} />
+          <Field label={t("ideas.dialog.status")}>
+            <SimpleSelect<Idea["status"]>
+              label={t("ideas.dialog.status")}
+              value={status}
+              onValueChange={setStatus}
+              options={IDEA_STATUSES.map((s) => ({ value: s.value, label: t(`ideas.statuses.${s.value}`) }))}
+            />
           </Field>
-          <Field label="Planned for">
+          <Field label={t("ideas.dialog.plannedFor")}>
             <Input type="date" value={planned} onChange={(e) => setPlanned(e.target.value)} />
           </Field>
         </div>
@@ -100,6 +108,7 @@ export function NewsletterIdeas({
   onOpenPost: (id: number) => void;
   onAsk: (message: string) => void;
 }) {
+  const { t } = useTranslation(["newsletter", "common"]);
   const { data: ideas, error, reload } = useIdeas(newsletter.id);
   const [editing, setEditing] = useState<Idea | "new" | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -127,19 +136,17 @@ export function NewsletterIdeas({
       <div className="mx-auto flex w-full max-w-[860px] flex-col gap-5 px-5 py-6">
         <div className="flex flex-wrap items-center gap-2">
           <Button size="sm" variant="solid" color="accent" startIcon={<IconPlus size={14} />} onClick={() => setEditing("new")}>
-            New idea
+            {t("ideas.new")}
           </Button>
           <Button
             size="sm"
             variant="outline"
             startIcon={<IconSparkles size={14} />}
             onClick={() =>
-              onAsk(
-                "Brainstorm ten ideas for upcoming issues from our brief, what performed best, and what readers asked in the comments. Add the best five to the backlog with an angle and a short outline, and plan them over the coming weeks at our cadence.",
-              )
+              onAsk(t("ideas.brainstormPrompt"))
             }
           >
-            Brainstorm with the copilot
+            {t("ideas.brainstorm")}
           </Button>
         </div>
         {actionError && <p className="text-t-text-danger">{actionError}</p>}
@@ -150,7 +157,7 @@ export function NewsletterIdeas({
         ) : open.length === 0 ? (
           <div className="flex flex-col items-center gap-2 rounded-md border border-dashed border-t-border px-5 py-8 text-center text-t-text-secondary">
             <IconBulb size={20} className="text-t-text-light" />
-            No ideas waiting. Jot one down, or let the copilot brainstorm from what your readers liked.
+            {t("ideas.empty")}
           </div>
         ) : (
           <ul className="flex flex-col gap-2">
@@ -160,35 +167,37 @@ export function NewsletterIdeas({
                   <span className="flex items-center gap-2">
                     <span className="truncate font-medium text-t-text">{idea.title}</span>
                     <Tag variant="soft" color={STATUS_COLORS[idea.status]} className="shrink-0 text-[11px]">
-                      {IDEA_STATUSES.find((s) => s.value === idea.status)?.label}
+                      {t(`ideas.statuses.${idea.status}`)}
                     </Tag>
-                    {idea.source === "copilot" && <IconSparkles size={12} className="shrink-0 text-t-text-light" aria-label="From the copilot" />}
+                    {idea.source === "copilot" && <IconSparkles size={12} className="shrink-0 text-t-text-light" aria-label={t("ideas.fromCopilot")} />}
                   </span>
                   {idea.notes && <span className="mt-0.5 line-clamp-2 block text-[12px] leading-[1.5] text-t-text-tertiary">{idea.notes}</span>}
                   {idea.planned_for && (
                     <span className="mt-0.5 block text-[12px] text-t-text-secondary tabular-nums">
-                      For {new Date(`${idea.planned_for}T12:00:00`).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" })}
+                      {t("ideas.plannedFor", {
+                        date: new Date(`${idea.planned_for}T12:00:00`).toLocaleDateString(intlLocale(), { weekday: "short", day: "numeric", month: "short" }),
+                      })}
                     </span>
                   )}
                 </button>
                 <div className="flex shrink-0 items-center gap-1">
                   {idea.draft_id ? (
-                    <Button size="sm" variant="outline" onClick={() => onOpenPost(Number(idea.draft_id))}>Open the draft</Button>
+                    <Button size="sm" variant="outline" onClick={() => onOpenPost(Number(idea.draft_id))}>{t("ideas.openDraft")}</Button>
                   ) : (
                     <>
                       <Button size="sm" variant="ghost" startIcon={<IconFilePencil size={14} />} loading={busy === idea.id} onClick={() =>
                         run(idea.id, async () => onOpenPost((await draftFromIdea(newsletter.id, idea.id)).id))
                       }>
-                        I'll write it
+                        {t("ideas.writeMyself")}
                       </Button>
                       <Button size="sm" variant="ghost" startIcon={<IconSparkles size={14} />} onClick={() =>
-                        onAsk(`Write the draft for the idea “${idea.title}” (idea ${idea.id}) from its notes, in our voice. Link the draft to the idea.`)
+                        onAsk(t("ideas.copilotWritesPrompt", { title: idea.title, id: idea.id }))
                       }>
-                        Copilot writes it
+                        {t("ideas.copilotWrites")}
                       </Button>
                     </>
                   )}
-                  <Button size="sm" variant="ghost" aria-label="Delete the idea" onClick={() => run(idea.id, () => deleteIdea(newsletter.id, idea.id))}>
+                  <Button size="sm" variant="ghost" aria-label={t("ideas.delete")} onClick={() => run(idea.id, () => deleteIdea(newsletter.id, idea.id))}>
                     <IconTrash size={14} />
                   </Button>
                 </div>
@@ -199,7 +208,7 @@ export function NewsletterIdeas({
         {closed.length > 0 && (
           <div className="flex flex-col gap-2">
             <button type="button" className="self-start text-[12px] text-t-text-tertiary hover:text-t-text" onClick={() => setShowClosed((v) => !v)}>
-              {showClosed ? "Hide" : "Show"} {closed.length} published or dropped
+              {showClosed ? t("ideas.hideClosed", { count: closed.length }) : t("ideas.showClosed", { count: closed.length })}
             </button>
             {showClosed && (
               <ul className="flex flex-col divide-y divide-t-border-light rounded-md border border-t-border">
@@ -208,7 +217,7 @@ export function NewsletterIdeas({
                     <button type="button" onClick={() => setEditing(idea)} className="flex w-full items-center gap-2 px-3 py-2 text-left text-t-text-secondary hover:bg-t-hover">
                       <span className="min-w-0 flex-1 truncate">{idea.title}</span>
                       <Tag variant="soft" color={STATUS_COLORS[idea.status]} className="text-[11px]">
-                        {IDEA_STATUSES.find((s) => s.value === idea.status)?.label}
+                        {t(`ideas.statuses.${idea.status}`)}
                       </Tag>
                     </button>
                   </li>

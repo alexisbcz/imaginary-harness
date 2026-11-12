@@ -3,6 +3,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router";
+import { useTranslation } from "react-i18next";
 import { LightIconButton } from "twenty-ui/components/input";
 import { Loader } from "twenty-ui/primitives/feedback";
 import { Button, Input } from "twenty-ui/primitives/input";
@@ -34,13 +35,14 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { sendMessage } from "@/lib/chat";
 import { createNewsletter, useNewsletters, type Newsletter } from "@/lib/newsletter";
 
+// Each tab's label is `page.views.<value>`.
 const VIEWS = [
-  { value: "posts", label: "Posts", icon: IconFileTextFilled, color: "orange" as const },
-  { value: "ideas", label: "Ideas", icon: IconBulb, color: "amber" as const },
-  { value: "notes", label: "Notes", icon: IconNotes, color: "blue" as const },
-  { value: "analytics", label: "Analytics", icon: IconChartAreaLineFilled, color: "green" as const },
-  { value: "settings", label: "Settings", icon: IconSettingsFilled, color: "gray" as const },
-];
+  { value: "posts", icon: IconFileTextFilled, color: "orange" as const },
+  { value: "ideas", icon: IconBulb, color: "amber" as const },
+  { value: "notes", icon: IconNotes, color: "blue" as const },
+  { value: "analytics", icon: IconChartAreaLineFilled, color: "green" as const },
+  { value: "settings", icon: IconSettingsFilled, color: "gray" as const },
+] as const;
 type View = (typeof VIEWS)[number]["value"];
 
 const browserZone = () => Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
@@ -52,6 +54,7 @@ const pageIcon = (
 
 /** The first screen: connect a Substack publication, or start without one. */
 function CreateNewsletter({ first, onCreated }: { first: boolean; onCreated: (n: Newsletter) => void }) {
+  const { t } = useTranslation(["newsletter", "common"]);
   const [publication, setPublication] = useState("");
   const [cookie, setCookie] = useState("");
   const [busy, setBusy] = useState<null | "connect" | "later">(null);
@@ -83,10 +86,9 @@ function CreateNewsletter({ first, onCreated }: { first: boolean; onCreated: (n:
           <IconNews />
         </IconTile>
         <div className="flex flex-col gap-1.5">
-          <h1 className="text-[22px] font-semibold text-t-text">{first ? "Your Substack, written with an agent" : "Another newsletter"}</h1>
+          <h1 className="text-[22px] font-semibold text-t-text">{first ? t("create.firstTitle") : t("create.anotherTitle")}</h1>
           <p className="leading-[1.55] text-t-text-secondary">
-            Plan issues, write them yourself, with the AI beside you, or let the copilot draft them, then publish or
-            schedule to Substack from here. Nothing is published or emailed until you say so.
+            {t("create.intro")}
           </p>
         </div>
         <form
@@ -96,14 +98,14 @@ function CreateNewsletter({ first, onCreated }: { first: boolean; onCreated: (n:
             if (cookie.trim()) void create(true);
           }}
         >
-          <Input aria-label="Publication" placeholder="yourname.substack.com (optional)" value={publication} onChange={(e) => setPublication(e.target.value)} autoFocus />
-          <Input aria-label="Substack session cookie" type="password" autoComplete="off" placeholder="substack.sid cookie" value={cookie} onChange={(e) => setCookie(e.target.value)} />
+          <Input aria-label={t("create.publication")} placeholder={t("create.publicationPlaceholder")} value={publication} onChange={(e) => setPublication(e.target.value)} autoFocus />
+          <Input aria-label={t("create.cookie")} type="password" autoComplete="off" placeholder={t("create.cookiePlaceholder")} value={cookie} onChange={(e) => setCookie(e.target.value)} />
           <CookieHelp />
           <Button type="submit" variant="solid" color="accent" loading={busy === "connect"} disabled={!cookie.trim() || busy !== null}>
-            Connect to Substack
+            {t("settings.connect.connect")}
           </Button>
           <Button variant="ghost" loading={busy === "later"} disabled={busy !== null} onClick={() => void create(false)}>
-            Start without connecting: plan ideas and the brief first
+            {t("create.later")}
           </Button>
         </form>
         {error && <p className="text-t-text-danger">{error}</p>}
@@ -113,6 +115,7 @@ function CreateNewsletter({ first, onCreated }: { first: boolean; onCreated: (n:
 }
 
 export function NewsletterPage() {
+  const { t } = useTranslation(["newsletter", "common"]);
   const { newsletterId, view: viewParam, postId: postParam } = useParams();
   const navigate = useNavigate();
   const isMobile = useIsMobile();
@@ -144,13 +147,13 @@ export function NewsletterPage() {
 
   if (error && !newsletters)
     return (
-      <Page title="Newsletter" icon={pageIcon}>
+      <Page title={t("common:sections.newsletter")} icon={pageIcon}>
         <p className="m-auto text-t-text-danger">{error}</p>
       </Page>
     );
   if (!newsletters || !data)
     return (
-      <Page title="Newsletter" icon={pageIcon}>
+      <Page title={t("common:sections.newsletter")} icon={pageIcon}>
         <div className="m-auto">
           <Loader />
         </div>
@@ -159,11 +162,11 @@ export function NewsletterPage() {
   if (newsletters.length === 0 || creating || !newsletter)
     return (
       <Page
-        title="Newsletter"
+        title={t("common:sections.newsletter")}
         icon={pageIcon}
         actions={
           creating && newsletters.length > 0 ? (
-            <Button size="sm" variant="ghost" onClick={() => setCreating(false)}>Cancel</Button>
+            <Button size="sm" variant="ghost" onClick={() => setCreating(false)}>{t("common:cancel")}</Button>
           ) : undefined
         }
       >
@@ -190,8 +193,8 @@ export function NewsletterPage() {
     <Tabs.Root value={view} onValueChange={(value) => navigate(`/newsletter/${newsletter.id}/${value}`)} className="flex h-full min-h-0 flex-col">
       {!postId && (
         <div className="flex h-10 shrink-0 items-end">
-          <Tabs.List aria-label="Newsletter views" className="relative w-full overflow-x-auto px-3">
-            {VIEWS.map(({ value, label, icon: TabIcon, color }) => (
+          <Tabs.List aria-label={t("page.views.label")} className="relative w-full overflow-x-auto px-3">
+            {VIEWS.map(({ value, icon: TabIcon, color }) => (
               <Tabs.Tab
                 key={value}
                 value={value}
@@ -201,7 +204,7 @@ export function NewsletterPage() {
                   </IconTile>
                 }
               >
-                {label}
+                {t(`page.views.${value}`)}
               </Tabs.Tab>
             ))}
             <Tabs.Indicator />
@@ -211,16 +214,16 @@ export function NewsletterPage() {
       {newsletter.connection_error && !postId && (
         <div className="flex items-center gap-2 border-b border-t-border-light bg-t-secondary px-4 py-2 text-t-text">
           <IconAlertTriangle size={16} className="shrink-0 text-[var(--t-color-orange9)]" />
-          <span className="min-w-0 flex-1 truncate">Substack refused the session: reconnect in Settings.</span>
-          <Button size="sm" variant="ghost" onClick={() => navigate(`/newsletter/${newsletter.id}/settings`)}>Settings</Button>
+          <span className="min-w-0 flex-1 truncate">{t("page.sessionRefused")}</span>
+          <Button size="sm" variant="ghost" onClick={() => navigate(`/newsletter/${newsletter.id}/settings`)}>{t("page.views.settings")}</Button>
         </div>
       )}
       <div className="min-h-0 flex-1">
         {needsConnection ? (
           <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center">
-            <p className="max-w-[420px] text-t-text-secondary">Connect the newsletter to Substack to write and publish posts and read its numbers. Ideas, Notes and the brief work already.</p>
+            <p className="max-w-[420px] text-t-text-secondary">{t("page.needsConnection")}</p>
             <Button size="sm" variant="solid" color="accent" onClick={() => navigate(`/newsletter/${newsletter.id}/settings`)}>
-              Connect to Substack
+              {t("settings.connect.connect")}
             </Button>
           </div>
         ) : view === "posts" && postId ? (
@@ -269,19 +272,19 @@ export function NewsletterPage() {
     <Page
       title={
         <SimpleSelect
-          label="Newsletter"
+          label={t("common:sections.newsletter")}
           bare
           value={newsletter.id}
           onValueChange={(id) => (id === "new" ? setCreating(true) : navigate(`/newsletter/${id}/${view}`))}
-          options={[...newsletters.map((n) => ({ value: n.id, label: n.name })), { value: "new", label: "New newsletter…" }]}
+          options={[...newsletters.map((n) => ({ value: n.id, label: n.name })), { value: "new", label: t("page.newNewsletter") }]}
           className="-ml-2 font-medium"
         />
       }
       icon={newsletter.logo_url ? <img src={newsletter.logo_url} alt="" className="size-5 rounded" /> : <NameTile name={newsletter.name} />}
       actions={
         <LightIconButton
-          aria-label={copilotOpen ? "Hide the copilot" : "Show the copilot"}
-          tooltip={copilotOpen ? "Hide the copilot" : "Show the copilot"}
+          aria-label={copilotOpen ? t("page.hideCopilot") : t("page.showCopilot")}
+          tooltip={copilotOpen ? t("page.hideCopilot") : t("page.showCopilot")}
           onClick={() => setCopilotOpen((open) => !open)}
         >
           {copilotOpen ? <IconLayoutSidebarRightCollapse size={16} /> : <IconSparkles size={16} />}

@@ -4,6 +4,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { createClient } from "@/lib/supabase/client";
+import i18n, { intlLocale } from "@/lib/i18n";
 import type {
   Analytics,
   AnalyzedPost,
@@ -146,20 +147,21 @@ export async function uploadMedia(brandId: string, file: File): Promise<Media> {
     body: form,
   });
   const result = (await response.json().catch(() => ({}))) as { media?: Media; error?: string };
-  if (!response.ok || !result.media) throw new Error(result.error ?? `Upload failed (${response.status})`);
+  if (!response.ok || !result.media) throw new Error(result.error ?? i18n.t("social:errors.uploadFailed", { status: response.status }));
   return result.media;
 }
 
+/** The rewrites the editor offers; their labels are `social:rewrites.<value>`. */
 export const REWRITES = [
-  { value: "improve", label: "Improve" },
-  { value: "hook", label: "Stronger hook" },
-  { value: "shorter", label: "Shorter" },
-  { value: "longer", label: "Longer" },
-  { value: "casual", label: "More casual" },
-  { value: "professional", label: "More professional" },
-  { value: "emoji", label: "Add emoji" },
-  { value: "hashtags", label: "Add hashtags" },
-  { value: "fix", label: "Fix spelling" },
+  { value: "improve" },
+  { value: "hook" },
+  { value: "shorter" },
+  { value: "longer" },
+  { value: "casual" },
+  { value: "professional" },
+  { value: "emoji" },
+  { value: "hashtags" },
+  { value: "fix" },
 ] as const;
 
 export const rewriteText = (brandId: string, input: { text: string; instruction: string; platform?: string }) =>
@@ -209,22 +211,20 @@ export const refreshWatched = (brandId: string, id: string) =>
 /** 1234 → 1.2K, 2500000 → 2.5M. */
 export function compact(value: number | null | undefined) {
   if (value === null || value === undefined) return "—";
-  return new Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 }).format(value);
+  return new Intl.NumberFormat(intlLocale(), { notation: "compact", maximumFractionDigits: 1 }).format(value);
 }
 
 export const percent = (value: number | null | undefined, digits = 1) =>
-  value === null || value === undefined ? "—" : `${(value * 100).toFixed(digits)}%`;
+  value === null || value === undefined
+    ? "—"
+    : new Intl.NumberFormat(intlLocale(), {
+        style: "percent",
+        minimumFractionDigits: digits,
+        maximumFractionDigits: digits,
+      }).format(value);
 
-export const STATUS_LABELS: Record<PostStatus, string> = {
-  draft: "Draft",
-  pending_approval: "Awaiting approval",
-  scheduled: "Scheduled",
-  publishing: "Publishing",
-  published: "Published",
-  partial: "Partly published",
-  failed: "Failed",
-  cancelled: "Cancelled",
-};
+/** A post status as people read it, in the current language. */
+export const statusLabel = (status: PostStatus) => i18n.t(`social:status.${status}`);
 
 // The views' contract ------------------------------------------------------------------------------------------
 

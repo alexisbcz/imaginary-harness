@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import CodeMirror, {
   keymap,
   Prec,
@@ -22,6 +23,7 @@ import {
 } from "@/components/ui/resizable";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { api } from "@/lib/api";
+import { intlLocale } from "@/lib/i18n";
 import { guessType } from "@/lib/sql-types";
 
 type QueryResult =
@@ -68,11 +70,9 @@ function lineAndColumn(text: string, position: number) {
   return { line: before.length, column: before.at(-1)!.length + 1 };
 }
 
-function plural(count: number, word: string) {
-  return `${count.toLocaleString()} ${word}${count === 1 ? "" : "s"}`;
-}
-
 function Summary({ result }: { result: Extract<QueryResult, { ok: true }> }) {
+  const { t } = useTranslation("builder");
+  const rows = { count: result.count, formatted: result.count.toLocaleString(intlLocale()) };
   const reads = result.command === "SELECT" || result.columns.length > 0;
   return (
     <>
@@ -86,15 +86,13 @@ function Summary({ result }: { result: Extract<QueryResult, { ok: true }> }) {
         </Tag>
       )}
       <span className="text-t-text-secondary">
-        {reads
-          ? plural(result.count, "row")
-          : `${plural(result.count, "row")} changed`}
+        {reads ? t("sql.rows", rows) : t("sql.rowsChanged", rows)}
         {result.truncated &&
-          `, first ${result.rows.length.toLocaleString()} shown`}
+          t("sql.firstShown", { shown: result.rows.length.toLocaleString(intlLocale()) })}
       </span>
       {result.statements > 1 && (
         <span className="text-t-text-tertiary">
-          · last of {result.statements} statements
+          · {t("sql.lastOf", { count: result.statements })}
         </span>
       )}
     </>
@@ -118,6 +116,7 @@ export function SqlEditor({
   /** Called after a statement that may have changed the tables or their rows. */
   onChanged: () => void;
 }) {
+  const { t } = useTranslation("builder");
   const scheme = useColorScheme();
   const [text, setText] = useState(
     () =>
@@ -157,12 +156,12 @@ export function SqlEditor({
       setResult(next);
       if (!next.ok && next.position !== null) {
         const at = lineAndColumn(text, offset + next.position);
-        setErrorAt(`Line ${at.line}, column ${at.column}`);
+        setErrorAt(t("sql.errorAt", { line: at.line, column: at.column }));
       } else setErrorAt(null);
       if (next.ok && next.command !== "SELECT") onChanged();
     } catch (error) {
       setFailure(
-        error instanceof Error ? error.message : "Could not run the query",
+        error instanceof Error ? error.message : t("sql.runFailed"),
       );
     } finally {
       setRunning(false);
@@ -207,10 +206,10 @@ export function SqlEditor({
       <div className="flex h-10 shrink-0 items-center gap-2 border-b border-t-border-light px-3">
         <IconTerminal2 size={16} className="shrink-0 text-t-text-tertiary" />
         <span className="shrink-0 font-medium whitespace-nowrap text-t-text">
-          SQL editor
+          {t("sql.title")}
         </span>
         <span className="hidden min-w-0 truncate text-t-text-tertiary md:inline">
-          Runs as the app, in its own schema
+          {t("sql.runsAs")}
         </span>
         <span className="flex-1" />
         <Button
@@ -223,7 +222,7 @@ export function SqlEditor({
           shortcut={["Mod", "Enter"]}
           onClick={() => void run()}
         >
-          Run
+          {t("sql.run")}
         </Button>
       </div>
       <ResizablePanelGroup orientation="vertical" className="min-h-0 flex-1">
@@ -246,11 +245,11 @@ export function SqlEditor({
         <ResizableHandle />
         <ResizablePanel minSize={80} className="flex flex-col">
           <div className="flex h-9 shrink-0 items-center gap-2 border-b border-t-border-light bg-t-secondary px-3 text-[12px]">
-            <span className="font-medium text-t-text-secondary">Results</span>
+            <span className="font-medium text-t-text-secondary">{t("sql.results")}</span>
             {result?.ok === true && <Summary result={result} />}
             {result?.ok === false && (
               <Tag color="red" variant="soft" className="text-[11px]">
-                Error
+                {t("sql.error")}
               </Tag>
             )}
             {result && (
@@ -268,9 +267,9 @@ export function SqlEditor({
             {failure && <p className="p-4 text-t-text-danger">{failure}</p>}
             {!failure && result === null && (
               <div className="flex h-full flex-col items-center justify-center gap-1 text-center text-t-text-tertiary">
-                <p>Run a query to see its results here.</p>
+                <p>{t("sql.emptyTitle")}</p>
                 <p className="text-[12px] text-t-text-light">
-                  Select part of the text to run only that.
+                  {t("sql.emptyHint")}
                 </p>
               </div>
             )}
@@ -293,7 +292,7 @@ export function SqlEditor({
                     <p className="text-t-text-secondary">{result.detail}</p>
                   )}
                   {result.hint && (
-                    <p className="text-t-text-secondary">Hint: {result.hint}</p>
+                    <p className="text-t-text-secondary">{t("sql.hint", { hint: result.hint })}</p>
                   )}
                 </div>
               </div>
@@ -304,8 +303,8 @@ export function SqlEditor({
                 rows={result.rows}
                 empty={
                   result.command === "SELECT"
-                    ? "The query returned no rows"
-                    : "Done. The statement returns no rows."
+                    ? t("sql.noRows")
+                    : t("sql.noRowsStatement")
                 }
               />
             )}

@@ -39,7 +39,7 @@ type Outgoing = {
   html?: string;
   replyTo?: string;
   draftId?: string;
-  attachments?: { filename: string; contentType: string; data: string }[];
+  attachments?: { filename: string; contentType: string; data: string; contentId?: string }[];
 };
 
 const MAX_ATTACHMENTS_BYTES = 20 * 1024 * 1024;
@@ -116,6 +116,8 @@ export function createMailApi({
           ? a.contentType
           : "application/octet-stream",
         content,
+        // An image the HTML shows (cid:), sent inline in a multipart/related.
+        ...(a.contentId && /^[\w.@-]{1,200}$/.test(a.contentId) ? { contentId: a.contentId } : {}),
       };
     });
     if (total > MAX_ATTACHMENTS_BYTES)

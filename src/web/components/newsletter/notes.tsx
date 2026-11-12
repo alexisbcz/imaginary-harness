@@ -1,6 +1,7 @@
 // Substack Notes: short posts on Substack's feed, drafted here by you or the copilot, published now or at a time.
 
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Loader } from "twenty-ui/primitives/feedback";
 import { Button, Input, Textarea } from "twenty-ui/primitives/input";
 import { Tag } from "twenty-ui/primitives/data-display";
@@ -23,6 +24,7 @@ import {
 } from "@/lib/newsletter";
 
 function NoteCard({ newsletter, note, onChanged }: { newsletter: Newsletter; note: Note; onChanged: () => void }) {
+  const { t } = useTranslation(["newsletter", "common"]);
   const [body, setBody] = useState(note.body);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -48,20 +50,20 @@ function NoteCard({ newsletter, note, onChanged }: { newsletter: Newsletter; not
   return (
     <li className="flex flex-col gap-2 rounded-md border border-t-border p-3">
       <div className="flex items-center gap-2 text-[12px] text-t-text-tertiary">
-        {note.source === "copilot" && <IconSparkles size={12} aria-label="Drafted by the copilot" />}
+        {note.source === "copilot" && <IconSparkles size={12} aria-label={t("notes.byCopilot")} />}
         <span className="flex-1">
           {note.status === "published"
-            ? `Published ${formatMoment(note.published_at, newsletter.timezone)}`
+            ? t("notes.published", { time: formatMoment(note.published_at, newsletter.timezone) })
             : note.status === "scheduled"
-              ? `Goes out ${formatMoment(note.publish_at, newsletter.timezone)}`
+              ? t("notes.goesOut", { time: formatMoment(note.publish_at, newsletter.timezone) })
               : note.status === "publishing"
-                ? "Publishing…"
-                : `Draft · ${formatMoment(note.created_at, newsletter.timezone)}`}
+                ? t("notes.publishing")
+                : t("notes.draft", { time: formatMoment(note.created_at, newsletter.timezone) })}
         </span>
-        {note.status === "failed" && <Tag variant="soft" color="red" className="text-[11px]">Failed</Tag>}
+        {note.status === "failed" && <Tag variant="soft" color="red" className="text-[11px]">{t("notes.failed")}</Tag>}
         {note.url && (
           <a href={note.url} target="_blank" rel="noreferrer" className="flex items-center gap-1 hover:text-t-text">
-            Open <IconExternalLink size={12} />
+            {t("common:open")} <IconExternalLink size={12} />
           </a>
         )}
       </div>
@@ -76,44 +78,46 @@ function NoteCard({ newsletter, note, onChanged }: { newsletter: Newsletter; not
         <div className="flex flex-wrap items-center gap-1.5">
           {dirty && (
             <Button size="sm" variant="outline" loading={busy === "save"} onClick={() => run("save", () => saveNote(newsletter.id, body, note.id))}>
-              Save
+              {t("common:save")}
             </Button>
           )}
           <span className="flex-1" />
-          <Button size="sm" variant="ghost" aria-label="Delete the note" loading={busy === "delete"} onClick={() => run("delete", () => deleteNote(newsletter.id, note.id))}>
+          <Button size="sm" variant="ghost" aria-label={t("notes.delete")} loading={busy === "delete"} onClick={() => run("delete", () => deleteNote(newsletter.id, note.id))}>
             <IconTrash size={14} />
           </Button>
           {note.status === "scheduled" ? (
             <Button size="sm" variant="ghost" loading={busy === "unschedule"} onClick={() => run("unschedule", () => scheduleNote(newsletter.id, note.id, null))}>
-              Unschedule
+              {t("notes.unschedule")}
             </Button>
           ) : (
             <Button size="sm" variant="ghost" startIcon={<IconClock size={14} />} disabled={!newsletter.connected_at} onClick={() => setDialog("schedule")}>
-              Schedule
+              {t("notes.schedule")}
             </Button>
           )}
           <Button size="sm" variant="solid" color="accent" startIcon={<IconSend size={14} />} disabled={!newsletter.connected_at} onClick={() => setDialog("publish")}>
-            Publish
+            {t("notes.publish")}
           </Button>
         </div>
       )}
       {dialog === "publish" && (
         <Modal
-          title="Publish this note?"
+          title={t("notes.publishDialog.title")}
           onClose={() => setDialog(null)}
           footer={
             <>
-              <Button size="sm" variant="ghost" onClick={() => setDialog(null)}>Cancel</Button>
+              <Button size="sm" variant="ghost" onClick={() => setDialog(null)}>{t("common:cancel")}</Button>
               <Button size="sm" variant="solid" color="accent" loading={busy === "publish"} onClick={() =>
                 run("publish", async () => {
                   if (dirty) await saveNote(newsletter.id, body, note.id);
                   await publishNote(newsletter.id, note.id);
                 })
-              }>Publish on Substack</Button>
+              }>{t("notes.publishDialog.confirm")}</Button>
             </>
           }
         >
-          <p className="mb-3 text-t-text-secondary">It goes on Substack's feed as {newsletter.substack_user_name ?? "you"}, right away.</p>
+          <p className="mb-3 text-t-text-secondary">{newsletter.substack_user_name
+              ? t("notes.publishDialog.body", { name: newsletter.substack_user_name })
+              : t("notes.publishDialog.bodyAsYou")}</p>
           <div className="rounded-md border border-t-border">
             <PostPreview doc={markdownToDoc(body)} title="" subtitle="" />
           </div>
@@ -121,23 +125,23 @@ function NoteCard({ newsletter, note, onChanged }: { newsletter: Newsletter; not
       )}
       {dialog === "schedule" && (
         <Modal
-          title="Schedule this note"
+          title={t("notes.scheduleDialog.title")}
           onClose={() => setDialog(null)}
           footer={
             <>
-              <Button size="sm" variant="ghost" onClick={() => setDialog(null)}>Cancel</Button>
+              <Button size="sm" variant="ghost" onClick={() => setDialog(null)}>{t("common:cancel")}</Button>
               <Button size="sm" variant="solid" color="accent" loading={busy === "schedule"} onClick={() =>
                 run("schedule", async () => {
                   const at = fromLocalInput(when, newsletter.timezone);
-                  if (!at) throw new Error("Pick a time");
+                  if (!at) throw new Error(t("notes.scheduleDialog.pickTime"));
                   if (dirty) await saveNote(newsletter.id, body, note.id);
                   await scheduleNote(newsletter.id, note.id, at);
                 })
-              }>Schedule</Button>
+              }>{t("notes.schedule")}</Button>
             </>
           }
         >
-          <Field label={`When (${newsletter.timezone})`}>
+          <Field label={t("notes.scheduleDialog.when", { timeZone: newsletter.timezone })}>
             <Input type="datetime-local" value={when} onChange={(e) => setWhen(e.target.value)} />
           </Field>
         </Modal>
@@ -147,6 +151,7 @@ function NoteCard({ newsletter, note, onChanged }: { newsletter: Newsletter; not
 }
 
 export function NewsletterNotes({ newsletter, onAsk }: { newsletter: Newsletter; onAsk: (message: string) => void }) {
+  const { t } = useTranslation(["newsletter", "common"]);
   const { data: notes, error, reload } = useNotes(newsletter.id);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
@@ -173,20 +178,20 @@ export function NewsletterNotes({ newsletter, onAsk }: { newsletter: Newsletter;
             }
           }}
         >
-          <Textarea rows={3} placeholder="A thought, a question for your readers, a line from your latest post…" value={draft} onChange={(e) => setDraft(e.target.value)} />
+          <Textarea rows={3} placeholder={t("notes.placeholder")} value={draft} onChange={(e) => setDraft(e.target.value)} />
           <div className="flex flex-wrap items-center gap-2">
             <Button
               size="sm"
               variant="ghost"
               startIcon={<IconSparkles size={14} />}
-              onClick={() => onAsk("Draft five Substack Notes for this week: ideas from our latest posts, a question for readers, and one that teases the next issue.")}
+              onClick={() => onAsk(t("notes.draftPrompt"))}
             >
-              Draft notes with the copilot
+              {t("notes.draftWithCopilot")}
             </Button>
             {saveError && <span className="text-t-text-danger">{saveError}</span>}
             <span className="flex-1" />
             <Button size="sm" type="submit" variant="solid" color="accent" loading={busy} disabled={!draft.trim()}>
-              Save draft
+              {t("notes.saveDraft")}
             </Button>
           </div>
         </form>
@@ -197,7 +202,7 @@ export function NewsletterNotes({ newsletter, onAsk }: { newsletter: Newsletter;
         ) : notes.length === 0 ? (
           <div className="flex flex-col items-center gap-2 py-6 text-center text-t-text-secondary">
             <IconNotes size={20} className="text-t-text-light" />
-            Notes bring readers to your posts. Draft one above.
+            {t("notes.empty")}
           </div>
         ) : (
           <ul className="flex flex-col gap-3">

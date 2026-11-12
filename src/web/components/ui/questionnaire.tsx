@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 import { Questionnaire as QuestionnairePrimitive } from "@shadcn/react/questionnaire";
 import { cn } from "cn";
 
@@ -219,6 +220,7 @@ function QuestionnairePrevious({
   ...props
 }: React.ComponentProps<typeof QuestionnairePrimitive.Previous> &
   Pick<React.ComponentProps<typeof Button>, "size" | "variant">) {
+  const { t } = useTranslation("common");
   return (
     <QuestionnairePrimitive.Previous
       data-slot="questionnaire-previous"
@@ -231,7 +233,7 @@ function QuestionnairePrevious({
       )}
       {...props}
     >
-      {children ?? "Previous"}
+      {children ?? t("previous")}
     </QuestionnairePrimitive.Previous>
   );
 }
@@ -244,6 +246,7 @@ function QuestionnaireSkip({
   ...props
 }: React.ComponentProps<typeof QuestionnairePrimitive.Skip> &
   Pick<React.ComponentProps<typeof Button>, "size" | "variant">) {
+  const { t } = useTranslation("common");
   return (
     <QuestionnairePrimitive.Skip
       data-slot="questionnaire-skip"
@@ -256,7 +259,7 @@ function QuestionnaireSkip({
       )}
       {...props}
     >
-      {children ?? "Skip"}
+      {children ?? t("ui.skip")}
     </QuestionnairePrimitive.Skip>
   );
 }
@@ -269,6 +272,7 @@ function QuestionnaireNext({
   ...props
 }: React.ComponentProps<typeof QuestionnairePrimitive.Next> &
   Pick<React.ComponentProps<typeof Button>, "size" | "variant">) {
+  const { t } = useTranslation("common");
   return (
     <QuestionnairePrimitive.Next
       data-slot="questionnaire-next"
@@ -281,7 +285,7 @@ function QuestionnaireNext({
       )}
       {...props}
     >
-      {children ?? "Next"}
+      {children ?? t("next")}
     </QuestionnairePrimitive.Next>
   );
 }
@@ -294,6 +298,7 @@ function QuestionnaireSubmit({
   ...props
 }: React.ComponentProps<typeof QuestionnairePrimitive.Submit> &
   Pick<React.ComponentProps<typeof Button>, "size" | "variant">) {
+  const { t } = useTranslation("common");
   return (
     <QuestionnairePrimitive.Submit
       data-slot="questionnaire-submit"
@@ -306,7 +311,7 @@ function QuestionnaireSubmit({
       )}
       {...props}
     >
-      {children ?? "Submit"}
+      {children ?? t("ui.submit")}
     </QuestionnairePrimitive.Submit>
   );
 }

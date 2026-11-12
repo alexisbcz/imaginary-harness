@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -10,6 +11,7 @@ import {
 } from "@/components/auth-ui";
 
 export function ForgotPasswordForm() {
+  const { t } = useTranslation("auth");
   const [email, setEmail] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
@@ -29,7 +31,7 @@ export function ForgotPasswordForm() {
       if (error) throw error;
       setSuccess(true);
     } catch (error: unknown) {
-      setError(error instanceof Error ? error.message : "An error occurred");
+      setError(error instanceof Error ? error.message : t("error"));
     } finally {
       setIsLoading(false);
     }
@@ -39,11 +41,11 @@ export function ForgotPasswordForm() {
     return (
       <div className="flex flex-col">
         <AuthHeader
-          title="Check your email"
-          description="If an account uses this address, a link to reset its password is on its way."
+          title={t("checkEmail")}
+          description={t("forgot.sent")}
         />
         <p className="text-center text-t-text-tertiary">
-          <AuthLink href="/login">Back to sign in</AuthLink>
+          <AuthLink href="/login">{t("forgot.backToSignIn")}</AuthLink>
         </p>
       </div>
     );
@@ -51,12 +53,12 @@ export function ForgotPasswordForm() {
   return (
     <form onSubmit={handleForgotPassword} className="flex flex-col">
       <AuthHeader
-        title="Reset your password"
-        description="Enter your email, and we will send you a link to choose a new one."
+        title={t("forgot.title")}
+        description={t("forgot.description")}
       />
       <div className="flex flex-col gap-4">
         <AuthField
-          label="Email"
+          label={t("email")}
           type="email"
           placeholder="you@example.com"
           autoComplete="email"
@@ -65,10 +67,11 @@ export function ForgotPasswordForm() {
           onValueChange={setEmail}
         />
         {error && <AuthError>{error}</AuthError>}
-        <AuthSubmit loading={isLoading}>Send the link</AuthSubmit>
+        <AuthSubmit loading={isLoading}>{t("forgot.submit")}</AuthSubmit>
       </div>
       <p className="mt-6 text-center text-t-text-tertiary">
-        Remembered it? <AuthLink href="/login">Sign in</AuthLink>
+        {t("forgot.remembered")}{" "}
+        <AuthLink href="/login">{t("signIn")}</AuthLink>
       </p>
     </form>
   );

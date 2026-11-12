@@ -4,6 +4,7 @@
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router";
+import { Trans, useTranslation } from "react-i18next";
 import { cn } from "cn";
 import { LightIconButton } from "twenty-ui/components/input";
 import { Loader } from "twenty-ui/primitives/feedback";
@@ -41,7 +42,7 @@ import {
   REWRITES,
   rewriteText,
   savePost,
-  STATUS_LABELS,
+  statusLabel,
   uploadMedia,
   type Brand,
   type EditorRequest,
@@ -49,6 +50,7 @@ import {
   type SocialAccount,
   type SocialPost,
 } from "@/lib/social";
+import { intlLocale } from "@/lib/i18n";
 
 type Busy = null | "draft" | "schedule" | "publish" | "delete" | "retry" | "rewrite";
 
@@ -56,7 +58,7 @@ const READ_ONLY = new Set(["published", "publishing", "partial"]);
 
 /** "Wed 12 Nov, 09:00" in a zone. */
 function formatMoment(date: Date, timeZone: string) {
-  return new Intl.DateTimeFormat("en-GB", {
+  return new Intl.DateTimeFormat(intlLocale(), {
     timeZone,
     weekday: "short",
     day: "numeric",
@@ -67,11 +69,17 @@ function formatMoment(date: Date, timeZone: string) {
 }
 
 const zoneLabel = (timeZone: string) =>
-  new Intl.DateTimeFormat("en-US", { timeZone, timeZoneName: "short" })
+  new Intl.DateTimeFormat(intlLocale(), { timeZone, timeZoneName: "short" })
     .formatToParts(new Date())
     .find((p) => p.type === "timeZoneName")?.value ?? timeZone;
 
 const isMediaFile = (file: File) => file.type.startsWith("image/") || file.type.startsWith("video/");
+
+/** "LinkedIn and X", "LinkedIn, X et Instagram": a list in the current language. */
+const listOf = (items: string[]) => new Intl.ListFormat(intlLocale(), { type: "conjunction" }).format(items);
+
+/** The statuses a post's account can have, as the editor names them. */
+const PLATFORM_STATUSES = ["pending", "scheduled", "publishing", "published", "failed", "cancelled"] as const;
 
 export function PostEditor({
   brand,
@@ -88,6 +96,7 @@ export function PostEditor({
   onSaved: () => void;
   onAsk: (message: string) => void;
 }) {
+  const { t } = useTranslation(["social", "common"]);
   const timeZone = brand.timezone || "UTC";
   const post = request.post;
   const readOnly = post ? READ_ONLY.has(post.status) : false;
@@ -129,17 +138,18 @@ export function PostEditor({
   const problems = chosen.flatMap((a) => problemsFor(a.platform, textFor(a.id), media));
   const scheduleBlocker =
     chosen.length === 0
-      ? "Pick an account"
+      ? t("editor.blockers.account")
       : uploading
-        ? "Wait for the upload"
+        ? t("editor.blockers.upload")
         : problems[0]
           ? problems[0]
           : !moment
-            ? "Pick a date and time"
+            ? t("editor.blockers.moment")
             : moment.getTime() < Date.now() + 60_000
-              ? "Pick a time in the future"
+              ? t("editor.blockers.future")
               : null;
-  const publishBlocker = chosen.length === 0 ? "Pick an account" : uploading ? "Wait for the upload" : (problems[0] ?? null);
+  const publishBlocker =
+    chosen.length === 0 ? t("editor.blockers.account") : uploading ? t("editor.blockers.upload") : (problems[0] ?? null);
 
   function setEditing(value: string) {
     if (activeAccount) setCustom((current) => ({ ...current, [activeAccount.id]: value }));
@@ -255,19 +265,19 @@ export function PostEditor({
   const today = dayOf(new Date(), timeZone);
   const nextMonday = addDays(today, 7 - weekdayOf(today));
   const quickPicks = [
-    { label: "Tomorrow 9:00", day: addDays(today, 1), time: "09:00" },
-    { label: "Next Monday 9:00", day: nextMonday, time: "09:00" },
+    { label: t("editor.when.tomorrow"), day: addDays(today, 1), time: "09:00" },
+    { label: t("editor.when.nextMonday"), day: nextMonday, time: "09:00" },
   ];
 
   const title = readOnly
-    ? STATUS_LABELS[post!.status]
+    ? statusLabel(post!.status)
     : post
       ? post.status === "scheduled"
-        ? "Scheduled post"
+        ? t("editor.titles.scheduled")
         : post.status === "failed"
-          ? "Failed post"
-          : "Draft"
-      : "New post";
+          ? t("editor.titles.failed")
+          : t("editor.titles.draft")
+      : t("editor.titles.new");
 
   const accountsLabel = chosen.map((a) => `${platformInfo(a.platform).label} · ${a.name}`).join(", ");
 
@@ -286,7 +296,7 @@ export function PostEditor({
               )}
               <Dialog.Close
                 render={
-                  <LightIconButton aria-label="Close">
+                  <LightIconButton aria-label={t("common:close")}>
                     <IconX size={16} />
                   </LightIconButton>
                 }
@@ -328,18 +338,22 @@ export function PostEditor({
                 >
                   {/* Accounts */}
                   <section className="flex flex-col gap-2 border-b border-t-border-light px-4 py-3">
-                    <span className="text-[12px] font-medium text-t-text-tertiary">Post on</span>
+                    <span className="text-[12px] font-medium text-t-text-tertiary">{t("editor.postOn")}</span>
                     {accounts.length === 0 ? (
                       <p className="text-t-text-secondary">
-                        No account is connected.{" "}
-                        <Link
-                          to={`/social/${brand.id}/brand`}
-                          onClick={onClose}
-                          className="font-medium text-t-text underline underline-offset-2"
-                        >
-                          Connect one
-                        </Link>{" "}
-                        to schedule; drafts can be saved meanwhile.
+                        <Trans
+                          t={t}
+                          i18nKey="editor.noAccount"
+                          components={{
+                            link: (
+                              <Link
+                                to={`/social/${brand.id}/brand`}
+                                onClick={onClose}
+                                className="font-medium text-t-text underline underline-offset-2"
+                              />
+                            ),
+                          }}
+                        />
                       </p>
                     ) : (
                       <div className="flex flex-wrap gap-1.5">
@@ -377,7 +391,7 @@ export function PostEditor({
                   <section className="flex flex-1 flex-col px-4 pt-3 pb-3">
                     <div className="flex flex-wrap items-center gap-1 pb-2">
                       <TabButton active={tab === "all"} onClick={() => setTab("all")}>
-                        {chosen.length > 1 ? "All accounts" : "Text"}
+                        {chosen.length > 1 ? t("editor.tabs.all") : t("editor.tabs.text")}
                       </TabButton>
                       {chosen.length > 1 &&
                         chosen.map((account) => (
@@ -389,7 +403,7 @@ export function PostEditor({
                           >
                             <PlatformGlyph platform={account.platform} size={12} />
                             {custom[account.id] === undefined
-                              ? `Customize for ${platformInfo(account.platform).label}`
+                              ? t("editor.customizeFor", { platform: platformInfo(account.platform).label })
                               : platformInfo(account.platform).label}
                           </TabButton>
                         ))}
@@ -404,14 +418,14 @@ export function PostEditor({
                               endIcon={<IconChevronDown size={12} />}
                               disabled={!editing.trim() || busy !== null}
                             >
-                              Rewrite
+                              {t("editor.rewrite")}
                             </Button>
                           }
                         />
                         <DropdownMenuContent align="end" className="w-52">
                           {REWRITES.map((option) => (
                             <DropdownMenuItem key={option.value} onClick={() => void rewrite(option.value)}>
-                              {option.label}
+                              {t(`rewrites.${option.value}`)}
                             </DropdownMenuItem>
                           ))}
                         </DropdownMenuContent>
@@ -423,27 +437,37 @@ export function PostEditor({
                         onClick={() =>
                           onAsk(
                             editing.trim()
-                              ? `Help me improve this post${activeAccount ? ` for ${platformInfo(activeAccount.platform).label}` : ""}${post ? ` (draft ${post.id})` : ""}:\n\n${editing}`
-                              : `Write a post for ${chosen.map((a) => platformInfo(a.platform).label).join(" and ") || "our accounts"}${moment ? ` to go out ${formatMoment(moment, timeZone)}` : ""}. Suggest an angle from our content pillars and save it as a draft.`,
+                              ? activeAccount
+                                ? post
+                                  ? t("editor.ask.improveDraftFor", { platform: platformInfo(activeAccount.platform).label, id: post.id, text: editing })
+                                  : t("editor.ask.improveFor", { platform: platformInfo(activeAccount.platform).label, text: editing })
+                                : post
+                                  ? t("editor.ask.improveDraft", { id: post.id, text: editing })
+                                  : t("editor.ask.improve", { text: editing })
+                              : (() => {
+                                  const platforms = chosen.length
+                                    ? listOf(chosen.map((a) => platformInfo(a.platform).label))
+                                    : t("editor.ask.ourAccounts");
+                                  return moment
+                                    ? t("editor.ask.writeAt", { platforms, time: formatMoment(moment, timeZone) })
+                                    : t("editor.ask.write", { platforms });
+                                })(),
                           )
                         }
                       >
-                        Ask the copilot
+                        {t("editor.askCopilot")}
                       </Button>
                     </div>
 
                     {activeAccount && custom[activeAccount.id] === undefined ? (
                       <div className="flex flex-1 flex-col items-start gap-2 rounded-md border border-dashed border-t-border p-4 text-t-text-secondary">
-                        <p>
-                          {platformInfo(activeAccount.platform).label} uses the shared text. Give it a version of its
-                          own when it needs a different length or tone.
-                        </p>
+                        <p>{t("editor.usesShared", { platform: platformInfo(activeAccount.platform).label })}</p>
                         <Button
                           size="sm"
                           variant="outline"
                           onClick={() => setCustom((current) => ({ ...current, [activeAccount.id]: content }))}
                         >
-                          Customize for {platformInfo(activeAccount.platform).label}
+                          {t("editor.customizeFor", { platform: platformInfo(activeAccount.platform).label })}
                         </Button>
                       </div>
                     ) : (
@@ -453,8 +477,8 @@ export function PostEditor({
                         autoFocus={!post}
                         placeholder={
                           activeAccount
-                            ? `The ${platformInfo(activeAccount.platform).label} version…`
-                            : "What do you want to share?"
+                            ? t("editor.placeholders.version", { platform: platformInfo(activeAccount.platform).label })
+                            : t("editor.placeholders.shared")
                         }
                         onPasteFiles={(files) => void addFiles(files)}
                       />
@@ -474,7 +498,7 @@ export function PostEditor({
                             )}
                           >
                             <PlatformGlyph platform={account.platform} size={11} />
-                            {count.toLocaleString()}/{info.limit.toLocaleString()}
+                            {count.toLocaleString(intlLocale())}/{info.limit.toLocaleString(intlLocale())}
                           </span>
                         );
                       })}
@@ -490,7 +514,7 @@ export function PostEditor({
                           }}
                           className="flex items-center gap-1 text-[12px] text-t-text-secondary hover:text-t-text"
                         >
-                          <IconArrowBackUp size={13} /> Undo rewrite
+                          <IconArrowBackUp size={13} /> {t("editor.undoRewrite")}
                         </button>
                       )}
                       {activeAccount && custom[activeAccount.id] !== undefined && (
@@ -505,7 +529,7 @@ export function PostEditor({
                           }
                           className="text-[12px] text-t-text-secondary hover:text-t-text"
                         >
-                          Use the shared text
+                          {t("editor.useShared")}
                         </button>
                       )}
                     </div>
@@ -525,14 +549,14 @@ export function PostEditor({
                   {/* Media */}
                   <section className="flex flex-col gap-2 border-t border-t-border-light px-4 py-3">
                     <div className="flex items-center gap-2">
-                      <span className="flex-1 text-[12px] font-medium text-t-text-tertiary">Media</span>
+                      <span className="flex-1 text-[12px] font-medium text-t-text-tertiary">{t("editor.media.title")}</span>
                       <Button
                         size="sm"
                         variant="ghost"
                         startIcon={<IconPhoto size={14} />}
                         onClick={() => fileInput.current?.click()}
                       >
-                        Add image or video
+                        {t("editor.media.add")}
                       </Button>
                       <input
                         ref={fileInput}
@@ -547,7 +571,7 @@ export function PostEditor({
                       />
                     </div>
                     {media.length === 0 && uploading === 0 ? (
-                      <p className="text-[12px] text-t-text-light">Drop, paste or pick images and videos.</p>
+                      <p className="text-[12px] text-t-text-light">{t("editor.media.empty")}</p>
                     ) : (
                       <div className="flex flex-wrap gap-2">
                         {media.map((item) => (
@@ -558,7 +582,7 @@ export function PostEditor({
                             <MediaThumb media={item} />
                             <button
                               type="button"
-                              aria-label="Remove"
+                              aria-label={t("common:remove")}
                               onClick={() => setMedia((current) => current.filter((m) => m.url !== item.url))}
                               className="absolute top-1 right-1 flex size-5 items-center justify-center rounded-full bg-black/60 text-white opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
                             >
@@ -572,7 +596,7 @@ export function PostEditor({
                             className="flex size-20 flex-col items-center justify-center gap-1 rounded-md border border-dashed border-t-border text-[11px] text-t-text-tertiary"
                           >
                             <Loader />
-                            Uploading
+                            {t("editor.media.uploading")}
                           </div>
                         ))}
                       </div>
@@ -582,7 +606,7 @@ export function PostEditor({
                   {/* When */}
                   <section className="flex flex-col gap-2 border-t border-t-border-light px-4 py-3">
                     <div className="flex items-center gap-2">
-                      <span className="flex-1 text-[12px] font-medium text-t-text-tertiary">When</span>
+                      <span className="flex-1 text-[12px] font-medium text-t-text-tertiary">{t("editor.when.title")}</span>
                       <span className="text-[11px] text-t-text-light">
                         {timeZone} ({zoneLabel(timeZone)})
                       </span>
@@ -590,7 +614,7 @@ export function PostEditor({
                     <div className="flex flex-wrap items-center gap-2">
                       <input
                         type="date"
-                        aria-label="Date"
+                        aria-label={t("editor.when.date")}
                         value={day}
                         min={today}
                         onChange={(event) => {
@@ -601,7 +625,7 @@ export function PostEditor({
                       />
                       <input
                         type="time"
-                        aria-label="Time"
+                        aria-label={t("editor.when.time")}
                         value={time}
                         onChange={(event) => setTime(event.target.value)}
                         className="h-8 rounded-md border border-t-border bg-t-primary px-2 text-t-text tabular-nums outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -628,7 +652,7 @@ export function PostEditor({
                           }}
                           className="text-[12px] text-t-text-tertiary hover:text-t-text"
                         >
-                          No date
+                          {t("editor.when.noDate")}
                         </button>
                       )}
                     </div>
@@ -638,11 +662,11 @@ export function PostEditor({
                 {/* The preview */}
                 <aside className="flex max-h-[40svh] min-h-0 flex-col overflow-y-auto bg-t-secondary/60 md:max-h-none md:w-[400px] md:shrink-0">
                   <div className="sticky top-0 z-10 bg-t-secondary/95 px-4 pt-3 pb-2 text-[12px] font-medium text-t-text-tertiary backdrop-blur">
-                    Preview
+                    {t("editor.preview.title")}
                   </div>
                   <div className="flex flex-col gap-3 px-4 pb-4">
                     {chosen.length === 0 ? (
-                      <p className="text-[12px] text-t-text-light">Pick an account to see the post as it will look.</p>
+                      <p className="text-[12px] text-t-text-light">{t("editor.preview.empty")}</p>
                     ) : (
                       chosen.map((account) => (
                         <PreviewCard
@@ -671,34 +695,39 @@ export function PostEditor({
               {confirm === "publish" ? (
                 <>
                   <span className="min-w-0 flex-1 text-t-text">
-                    Publish now to <span className="font-medium">{accountsLabel}</span>?
+                    <Trans
+                      t={t}
+                      i18nKey="editor.confirmPublish"
+                      values={{ accounts: accountsLabel }}
+                      components={{ b: <span className="font-medium" /> }}
+                    />
                   </span>
                   <Button size="sm" variant="ghost" onClick={() => setConfirm(null)} disabled={busy !== null}>
-                    Cancel
+                    {t("common:cancel")}
                   </Button>
                   <Button size="sm" variant="solid" color="accent" loading={busy === "publish"} onClick={() => void save("publish")}>
-                    Publish now
+                    {t("editor.publishNow")}
                   </Button>
                 </>
               ) : confirm === "delete" ? (
                 <>
                   <span className="min-w-0 flex-1 text-t-text">
                     {post?.source === "imported"
-                      ? "Remove it from Richelieu? It stays on the platform."
-                      : "Delete this post? This cannot be undone."}
+                      ? t("editor.confirmRemoveImported")
+                      : t("editor.confirmDelete")}
                   </span>
                   <Button size="sm" variant="ghost" onClick={() => setConfirm(null)} disabled={busy !== null}>
-                    Cancel
+                    {t("common:cancel")}
                   </Button>
                   <Button size="sm" variant="solid" color="danger" loading={busy === "delete"} onClick={() => void remove()}>
-                    Delete
+                    {t("common:delete")}
                   </Button>
                 </>
               ) : readOnly ? (
                 <>
                   {post?.source === "imported" && (
                     <Button size="sm" variant="ghost" onClick={() => setConfirm("delete")} disabled={busy !== null}>
-                      Remove from Richelieu
+                      {t("editor.removeFromRichelieu")}
                     </Button>
                   )}
                   <div className="flex-1" />
@@ -710,19 +739,19 @@ export function PostEditor({
                       loading={busy === "retry"}
                       onClick={() => void retry()}
                     >
-                      Retry the failed accounts
+                      {t("editor.retryFailed")}
                     </Button>
                   )}
                   <Button size="sm" variant="solid" color="neutral" onClick={onClose}>
-                    Close
+                    {t("common:close")}
                   </Button>
                 </>
               ) : (
                 <>
                   {post && (
                     <LightIconButton
-                      aria-label="Delete the post"
-                      tooltip="Delete"
+                      aria-label={t("editor.deletePost")}
+                      tooltip={t("common:delete")}
                       onClick={() => setConfirm("delete")}
                       disabled={busy !== null}
                     >
@@ -737,7 +766,7 @@ export function PostEditor({
                       loading={busy === "retry"}
                       onClick={() => void retry()}
                     >
-                      Retry
+                      {t("common:retry")}
                     </Button>
                   )}
                   <span className="min-w-0 flex-1 truncate text-[12px] text-t-text-tertiary">
@@ -749,7 +778,7 @@ export function PostEditor({
                     onClick={() => setConfirm("publish")}
                     disabled={busy !== null || publishBlocker !== null}
                   >
-                    Publish now
+                    {t("editor.publishNow")}
                   </Button>
                   <Button
                     size="sm"
@@ -759,7 +788,7 @@ export function PostEditor({
                     onClick={() => void save("draft")}
                     shortcut={["Mod", "Enter"]}
                   >
-                    Save draft
+                    {t("editor.saveDraft")}
                   </Button>
                   <Button
                     size="sm"
@@ -770,7 +799,7 @@ export function PostEditor({
                     onClick={() => void save("schedule")}
                     title={scheduleBlocker ?? undefined}
                   >
-                    {post?.status === "scheduled" ? "Update schedule" : "Schedule"}
+                    {post?.status === "scheduled" ? t("editor.updateSchedule") : t("editor.schedule")}
                   </Button>
                 </>
               )}
@@ -913,6 +942,7 @@ function PreviewCard({
   when: Date | null;
   timeZone: string;
 }) {
+  const { t } = useTranslation(["social", "common"]);
   const [expanded, setExpanded] = useState(false);
   const fold = FOLD[account.platform];
   const folded = fold !== undefined && !expanded && text.length > fold;
@@ -926,7 +956,7 @@ function PreviewCard({
         <div className="min-w-0 flex-1 leading-tight">
           <div className="truncate text-[13px] font-semibold text-t-text">{account.name}</div>
           <div className="truncate text-[11px] text-t-text-tertiary">
-            {handle} · {when ? formatMoment(when, timeZone) : "Draft"}
+            {handle} · {when ? formatMoment(when, timeZone) : t("editor.titles.draft")}
           </div>
         </div>
         <PlatformGlyph platform={account.platform} size={14} className="text-t-text-light" />
@@ -944,13 +974,13 @@ function PreviewCard({
                   onClick={() => setExpanded(true)}
                   className="text-t-text-tertiary hover:text-t-text-secondary"
                 >
-                  see more
+                  {t("editor.preview.seeMore")}
                 </button>
               </>
             )}
           </p>
         ) : (
-          <p className="text-[13px] text-t-text-light italic">No text yet</p>
+          <p className="text-[13px] text-t-text-light italic">{t("editor.preview.noText")}</p>
         )}
         {!mediaFirst && <MediaGrid media={media} />}
       </div>
@@ -970,13 +1000,16 @@ function PublishedView({
   brand: Brand;
   accounts: SocialAccount[];
 }) {
+  const { t } = useTranslation(["social", "common"]);
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto md:flex-row">
       <div className="flex min-w-0 flex-1 flex-col gap-4 px-4 py-4">
         {post.published_at && (
           <p className="text-[12px] text-t-text-tertiary tabular-nums">
-            Published {formatMoment(new Date(post.published_at), timeZone)} ({timeZone})
-            {post.source === "imported" && " · outside Richelieu, imported by its link"}
+            {t(post.source === "imported" ? "editor.published.atImported" : "editor.published.at", {
+              time: formatMoment(new Date(post.published_at), timeZone),
+              zone: timeZone,
+            })}
           </p>
         )}
         {post.metrics && (
@@ -992,12 +1025,13 @@ function PublishedView({
               .filter(([, value]) => value !== null)
               .map(([label, value]) => (
                 <span key={label}>
-                  <span className="font-semibold text-t-text">{value!.toLocaleString()}</span> {label}
+                  <span className="font-semibold text-t-text">{value!.toLocaleString(intlLocale())}</span>{" "}
+                  {t(`editor.published.metrics.${label}`, { count: value! })}
                 </span>
               ))}
           </div>
         )}
-        <p className="text-[14px] leading-[1.55] whitespace-pre-wrap text-t-text">{post.content || "(no text)"}</p>
+        <p className="text-[14px] leading-[1.55] whitespace-pre-wrap text-t-text">{post.content || t("editor.published.noText")}</p>
         {post.media.length > 0 && (
           <div className="max-w-[420px]">
             <MediaGrid media={post.media} />
@@ -1005,7 +1039,7 @@ function PublishedView({
         )}
       </div>
       <aside className="flex flex-col gap-2 border-t border-t-border-light bg-t-secondary/60 px-4 py-4 md:w-[340px] md:shrink-0 md:border-t-0 md:border-l">
-        <span className="text-[12px] font-medium text-t-text-tertiary">Accounts</span>
+        <span className="text-[12px] font-medium text-t-text-tertiary">{t("editor.published.accounts")}</span>
         {post.platforms.map((platform) => {
           const account = accounts.find((a) => a.id === platform.account_id);
           const failed = platform.status === "failed";
@@ -1030,7 +1064,11 @@ function PublishedView({
                     failed ? "text-t-text-danger" : platform.status === "published" ? "text-[var(--t-color-green11)]" : "text-t-text-tertiary",
                   )}
                 >
-                  {platform.status ?? "—"}
+                  {platform.status === null
+                    ? "—"
+                    : (PLATFORM_STATUSES as readonly string[]).includes(platform.status)
+                      ? t(`platformStatus.${platform.status as (typeof PLATFORM_STATUSES)[number]}`)
+                      : platform.status}
                 </span>
               </div>
               {platform.url && (
@@ -1040,7 +1078,7 @@ function PublishedView({
                   rel="noreferrer"
                   className="flex items-center gap-1 text-[12px] text-t-text-secondary hover:text-t-text"
                 >
-                  <IconExternalLink size={12} /> See it on {platformInfo(platform.platform).label}
+                  <IconExternalLink size={12} /> {t("editor.published.seeOn", { platform: platformInfo(platform.platform).label })}
                 </a>
               )}
               {platform.error && <p className="text-[12px] text-t-text-danger">{platform.error}</p>}

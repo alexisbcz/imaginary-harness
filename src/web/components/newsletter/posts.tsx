@@ -2,6 +2,7 @@
 // written by the copilot) one click away.
 
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Loader } from "twenty-ui/primitives/feedback";
 import { Button, Input } from "twenty-ui/primitives/input";
 import { Tag } from "twenty-ui/primitives/data-display";
@@ -17,6 +18,7 @@ import {
 } from "@/lib/newsletter";
 
 function Row({ post, newsletter, onOpen }: { post: NewsletterPost; newsletter: Newsletter; onOpen: () => void }) {
+  const { t } = useTranslation(["newsletter", "common"]);
   return (
     <li>
       <button type="button" onClick={onOpen} className="flex w-full items-center gap-3 px-3 py-2.5 text-left hover:bg-t-hover">
@@ -28,9 +30,9 @@ function Row({ post, newsletter, onOpen }: { post: NewsletterPost; newsletter: N
           </span>
         )}
         <span className="min-w-0 flex-1">
-          <span className="block truncate font-medium text-t-text">{post.title || "Untitled"}</span>
+          <span className="block truncate font-medium text-t-text">{post.title || t("common:untitled")}</span>
           <span className="block truncate text-[12px] text-t-text-tertiary">
-            {post.subtitle || (post.state === "draft" ? `Edited ${formatMoment(post.updated_at, newsletter.timezone)}` : "")}
+            {post.subtitle || (post.state === "draft" ? t("posts.edited", { time: formatMoment(post.updated_at, newsletter.timezone) }) : "")}
           </span>
         </span>
         {post.audience !== "everyone" && (
@@ -39,14 +41,14 @@ function Row({ post, newsletter, onOpen }: { post: NewsletterPost; newsletter: N
           </Tag>
         )}
         {post.release_error && (
-          <Tag variant="soft" color="red" className="text-[11px]">Release failed</Tag>
+          <Tag variant="soft" color="red" className="text-[11px]">{t("posts.releaseFailed")}</Tag>
         )}
         <span className="shrink-0 text-right text-[12px] text-t-text-tertiary tabular-nums">
           {post.state === "scheduled" ? (
             <span className="flex items-center gap-1">
               <IconClock size={13} />
               {formatMoment(post.scheduled_for, newsletter.timezone)}
-              {post.send_email === false && " · web"}
+              {post.send_email === false && ` · ${t("posts.webOnly")}`}
               {post.scheduled_by === "substack" && " · Substack"}
             </span>
           ) : post.state === "published" ? (
@@ -68,7 +70,7 @@ function Row({ post, newsletter, onOpen }: { post: NewsletterPost; newsletter: N
             rel="noreferrer"
             onClick={(e) => e.stopPropagation()}
             className="rounded p-1 text-t-text-tertiary hover:bg-t-hover hover:text-t-text"
-            aria-label="Open on Substack"
+            aria-label={t("posts.openOnSubstack")}
           >
             <IconExternalLink size={14} />
           </a>
@@ -105,6 +107,7 @@ export function NewsletterPosts({
   onOpen: (id: number) => void;
   onAsk: (message: string) => void;
 }) {
+  const { t } = useTranslation(["newsletter", "common"]);
   const { data: posts, error, loading } = usePosts(newsletter, revision);
   const [search, setSearch] = useState("");
   const [creating, setCreating] = useState(false);
@@ -133,22 +136,20 @@ export function NewsletterPosts({
       <div className="mx-auto flex w-full max-w-[860px] flex-col gap-6 px-5 py-6">
         <div className="flex flex-wrap items-center gap-2">
           <Button size="sm" variant="solid" color="accent" startIcon={<IconFilePencil size={14} />} loading={creating} onClick={() => void blank()}>
-            New draft
+            {t("posts.newDraft")}
           </Button>
           <Button
             size="sm"
             variant="outline"
             startIcon={<IconSparkles size={14} />}
             onClick={() =>
-              onAsk(
-                "Look at what my readers opened and shared most, and my ideas backlog. Propose the next issue (three angles to choose from), then write the draft for the one I pick.",
-              )
+              onAsk(t("posts.nextIssuePrompt"))
             }
           >
-            Write the next issue with the copilot
+            {t("posts.nextIssue")}
           </Button>
           <span className="flex-1" />
-          <Input aria-label="Search posts" placeholder="Search" value={search} onChange={(e) => setSearch(e.target.value)} className="w-48" />
+          <Input aria-label={t("posts.search")} placeholder={t("common:search")} value={search} onChange={(e) => setSearch(e.target.value)} className="w-48" />
         </div>
         {createError && <p className="text-t-text-danger">{createError}</p>}
         {error ? (
@@ -157,14 +158,14 @@ export function NewsletterPosts({
           <div className="flex h-24 items-center justify-center">{loading && <Loader />}</div>
         ) : posts.length === 0 ? (
           <div className="rounded-md border border-dashed border-t-border px-5 py-8 text-center text-t-text-secondary">
-            No posts yet. Start a draft, or ask the copilot to write your first issue.
+            {t("posts.empty")}
           </div>
         ) : (
           <>
-            <Group title="Scheduled" posts={scheduled} newsletter={newsletter} onOpen={onOpen} />
-            <Group title="Drafts" posts={drafts} newsletter={newsletter} onOpen={onOpen} />
-            <Group title="Published" posts={published} newsletter={newsletter} onOpen={onOpen} />
-            {shown.length === 0 && <p className="text-t-text-tertiary">No post matches “{search}”.</p>}
+            <Group title={t("posts.groups.scheduled")} posts={scheduled} newsletter={newsletter} onOpen={onOpen} />
+            <Group title={t("posts.groups.drafts")} posts={drafts} newsletter={newsletter} onOpen={onOpen} />
+            <Group title={t("posts.groups.published")} posts={published} newsletter={newsletter} onOpen={onOpen} />
+            {shown.length === 0 && <p className="text-t-text-tertiary">{t("posts.noMatch", { query: search })}</p>}
           </>
         )}
       </div>

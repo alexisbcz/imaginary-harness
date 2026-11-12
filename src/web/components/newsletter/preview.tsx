@@ -2,13 +2,15 @@
 // the preview is the document Substack receives and not a second reading of the Markdown.
 
 import type { ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import { IconLock, IconBrandYoutube, IconPuzzle } from "@tabler/icons-react";
 import { BUTTON_URLS, type PMDoc, type PMNode } from "@/lib/newsletter";
 
-const BUTTON_LABELS: Record<string, string> = {
-  [BUTTON_URLS.subscribe]: "Subscribe",
-  [BUTTON_URLS.share]: "Share",
-  [BUTTON_URLS.comment]: "Leave a comment",
+// Substack's own buttons, by address; each label is `preview.buttons.<name>`.
+const BUTTON_LABELS: Record<string, "subscribe" | "share" | "comment"> = {
+  [BUTTON_URLS.subscribe]: "subscribe",
+  [BUTTON_URLS.share]: "share",
+  [BUTTON_URLS.comment]: "comment",
 };
 
 function Inline({ nodes }: { nodes?: PMNode[] }) {
@@ -37,6 +39,7 @@ function Inline({ nodes }: { nodes?: PMNode[] }) {
 }
 
 function Block({ node }: { node: PMNode }) {
+  const { t } = useTranslation("newsletter");
   switch (node.type) {
     case "paragraph":
       return (
@@ -109,7 +112,7 @@ function Block({ node }: { node: PMNode }) {
       return (
         <div className="my-8 flex items-center gap-3 text-[12px] font-medium tracking-wide text-t-text-tertiary uppercase">
           <span className="h-px flex-1 bg-t-border" />
-          <IconLock size={14} /> Paid subscribers only below
+          <IconLock size={14} /> {t("preview.paywall")}
           <span className="h-px flex-1 bg-t-border" />
         </div>
       );
@@ -118,7 +121,7 @@ function Block({ node }: { node: PMNode }) {
       return (
         <div className="my-6 text-center">
           <span className="inline-block rounded-md bg-[var(--nl-accent)] px-5 py-2.5 font-sans text-[14px] font-semibold text-white">
-            {String(node.attrs?.text ?? BUTTON_LABELS[url] ?? "Button")}
+            {String(node.attrs?.text ?? (BUTTON_LABELS[url] ? t(`preview.buttons.${BUTTON_LABELS[url]}`) : t("preview.button")))}
           </span>
           {!BUTTON_LABELS[url] && <div className="mt-1 truncate text-[11px] text-t-text-light">{url}</div>}
         </div>
@@ -129,7 +132,7 @@ function Block({ node }: { node: PMNode }) {
         <div className="my-6 overflow-hidden rounded-md border border-t-border">
           <img
             src={`https://img.youtube.com/vi/${String(node.attrs?.videoId ?? "")}/hqdefault.jpg`}
-            alt="YouTube video"
+            alt={t("preview.youtube")}
             className="aspect-video w-full object-cover"
           />
           <div className="flex items-center gap-2 px-3 py-2 font-sans text-[12px] text-t-text-tertiary">
@@ -140,7 +143,7 @@ function Block({ node }: { node: PMNode }) {
     default:
       return (
         <div className="my-5 flex items-center gap-2 rounded-md border border-dashed border-t-border px-3 py-2 font-sans text-[12px] text-t-text-tertiary">
-          <IconPuzzle size={14} /> A Substack block ({node.type}) kept as it is
+          <IconPuzzle size={14} /> {t("preview.unknownBlock", { type: node.type })}
         </div>
       );
   }
@@ -161,19 +164,20 @@ export function PostPreview({
   publication?: string;
   coverImage?: string | null;
 }) {
+  const { t } = useTranslation("newsletter");
   return (
     <article
       className="mx-auto w-full max-w-[680px] px-6 py-8 font-serif text-[17px] leading-[1.65] text-t-text [--nl-accent:#FF6719]"
       style={{ fontFamily: "Georgia, 'Iowan Old Style', 'Times New Roman', serif" }}
     >
       {publication && <div className="mb-6 font-sans text-[12px] font-semibold tracking-wide text-t-text-tertiary uppercase">{publication}</div>}
-      <h1 className="text-[2em] leading-tight font-bold">{title || <span className="text-t-text-light">Title</span>}</h1>
+      <h1 className="text-[2em] leading-tight font-bold">{title || <span className="text-t-text-light">{t("preview.title")}</span>}</h1>
       {subtitle && <p className="mt-2 text-[1.15em] text-t-text-secondary">{subtitle}</p>}
       {author && <div className="mt-4 font-sans text-[13px] text-t-text-tertiary">{author}</div>}
       {coverImage && <img src={coverImage} alt="" className="mt-6 w-full rounded-sm" />}
       <div className="mt-6 border-t border-t-border-light pt-2">
         {doc.content.length === 0 ? (
-          <p className="my-4 text-t-text-light">Nothing written yet.</p>
+          <p className="my-4 text-t-text-light">{t("preview.empty")}</p>
         ) : (
           doc.content.map((node, i) => <Block key={i} node={node} />)
         )}

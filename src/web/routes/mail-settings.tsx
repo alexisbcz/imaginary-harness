@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Link } from "react-router";
 import { formatDistanceToNow } from "date-fns";
 import { cn } from "cn";
@@ -27,6 +28,7 @@ import { IconTile } from "@/components/icon-tile";
 import { Page } from "@/components/page";
 import { SimpleSelect } from "@/components/simple-select";
 import { api } from "@/lib/api";
+import { dateLocale } from "@/lib/i18n";
 import {
   download,
   updateAccount,
@@ -72,13 +74,15 @@ function Section({
   );
 }
 
+/** `label` says what it copies: "Copy the name". */
 function CopyButton({ value, label }: { value: string; label: string }) {
+  const { t: tc } = useTranslation("common");
   const [copied, setCopied] = useState(false);
   return (
     <LightIconButton
       size="xs"
-      aria-label={`Copy ${label}`}
-      tooltip={copied ? "Copied" : `Copy ${label}`}
+      aria-label={label}
+      tooltip={copied ? tc("copied") : label}
       onClick={() =>
         void navigator.clipboard.writeText(value).then(
           () => {
@@ -95,6 +99,7 @@ function CopyButton({ value, label }: { value: string; label: string }) {
 }
 
 function RecordRow({ record }: { record: DnsRecord }) {
+  const { t } = useTranslation("mail");
   const status = record.ok === undefined ? undefined : record.ok;
   return (
     <div className="grid grid-cols-[20px_52px_minmax(0,1fr)] items-start gap-x-2 gap-y-1 border-b border-t-border-light px-3 py-2.5 last:border-b-0">
@@ -129,10 +134,10 @@ function RecordRow({ record }: { record: DnsRecord }) {
           <code className="min-w-0 truncate font-mono text-[12px] text-t-text">
             {record.name}
           </code>
-          <CopyButton value={record.name} label="name" />
+          <CopyButton value={record.name} label={t("settings.copy.name")} />
           {!record.required && (
             <span className="text-[11px] text-t-text-tertiary">
-              recommended
+              {t("settings.records.recommended")}
             </span>
           )}
         </div>
@@ -140,15 +145,17 @@ function RecordRow({ record }: { record: DnsRecord }) {
           <code className="min-w-0 flex-1 rounded-sm bg-t-tertiary px-1.5 py-0.5 font-mono text-[11px] break-all text-t-text-secondary">
             {record.value}
           </code>
-          <CopyButton value={record.value} label="value" />
+          <CopyButton value={record.value} label={t("settings.copy.value")} />
         </div>
         <p className="text-[12px] text-t-text-tertiary">{record.purpose}</p>
         {record.ok === false && (
           <p className="text-[12px] text-[var(--t-color-amber11)]">
             {record.note ??
               (record.found?.length
-                ? `Found: ${record.found.join(" | ")}`
-                : "Not found yet. DNS changes can take a few minutes to show.")}
+                ? t("settings.records.found", {
+                    values: record.found.join(" | "),
+                  })
+                : t("settings.records.notFound"))}
           </p>
         )}
       </div>
@@ -163,6 +170,7 @@ function DomainCard({
   domain: MailDomain;
   onChanged: () => void;
 }) {
+  const { t } = useTranslation("mail");
   const [records, setRecords] = useState<DnsRecord[]>(() => {
     const last = (domain.checks as { checks?: DnsRecord[] }).checks;
     return last ?? domain.records;
@@ -194,23 +202,28 @@ function DomainCard({
         <span className="font-semibold text-t-text">{domain.name}</span>
         {domain.verified_at ? (
           <Tag color="green" variant="soft">
-            Verified
+            {t("settings.domain.verified")}
           </Tag>
         ) : (
           <Tag color="amber" variant="soft">
             {records.some((r) => r.ok !== undefined)
-              ? `${passing} of ${required.length} required records`
-              : "Waiting for DNS"}
+              ? t("settings.domain.passing", {
+                  passing,
+                  count: required.length,
+                })
+              : t("settings.domain.waiting")}
           </Tag>
         )}
         {domain.open && !owned && (
           <span className="text-[12px] text-t-text-tertiary">
-            server domain
+            {t("settings.domain.serverDomain")}
           </span>
         )}
         <div className="flex-1" />
         <Button size="sm" variant="ghost" onClick={() => setOpen((v) => !v)}>
-          {open ? "Hide records" : "DNS records"}
+          {open
+            ? t("settings.domain.hideRecords")
+            : t("settings.domain.showRecords")}
         </Button>
         <Button
           size="sm"
@@ -220,16 +233,20 @@ function DomainCard({
           startIcon={<IconRefresh size={14} />}
           onClick={() => void check()}
         >
-          Check DNS
+          {t("settings.domain.check")}
         </Button>
       </div>
       {open && (
         <>
           <div className="border-t border-t-border-light bg-t-secondary px-3 py-2 text-[12px] text-t-text-tertiary">
-            Add these records at your DNS provider. The required ones let the
-            domain send; the others help mail apps and other servers.
+            {t("settings.domain.help")}
             {domain.checked_at &&
-              ` Last checked ${formatDistanceToNow(new Date(domain.checked_at))} ago.`}
+              ` ${t("settings.domain.lastChecked", {
+                when: formatDistanceToNow(new Date(domain.checked_at), {
+                  addSuffix: true,
+                  locale: dateLocale(),
+                }),
+              })}`}
           </div>
           <div className="border-t border-t-border-light">
             {records.map((record) => (
@@ -249,7 +266,7 @@ function DomainCard({
                   )
                 }
               >
-                Zone file
+                {t("settings.domain.zoneFile")}
               </Button>
               <Button
                 size="sm"
@@ -265,7 +282,7 @@ function DomainCard({
                   })
                 }
               >
-                New DKIM key
+                {t("settings.domain.newDkim")}
               </Button>
               <div className="flex-1" />
               <Button
@@ -276,7 +293,9 @@ function DomainCard({
                 onClick={() => {
                   if (
                     confirm(
-                      `Remove ${domain.name}? Its addresses and their mail are deleted.`,
+                      t("settings.domain.removeConfirm", {
+                        domain: domain.name,
+                      }),
                     )
                   )
                     void supabase
@@ -286,7 +305,7 @@ function DomainCard({
                       .then(onChanged);
                 }}
               >
-                Remove
+                {t("settings.domain.remove")}
               </Button>
             </div>
           )}
@@ -303,6 +322,7 @@ function AccountRow({
   account: MailAccount;
   domains: MailDomain[];
 }) {
+  const { t } = useTranslation("mail");
   const [name, setName] = useState(account.display_name);
   useEffect(() => setName(account.display_name), [account.display_name]);
   const domain = domains.find((d) => d.id === account.domain_id);
@@ -312,7 +332,7 @@ function AccountRow({
         <span className="font-semibold text-t-text">{account.address}</span>
         {domain && !domain.verified_at && (
           <Tag color="amber" variant="soft">
-            Receives only until {domain.name} is verified
+            {t("settings.account.receivesOnly", { domain: domain.name })}
           </Tag>
         )}
         <div className="flex-1" />
@@ -327,13 +347,13 @@ function AccountRow({
             )
           }
         >
-          Apple profile
+          {t("settings.account.appleProfile")}
         </Button>
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="flex flex-col gap-1">
           <span className="text-[12px] font-medium text-t-text-tertiary">
-            Name on sent mail
+            {t("settings.account.displayName")}
           </span>
           <Input
             size="sm"
@@ -343,24 +363,27 @@ function AccountRow({
               name !== account.display_name &&
               void updateAccount(account.id, { display_name: name.trim() })
             }
-            placeholder="Ada Lovelace"
+            placeholder={t("settings.account.displayNamePlaceholder")}
           />
         </label>
         <div className="flex flex-col gap-1">
           <span className="text-[12px] font-medium text-t-text-tertiary">
-            The agent, on new mail
+            {t("settings.account.agent")}
           </span>
           <SegmentedControl<MailAccount["assistant"]>
-            aria-label="Assistant"
+            aria-label={t("settings.account.assistant")}
             size="sm"
             value={account.assistant}
             onValueChange={(assistant) =>
               void updateAccount(account.id, { assistant })
             }
             options={[
-              { value: "off", label: "Off" },
-              { value: "summarize", label: "Summarize" },
-              { value: "draft", label: "Draft replies" },
+              { value: "off", label: t("settings.account.assistantOff") },
+              {
+                value: "summarize",
+                label: t("settings.account.assistantSummarize"),
+              },
+              { value: "draft", label: t("settings.account.assistantDraft") },
             ]}
           />
         </div>
@@ -375,8 +398,9 @@ function AccountRow({
         >
           <Switch.Thumb />
         </Switch.Root>
-        Also receive mail sent to unknown addresses at{" "}
-        {domain?.name ?? "this domain"}
+        {t("settings.account.catchAll", {
+          domain: domain?.name ?? t("settings.account.thisDomain"),
+        })}
       </label>
     </div>
   );
@@ -389,6 +413,8 @@ function AppPasswords({
   server: MailServer | null;
   accounts: MailAccount[];
 }) {
+  const { t } = useTranslation("mail");
+  const { t: tc } = useTranslation("common");
   const [passwords, setPasswords] = useState<
     | {
         id: string;
@@ -416,7 +442,7 @@ function AppPasswords({
     try {
       const { password } = await api<{ password: string }>(
         "/api/mail/app-passwords",
-        { body: { name: name || "Mail client" } },
+        { body: { name: name || t("settings.apps.defaultName") } },
       );
       setCreated(password);
       setName("");
@@ -426,21 +452,38 @@ function AppPasswords({
     }
   }
 
-  const rows: [string, string][] = server
+  // Each row: its label, its value, and its copy button's label (none for the password, which is not here).
+  const rows: [string, string, string | null][] = server
     ? [
-        ["Username", accounts[0]?.address ?? "your address"],
-        ["IMAP", `${server.hostname}, port ${server.ports.imaps} (SSL/TLS)`],
+        [
+          t("settings.apps.username"),
+          accounts[0]?.address ?? t("settings.apps.yourAddress"),
+          t("settings.copy.username"),
+        ],
+        [
+          "IMAP",
+          t("settings.apps.imapValue", {
+            host: server.hostname,
+            port: server.ports.imaps,
+          }),
+          t("settings.copy.imap"),
+        ],
         [
           "SMTP",
-          `${server.hostname}, port ${server.ports.submissions} (SSL/TLS) or ${server.ports.submission} (STARTTLS)`,
+          t("settings.apps.smtpValue", {
+            host: server.hostname,
+            port: server.ports.submissions,
+            submission: server.ports.submission,
+          }),
+          t("settings.copy.smtp"),
         ],
-        ["Password", "an app password, below"],
+        [t("settings.apps.password"), t("settings.apps.passwordValue"), null],
       ]
     : [];
   return (
     <div className="flex flex-col gap-3">
       <div className="overflow-hidden rounded-lg border border-t-border">
-        {rows.map(([label, value]) => (
+        {rows.map(([label, value, copyLabel]) => (
           <div
             key={label}
             className="flex items-center gap-3 border-b border-t-border-light px-3 py-2 last:border-b-0"
@@ -451,8 +494,8 @@ function AppPasswords({
             <span className="min-w-0 flex-1 truncate font-mono text-[12px] text-t-text">
               {value}
             </span>
-            {label !== "Password" && (
-              <CopyButton value={value.split(",")[0]!} label={label} />
+            {copyLabel && (
+              <CopyButton value={value.split(",")[0]!} label={copyLabel} />
             )}
           </div>
         ))}
@@ -465,8 +508,13 @@ function AppPasswords({
             <span className="text-t-text">{p.name}</span>
             <span className="flex-1 text-[12px] text-t-text-tertiary">
               {p.last_used_at
-                ? `used ${formatDistanceToNow(new Date(p.last_used_at))} ago`
-                : "never used"}
+                ? t("settings.apps.usedAgo", {
+                    when: formatDistanceToNow(new Date(p.last_used_at), {
+                      addSuffix: true,
+                      locale: dateLocale(),
+                    }),
+                  })
+                : t("settings.apps.neverUsed")}
             </span>
             <Button
               size="sm"
@@ -480,7 +528,7 @@ function AppPasswords({
                   .then(load)
               }
             >
-              Revoke
+              {t("settings.apps.revoke")}
             </Button>
           </div>
         ))}
@@ -488,14 +536,14 @@ function AppPasswords({
       <form onSubmit={create} className="flex gap-2">
         <Input
           size="sm"
-          aria-label="Device name"
-          placeholder="iPhone, Thunderbird…"
+          aria-label={t("settings.apps.deviceName")}
+          placeholder={t("settings.apps.devicePlaceholder")}
           value={name}
           onChange={(e) => setName(e.target.value)}
           className="max-w-[260px]"
         />
         <Button type="submit" size="sm" variant="outline" loading={creating}>
-          Create an app password
+          {t("settings.apps.create")}
         </Button>
       </form>
       <Dialog.Root
@@ -507,25 +555,27 @@ function AppPasswords({
           <Dialog.Viewport>
             <Dialog.Popup size="sm">
               <Dialog.Header>
-                <Dialog.Title>Your app password</Dialog.Title>
+                <Dialog.Title>{t("settings.apps.createdTitle")}</Dialog.Title>
               </Dialog.Header>
               <Dialog.Body className="flex flex-col gap-3">
                 <p className="text-t-text-secondary">
-                  Type it in your mail app as the password. It is shown once;
-                  revoke it here when the device is gone.
+                  {t("settings.apps.createdBody")}
                 </p>
                 <div className="flex items-center gap-2 rounded-md bg-t-tertiary px-3 py-2">
                   <code className="flex-1 font-mono text-[16px] tracking-wider text-t-text">
                     {created}
                   </code>
-                  <CopyButton value={created ?? ""} label="password" />
+                  <CopyButton
+                    value={created ?? ""}
+                    label={t("settings.copy.password")}
+                  />
                 </div>
               </Dialog.Body>
               <Dialog.Footer>
                 <Dialog.Close
                   render={<Button variant="solid" color="accent" />}
                 >
-                  Done
+                  {tc("done")}
                 </Dialog.Close>
               </Dialog.Footer>
             </Dialog.Popup>
@@ -537,6 +587,7 @@ function AppPasswords({
 }
 
 export function MailSettings() {
+  const { t } = useTranslation("mail");
   const { accounts } = useMailAccounts();
   const [domains, setDomains] = useState<MailDomain[] | null>(null);
   const [server, setServer] = useState<MailServer | null>(null);
@@ -573,7 +624,7 @@ export function MailSettings() {
 
   return (
     <Page
-      title="Mail settings"
+      title={t("settings.title")}
       icon={
         <IconTile color="blue">
           <IconSettings />
@@ -587,7 +638,7 @@ export function MailSettings() {
           nativeButton={false}
           render={<Link to="/mail" />}
         >
-          Inbox
+          {t("settings.inbox")}
         </Button>
       }
     >
@@ -602,8 +653,8 @@ export function MailSettings() {
           <Section
             icon={<IconMail />}
             color="blue"
-            title="Addresses"
-            description="Each address has its own folders. Mail to name+anything@ arrives at name@."
+            title={t("settings.addresses.title")}
+            description={t("settings.addresses.description")}
           >
             {accounts === null ? (
               <Loader />
@@ -627,7 +678,7 @@ export function MailSettings() {
               >
                 <Input
                   size="sm"
-                  aria-label="New address"
+                  aria-label={t("settings.addresses.newAddress")}
                   placeholder="hello"
                   value={local}
                   onChange={(e) => setLocal(e.target.value.toLowerCase())}
@@ -636,7 +687,7 @@ export function MailSettings() {
                 />
                 <span className="text-t-text-tertiary">@</span>
                 <SimpleSelect
-                  label="Domain"
+                  label={t("settings.addresses.domain")}
                   value={domainForAddress}
                   onValueChange={setDomainForAddress}
                   options={domains.map((d) => ({
@@ -651,7 +702,7 @@ export function MailSettings() {
                   variant="outline"
                   loading={busy === "address"}
                 >
-                  Add the address
+                  {t("settings.addresses.add")}
                 </Button>
               </form>
             )}
@@ -660,8 +711,8 @@ export function MailSettings() {
           <Section
             icon={<IconWorld />}
             color="green"
-            title="Domains"
-            description="Receive and send mail at your own domain. Richelieu signs it with DKIM; the records below prove it is yours."
+            title={t("settings.domains.title")}
+            description={t("settings.domains.description")}
           >
             {domains === null ? (
               <Loader />
@@ -687,7 +738,7 @@ export function MailSettings() {
             >
               <Input
                 size="sm"
-                aria-label="Domain"
+                aria-label={t("settings.domains.domain")}
                 placeholder="example.com"
                 value={newDomain}
                 onChange={(e) => setNewDomain(e.target.value)}
@@ -700,7 +751,7 @@ export function MailSettings() {
                 variant="outline"
                 loading={busy === "domain"}
               >
-                Add a domain
+                {t("settings.domains.add")}
               </Button>
             </form>
           </Section>
@@ -708,8 +759,8 @@ export function MailSettings() {
           <Section
             icon={<IconKey />}
             color="purple"
-            title="Mail apps"
-            description="Apple Mail, Outlook, Thunderbird and phones connect over IMAP and SMTP with an app password, never your Richelieu password."
+            title={t("settings.mailApps.title")}
+            description={t("settings.mailApps.description")}
           >
             <AppPasswords server={server} accounts={accounts ?? []} />
           </Section>
@@ -717,8 +768,8 @@ export function MailSettings() {
           <Section
             icon={<IconServer />}
             color="orange"
-            title="Server"
-            description="The machine that sends and receives the mail."
+            title={t("settings.server.title")}
+            description={t("settings.server.description")}
             actions={
               <Button
                 size="sm"
@@ -738,23 +789,29 @@ export function MailSettings() {
                   )
                 }
               >
-                Check
+                {t("settings.server.check")}
               </Button>
             }
           >
             {server ? (
               <div className="flex flex-col gap-3">
                 <div className="grid grid-cols-[120px_minmax(0,1fr)] gap-x-3 gap-y-1.5 rounded-lg border border-t-border px-3 py-2.5 text-[13px]">
-                  <span className="text-t-text-tertiary">Hostname</span>
+                  <span className="text-t-text-tertiary">
+                    {t("settings.server.hostname")}
+                  </span>
                   <span className="font-mono text-t-text">
                     {server.hostname}
                   </span>
-                  <span className="text-t-text-tertiary">Addresses</span>
+                  <span className="text-t-text-tertiary">
+                    {t("settings.server.addresses")}
+                  </span>
                   <span className="font-mono text-t-text">
                     {server.addresses.join(", ") ||
-                      "unknown: set MAIL_PUBLIC_IP"}
+                      t("settings.server.unknownAddresses")}
                   </span>
-                  <span className="text-t-text-tertiary">Certificate</span>
+                  <span className="text-t-text-tertiary">
+                    {t("settings.server.certificate")}
+                  </span>
                   <span
                     className={cn(
                       "text-t-text",
@@ -762,16 +819,28 @@ export function MailSettings() {
                     )}
                   >
                     {server.certificate
-                      ? `${server.certificate.selfSigned ? "Self-signed" : (server.certificate.issuer.match(/CN=([^,]+)/)?.[1] ?? "Issued")}, expires ${formatDistanceToNow(new Date(server.certificate.expiresAt), { addSuffix: true })}`
+                      ? t("settings.server.expires", {
+                          issuer: server.certificate.selfSigned
+                            ? t("settings.server.selfSigned")
+                            : (server.certificate.issuer.match(
+                                /CN=([^,]+)/,
+                              )?.[1] ?? t("settings.server.issued")),
+                          when: formatDistanceToNow(
+                            new Date(server.certificate.expiresAt),
+                            { addSuffix: true, locale: dateLocale() },
+                          ),
+                        })
                       : server.tls === "off"
-                        ? "TLS is off"
-                        : "None in this process (the mail server runs elsewhere, or is starting)"}
+                        ? t("settings.server.tlsOff")
+                        : t("settings.server.noCertificate")}
                   </span>
-                  <span className="text-t-text-tertiary">Outgoing</span>
+                  <span className="text-t-text-tertiary">
+                    {t("settings.server.outgoing")}
+                  </span>
                   <span className="text-t-text">
                     {server.relay
-                      ? `through ${server.relay}`
-                      : "straight to each recipient's server (port 25)"}
+                      ? t("settings.server.through", { relay: server.relay })
+                      : t("settings.server.direct")}
                   </span>
                 </div>
                 {(hostChecks ?? server.host).length > 0 && (

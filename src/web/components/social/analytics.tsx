@@ -3,6 +3,7 @@
 
 import { useMemo, useState } from "react";
 import { Link } from "react-router";
+import { Trans, useTranslation } from "react-i18next";
 import { formatDistanceToNow, format } from "date-fns";
 import { cn } from "cn";
 import { SegmentedControl } from "twenty-ui/components/input";
@@ -33,31 +34,32 @@ import {
   type AnalyzedPost,
   type BrandViewProps,
 } from "@/lib/social";
+import { dateLocale, intlLocale } from "@/lib/i18n";
 
-const PERIODS = [
-  { value: "7", label: "7 days" },
-  { value: "30", label: "30 days" },
-  { value: "90", label: "90 days" },
-] as const;
+/** The periods, in days; their labels are `analytics.period`. */
+const PERIODS = ["7", "30", "90"] as const;
 
-const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-const WEEKDAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
-/** Four-hour buckets: a heatmap a person can read at a glance. */
+/** A weekday's name (0 = Monday), in the current language. */
+const weekdayName = (index: number, weekday: "short" | "long") =>
+  new Intl.DateTimeFormat(intlLocale(), { weekday, timeZone: "UTC" }).format(new Date(Date.UTC(2024, 0, 1 + index, 12)));
+const WEEKDAY_INDEXES = [0, 1, 2, 3, 4, 5, 6];
+/** Four-hour buckets: a heatmap a person can read at a glance. `part` names the key of "Monday mornings". */
 const BUCKETS = [
   { from: 0, label: "0–4", part: "nights" },
-  { from: 4, label: "4–8", part: "early mornings" },
+  { from: 4, label: "4–8", part: "earlyMornings" },
   { from: 8, label: "8–12", part: "mornings" },
   { from: 12, label: "12–16", part: "afternoons" },
   { from: 16, label: "16–20", part: "evenings" },
-  { from: 20, label: "20–24", part: "late evenings" },
-];
+  { from: 20, label: "20–24", part: "lateEvenings" },
+] as const;
 
 /** The change from `previous` to `current`, as a ratio; null when there is nothing to compare with. */
 const change = (current: number, previous: number) => (previous > 0 ? (current - previous) / previous : null);
 
-function Delta({ value, suffix = "vs previous period" }: { value: number | null; suffix?: string }) {
-  if (value === null) return <span className="text-t-text-light">No earlier data</span>;
-  if (Math.abs(value) < 0.0005) return <span className="truncate text-t-text-light">Same as the previous period</span>;
+function Delta({ value, suffix }: { value: number | null; suffix?: string }) {
+  const { t } = useTranslation("social");
+  if (value === null) return <span className="text-t-text-light">{t("analytics.delta.none")}</span>;
+  if (Math.abs(value) < 0.0005) return <span className="truncate text-t-text-light">{t("analytics.delta.same")}</span>;
   const up = value > 0;
   const Arrow = up ? IconArrowUpRight : IconArrowDownRight;
   return (
@@ -69,9 +71,9 @@ function Delta({ value, suffix = "vs previous period" }: { value: number | null;
         )}
       >
         <Arrow size={13} />
-        {Math.abs(value * 100).toFixed(Math.abs(value) < 0.1 ? 1 : 0)}%
+        {percent(Math.abs(value), Math.abs(value) < 0.1 ? 1 : 0)}
       </span>
-      <span className="truncate text-t-text-light">{suffix}</span>
+      <span className="truncate text-t-text-light">{suffix ?? t("analytics.delta.vsPrevious")}</span>
     </span>
   );
 }
@@ -118,10 +120,11 @@ function Kpis({ analytics }: { analytics: Analytics }) {
   const previousRate = previous.impressions > 0 ? previous.engagements / previous.impressions : null;
   const growth = totals.followers_growth;
   const start = totals.followers - growth;
+  const { t } = useTranslation("social");
   return (
     <div className="grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-5">
       <StatTile
-        label="Followers"
+        label={t("analytics.kpis.followers")}
         value={compact(totals.followers)}
         footer={
           <span
@@ -134,38 +137,43 @@ function Kpis({ analytics }: { analytics: Analytics }) {
                   : "text-t-text-light",
             )}
           >
-            {growth > 0 ? "+" : ""}
-            {compact(growth)}
-            {start > 0 && growth !== 0 ? ` (${growth > 0 ? "+" : ""}${((growth / start) * 100).toFixed(1)}%)` : ""}
-            <span className="font-normal text-t-text-light"> in {analytics.days} days</span>
+            <Trans
+              t={t}
+              i18nKey="analytics.kpis.growthIn"
+              values={{
+                growth: `${growth > 0 ? "+" : ""}${compact(growth)}${start > 0 && growth !== 0 ? ` (${growth > 0 ? "+" : ""}${percent(growth / start, 1)})` : ""}`,
+                count: analytics.days,
+              }}
+              components={{ light: <span className="font-normal text-t-text-light" /> }}
+            />
           </span>
         }
       />
       <StatTile
-        label="Impressions"
+        label={t("analytics.kpis.impressions")}
         value={compact(totals.impressions)}
         footer={<Delta value={change(totals.impressions, previous.impressions)} />}
       />
       <StatTile
-        label="Engagements"
+        label={t("analytics.kpis.engagements")}
         value={compact(totals.engagements)}
         footer={<Delta value={change(totals.engagements, previous.engagements)} />}
       />
       <StatTile
-        label="Engagement rate"
+        label={t("analytics.kpis.rate")}
         value={percent(totals.engagement_rate)}
         footer={
           totals.engagement_rate !== null && previousRate !== null ? (
             <span className="text-t-text-light tabular-nums">
-              {percent(previousRate)} the period before
+              {t("analytics.kpis.periodBefore", { rate: percent(previousRate) })}
             </span>
           ) : (
-            <span className="text-t-text-light">Engagements per impression</span>
+            <span className="text-t-text-light">{t("analytics.kpis.rateHint")}</span>
           )
         }
       />
       <StatTile
-        label="Posts published"
+        label={t("analytics.kpis.posts")}
         value={String(totals.posts)}
         footer={<Delta value={change(totals.posts, previous.posts)} />}
       />
@@ -181,11 +189,12 @@ function FollowerChart({ analytics }: { analytics: Analytics }) {
     [accounts],
   );
   const [selected, setSelected] = useState<string | null>(null);
+  const { t } = useTranslation("social");
   const account = ordered.find((a) => a.id === selected) ?? ordered[0];
   if (!account) return null;
 
   const color = `var(--t-color-${platformColor(account.platform) === "gray" ? "iris" : platformColor(account.platform)}9)`;
-  const config = { followers: { label: "Followers", color } } satisfies ChartConfig;
+  const config = { followers: { label: t("analytics.kpis.followers"), color } } satisfies ChartConfig;
   const series = account.series.length
     ? account.series
     : account.followers !== null
@@ -198,8 +207,12 @@ function FollowerChart({ analytics }: { analytics: Analytics }) {
 
   return (
     <Section
-      title="Follower growth"
-      description={`${account.name} on ${platformInfo(account.platform).label}, last ${analytics.days} days`}
+      title={t("analytics.followers.title")}
+      description={t("analytics.followers.description", {
+        account: account.name,
+        platform: platformInfo(account.platform).label,
+        count: analytics.days,
+      })}
       className="xl:col-span-2"
     >
       {ordered.length > 1 && (
@@ -233,12 +246,12 @@ function FollowerChart({ analytics }: { analytics: Analytics }) {
         </div>
       )}
       {series.length === 0 ? (
-        <p className="py-10 text-center text-t-text-tertiary">No follower history yet for this account.</p>
+        <p className="py-10 text-center text-t-text-tertiary">{t("analytics.followers.empty")}</p>
       ) : (
         <>
           <div className="flex items-baseline gap-2">
             <span className="text-[20px] font-semibold text-t-text tabular-nums">
-              {(account.followers ?? 0).toLocaleString()}
+              {(account.followers ?? 0).toLocaleString(intlLocale())}
             </span>
             <span
               className={cn(
@@ -251,7 +264,7 @@ function FollowerChart({ analytics }: { analytics: Analytics }) {
               )}
             >
               {account.growth > 0 ? "+" : ""}
-              {account.growth.toLocaleString()} ({account.growth_percentage.toFixed(1)}%)
+              {account.growth.toLocaleString(intlLocale())} ({percent(account.growth_percentage / 100, 1)})
             </span>
           </div>
           <ChartContainer config={config} className="aspect-auto h-[220px] w-full">
@@ -268,7 +281,7 @@ function FollowerChart({ analytics }: { analytics: Analytics }) {
                 tickLine={false}
                 axisLine={false}
                 minTickGap={28}
-                tickFormatter={(value: string) => format(new Date(`${value}T00:00:00`), "d MMM")}
+                tickFormatter={(value: string) => format(new Date(`${value}T00:00:00`), "d MMM", { locale: dateLocale() })}
               />
               <YAxis
                 width={44}
@@ -281,11 +294,13 @@ function FollowerChart({ analytics }: { analytics: Analytics }) {
                 cursor={false}
                 content={
                   <ChartTooltipContent
-                    labelFormatter={(value) => format(new Date(`${String(value)}T00:00:00`), "EEE d MMM yyyy")}
+                    labelFormatter={(value) =>
+                      format(new Date(`${String(value)}T00:00:00`), "EEE d MMM yyyy", { locale: dateLocale() })
+                    }
                     formatter={(value) => (
                       <span className="flex w-full justify-between gap-4">
-                        <span className="text-muted-foreground">Followers</span>
-                        <span className="font-medium tabular-nums">{Number(value).toLocaleString()}</span>
+                        <span className="text-muted-foreground">{t("analytics.kpis.followers")}</span>
+                        <span className="font-medium tabular-nums">{Number(value).toLocaleString(intlLocale())}</span>
                       </span>
                     )}
                   />
@@ -309,8 +324,9 @@ function FollowerChart({ analytics }: { analytics: Analytics }) {
 }
 
 function BestTimes({ analytics }: { analytics: Analytics }) {
+  const { t } = useTranslation("social");
   const grid = useMemo(() => {
-    const cells = WEEKDAYS.map(() => BUCKETS.map(() => ({ posts: 0, engagements: 0 })));
+    const cells = WEEKDAY_INDEXES.map(() => BUCKETS.map(() => ({ posts: 0, engagements: 0 })));
     for (const slot of analytics.best_times) {
       const bucket = Math.min(5, Math.floor(slot.hour / 4));
       const cell = cells[slot.weekday]?.[bucket];
@@ -333,15 +349,19 @@ function BestTimes({ analytics }: { analytics: Analytics }) {
 
   return (
     <Section
-      title="Best time to post"
+      title={t("analytics.bestTimes.title")}
       description={
         top && max > 0
-          ? `Your posts do best on ${WEEKDAY_NAMES[top.weekday]} ${BUCKETS[top.bucket]!.part} (${top.avg.toFixed(1)} engagements a post), in ${analytics.days * 2} days of posts.`
-          : "Average engagements per post, by weekday and time, in the brand's time zone."
+          ? t("analytics.bestTimes.best", {
+              when: t(`analytics.bestTimes.parts.${BUCKETS[top.bucket]!.part}`, { day: weekdayName(top.weekday, "long") }),
+              avg: top.avg.toLocaleString(intlLocale(), { minimumFractionDigits: 1, maximumFractionDigits: 1 }),
+              days: analytics.days * 2,
+            })
+          : t("analytics.bestTimes.description")
       }
     >
       {total === 0 ? (
-        <p className="py-6 text-center text-t-text-tertiary">Publish a few posts to see when they do best.</p>
+        <p className="py-6 text-center text-t-text-tertiary">{t("analytics.bestTimes.empty")}</p>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full min-w-[320px] border-separate border-spacing-1 text-[11px]">
@@ -357,9 +377,9 @@ function BestTimes({ analytics }: { analytics: Analytics }) {
             </thead>
             <tbody>
               {grid.map((row, weekday) => (
-                <tr key={WEEKDAYS[weekday]}>
+                <tr key={weekday}>
                   <th scope="row" className="pr-1 text-left font-normal text-t-text-tertiary">
-                    {WEEKDAYS[weekday]}
+                    {weekdayName(weekday, "short")}
                   </th>
                   {row.map((cell, bucket) => {
                     const strength = cell.avg !== null && max > 0 ? cell.avg / max : 0;
@@ -368,8 +388,13 @@ function BestTimes({ analytics }: { analytics: Analytics }) {
                         key={bucket}
                         title={
                           cell.posts
-                            ? `${WEEKDAY_NAMES[weekday]} ${BUCKETS[bucket]!.label}h: ${cell.avg!.toFixed(1)} engagements a post over ${cell.posts} post${cell.posts > 1 ? "s" : ""}`
-                            : `${WEEKDAY_NAMES[weekday]} ${BUCKETS[bucket]!.label}h: no posts`
+                            ? t("analytics.bestTimes.cell", {
+                                day: weekdayName(weekday, "long"),
+                                hours: BUCKETS[bucket]!.label,
+                                avg: cell.avg!.toLocaleString(intlLocale(), { minimumFractionDigits: 1, maximumFractionDigits: 1 }),
+                                count: cell.posts,
+                              })
+                            : t("analytics.bestTimes.cellEmpty", { day: weekdayName(weekday, "long"), hours: BUCKETS[bucket]!.label })
                         }
                         className="h-7 rounded-[4px] text-center tabular-nums"
                         style={{
@@ -379,7 +404,12 @@ function BestTimes({ analytics }: { analytics: Analytics }) {
                           color: strength > 0.55 ? "white" : undefined,
                         }}
                       >
-                        {cell.posts ? cell.avg!.toFixed(cell.avg! >= 10 ? 0 : 1) : ""}
+                        {cell.posts
+                          ? cell.avg!.toLocaleString(intlLocale(), {
+                              minimumFractionDigits: cell.avg! >= 10 ? 0 : 1,
+                              maximumFractionDigits: cell.avg! >= 10 ? 0 : 1,
+                            })
+                          : ""}
                       </td>
                     );
                   })}
@@ -396,10 +426,11 @@ function BestTimes({ analytics }: { analytics: Analytics }) {
 function ByPlatform({ analytics }: { analytics: Analytics }) {
   const rows = [...analytics.by_platform].sort((a, b) => b.engagements - a.engagements);
   const max = Math.max(1, ...rows.map((r) => r.impressions));
+  const { t } = useTranslation("social");
   return (
-    <Section title="By platform" description={`Last ${analytics.days} days`}>
+    <Section title={t("analytics.byPlatform.title")} description={t("analytics.byPlatform.description", { count: analytics.days })}>
       {rows.length === 0 ? (
-        <p className="py-6 text-center text-t-text-tertiary">No posts in this period.</p>
+        <p className="py-6 text-center text-t-text-tertiary">{t("analytics.byPlatform.empty")}</p>
       ) : (
         <div className="flex flex-col gap-3">
           {rows.map((row) => (
@@ -408,7 +439,7 @@ function ByPlatform({ analytics }: { analytics: Analytics }) {
                 <PlatformGlyph platform={row.platform} className="text-t-text-secondary" />
                 <span className="flex-1 font-medium text-t-text">{platformInfo(row.platform).label}</span>
                 <span className="text-[12px] text-t-text-tertiary tabular-nums">
-                  {row.posts} post{row.posts === 1 ? "" : "s"} · {compact(row.engagements)} eng.
+                  {t("analytics.byPlatform.summary", { count: row.posts, engagements: compact(row.engagements) })}
                 </span>
               </div>
               <div className="h-1.5 overflow-hidden rounded-full bg-t-tertiary">
@@ -421,8 +452,12 @@ function ByPlatform({ analytics }: { analytics: Analytics }) {
                 />
               </div>
               <span className="text-[11px] text-t-text-light tabular-nums">
-                {compact(row.impressions)} impressions
-                {row.impressions > 0 ? ` · ${percent(row.engagements / row.impressions)} engagement` : ""}
+                {row.impressions > 0
+                  ? t("analytics.byPlatform.impressionsRate", {
+                      impressions: compact(row.impressions),
+                      rate: percent(row.engagements / row.impressions),
+                    })
+                  : t("analytics.byPlatform.impressions", { impressions: compact(row.impressions) })}
               </span>
             </div>
           ))}
@@ -434,15 +469,11 @@ function ByPlatform({ analytics }: { analytics: Analytics }) {
 
 type SortKey = "published_at" | "impressions" | "likes" | "comments" | "shares" | "engagement_rate";
 
-const COLUMNS: { key: SortKey; label: string }[] = [
-  { key: "impressions", label: "Impr." },
-  { key: "likes", label: "Likes" },
-  { key: "comments", label: "Comm." },
-  { key: "shares", label: "Shares" },
-  { key: "engagement_rate", label: "Eng. rate" },
-];
+/** The sortable number columns; their labels are `analytics.posts.columns.<key>`. */
+const COLUMNS = ["impressions", "likes", "comments", "shares", "engagement_rate"] as const satisfies SortKey[];
 
 function TopPosts({ posts, onAsk }: { posts: AnalyzedPost[]; onAsk: (message: string) => void }) {
+  const { t } = useTranslation("social");
   const [sort, setSort] = useState<{ key: SortKey; desc: boolean }>({ key: "impressions", desc: true });
   const sorted = useMemo(() => {
     const value = (p: AnalyzedPost) =>
@@ -475,15 +506,15 @@ function TopPosts({ posts, onAsk }: { posts: AnalyzedPost[]; onAsk: (message: st
   };
 
   return (
-    <Section title="Posts" description="Every post published in the period. Click a column to sort.">
+    <Section title={t("analytics.posts.title")} description={t("analytics.posts.description")}>
       <div className="-mx-4 overflow-x-auto">
         <table className="w-full min-w-[760px] text-[13px]">
           <thead className="border-b border-t-border-light text-[12px]">
             <tr>
               <th className="w-4" />
-              {header("published_at", "Date", "left")}
-              <th className="px-2 py-2 text-left font-medium text-t-text-tertiary">Post</th>
-              {COLUMNS.map((c) => header(c.key, c.label))}
+              {header("published_at", t("analytics.posts.columns.date"), "left")}
+              <th className="px-2 py-2 text-left font-medium text-t-text-tertiary">{t("analytics.posts.columns.post")}</th>
+              {COLUMNS.map((c) => header(c, t(`analytics.posts.columns.${c}`)))}
               <th className="w-4" />
             </tr>
           </thead>
@@ -492,15 +523,15 @@ function TopPosts({ posts, onAsk }: { posts: AnalyzedPost[]; onAsk: (message: st
               <tr key={post.id} className="group border-b border-t-border-light last:border-0 hover:bg-t-hover">
                 <td />
                 <td className="px-2 py-2.5 align-top whitespace-nowrap text-t-text-secondary tabular-nums">
-                  {format(new Date(post.published_at), "d MMM")}
+                  {format(new Date(post.published_at), "d MMM", { locale: dateLocale() })}
                   <div className="mt-1 flex gap-1 text-t-text-tertiary">
                     {post.platforms.map((p) => (
                       <PlatformGlyph key={p} platform={p} size={13} />
                     ))}
                   </div>
                   {post.imported && (
-                    <span className="mt-1 block text-[10px] text-t-text-light" title="Published outside Richelieu, imported by its link">
-                      imported
+                    <span className="mt-1 block text-[10px] text-t-text-light" title={t("analytics.posts.importedHint")}>
+                      {t("analytics.posts.imported")}
                     </span>
                   )}
                 </td>
@@ -516,7 +547,7 @@ function TopPosts({ posts, onAsk }: { posts: AnalyzedPost[]; onAsk: (message: st
                       />
                     )}
                     <div className="flex min-w-0 flex-col gap-1">
-                      <p className="line-clamp-2 leading-[1.45] text-t-text">{post.content || "(no text)"}</p>
+                      <p className="line-clamp-2 leading-[1.45] text-t-text">{post.content || t("calendar.noText")}</p>
                       <div className="flex gap-3 text-[12px] opacity-70 group-hover:opacity-100 [@media(hover:none)]:opacity-100">
                         {post.url && (
                           <a
@@ -525,7 +556,7 @@ function TopPosts({ posts, onAsk }: { posts: AnalyzedPost[]; onAsk: (message: st
                             rel="noreferrer"
                             className="inline-flex items-center gap-1 text-t-text-tertiary hover:text-t-text"
                           >
-                            <IconExternalLink size={12} /> View
+                            <IconExternalLink size={12} /> {t("analytics.posts.view")}
                           </a>
                         )}
                         <button
@@ -533,11 +564,18 @@ function TopPosts({ posts, onAsk }: { posts: AnalyzedPost[]; onAsk: (message: st
                           className="inline-flex items-center gap-1 text-t-text-tertiary hover:text-t-text"
                           onClick={() =>
                             onAsk(
-                              `Write 3 new post ideas in the spirit of this post that did well (${compact(post.impressions || post.views)} impressions, ${post.likes} likes, ${post.comments} comments, ${post.shares} shares on ${post.platforms.map((p) => platformInfo(p).label).join(", ")}). Keep what made it work, change the topic and angle, and put them on the calendar as drafts:\n\n"""\n${post.content}\n"""`,
+                              t("analytics.posts.morePrompt", {
+                                impressions: compact(post.impressions || post.views),
+                                likes: post.likes,
+                                comments: post.comments,
+                                shares: post.shares,
+                                platforms: post.platforms.map((p) => platformInfo(p).label).join(", "),
+                                content: post.content,
+                              }),
                             )
                           }
                         >
-                          <IconSparkles size={12} /> Write more like this
+                          <IconSparkles size={12} /> {t("analytics.posts.more")}
                         </button>
                       </div>
                     </div>
@@ -561,8 +599,9 @@ function TopPosts({ posts, onAsk }: { posts: AnalyzedPost[]; onAsk: (message: st
 }
 
 function Loading() {
+  const { t } = useTranslation("social");
   return (
-    <div className="flex flex-col gap-3" aria-busy="true" aria-label="Loading the analytics">
+    <div className="flex flex-col gap-3" aria-busy="true" aria-label={t("analytics.loading")}>
       <div className="grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-5">
         {Array.from({ length: 5 }, (_, i) => (
           <div key={i} className="flex flex-col gap-2 rounded-lg border border-t-border px-3.5 py-3">
@@ -617,6 +656,7 @@ function Empty({
 
 /** The Analytics tab of a brand. */
 export function SocialAnalytics({ brand, accounts, onAsk }: BrandViewProps) {
+  const { t } = useTranslation(["social", "common"]);
   const [days, setDays] = useState(30);
   const { data: analytics, error, loading, reload } = useAnalytics(brand.id, days);
 
@@ -629,9 +669,9 @@ export function SocialAnalytics({ brand, accounts, onAsk }: BrandViewProps) {
               <IconPlugConnected />
             </IconTile>
           }
-          title="Connect an account to see its numbers"
+          title={t("analytics.empty.title")}
         >
-          <p>Followers, reach, engagement and the best times to post show up here once an account is connected.</p>
+          <p>{t("analytics.empty.body")}</p>
           <Button
             className="mt-4"
             size="sm"
@@ -639,7 +679,7 @@ export function SocialAnalytics({ brand, accounts, onAsk }: BrandViewProps) {
             color="accent"
             render={<Link to={`/social/${brand.id}/brand`} />}
           >
-            Connect accounts
+            {t("calendar.connect")}
           </Button>
         </Empty>
       </div>
@@ -649,16 +689,18 @@ export function SocialAnalytics({ brand, accounts, onAsk }: BrandViewProps) {
     <div className="h-full overflow-y-auto">
       <div className="mx-auto flex w-full max-w-[1200px] flex-col gap-3 p-4">
         <div className="flex flex-wrap items-center gap-2">
-          <SegmentedControl<(typeof PERIODS)[number]["value"]>
-            aria-label="Period"
+          <SegmentedControl<(typeof PERIODS)[number]>
+            aria-label={t("analytics.periodLabel")}
             size="sm"
-            value={String(days) as (typeof PERIODS)[number]["value"]}
+            value={String(days) as (typeof PERIODS)[number]}
             onValueChange={(value) => setDays(Number(value))}
-            options={PERIODS.map((p) => ({ value: p.value, label: p.label }))}
+            options={PERIODS.map((p) => ({ value: p, label: t("analytics.period", { count: Number(p) }) }))}
           />
           <span className="flex-1 text-[12px] text-t-text-light">
             {analytics?.synced_at
-              ? `Synced ${formatDistanceToNow(new Date(analytics.synced_at), { addSuffix: true })}`
+              ? t("analytics.synced", {
+                  ago: formatDistanceToNow(new Date(analytics.synced_at), { addSuffix: true, locale: dateLocale() }),
+                })
               : ""}
           </span>
           <Button
@@ -669,15 +711,15 @@ export function SocialAnalytics({ brand, accounts, onAsk }: BrandViewProps) {
             disabled={loading}
             onClick={() => void reload()}
           >
-            Refresh
+            {t("analytics.refresh")}
           </Button>
         </div>
 
         {error && (
           <div className="flex items-center justify-between gap-3 rounded-md border border-[var(--t-border-color-danger)] bg-[var(--t-background-danger)] px-3 py-2 text-t-text-danger">
-            <span>The analytics could not load: {error}</span>
+            <span>{t("analytics.error", { error })}</span>
             <Button size="sm" variant="outline" onClick={() => void reload()}>
-              Retry
+              {t("common:retry")}
             </Button>
           </div>
         )}
@@ -693,16 +735,16 @@ export function SocialAnalytics({ brand, accounts, onAsk }: BrandViewProps) {
             </div>
             <BestTimes analytics={analytics} />
             {analytics.posts.length === 0 ? (
-              <Section title="Posts">
+              <Section title={t("analytics.posts.title")}>
                 <Empty
                   icon={
                     <IconTile size="lg" color="green">
                       <IconChartAreaLineFilled />
                     </IconTile>
                   }
-                  title={`No posts published in the last ${analytics.days} days`}
+                  title={t("analytics.noPosts.title", { count: analytics.days })}
                 >
-                  <p>Plan a few on the calendar, or ask the copilot for a week of posts.</p>
+                  <p>{t("analytics.noPosts.body")}</p>
                   <Button
                     className="mt-4"
                     size="sm"
@@ -710,11 +752,11 @@ export function SocialAnalytics({ brand, accounts, onAsk }: BrandViewProps) {
                     startIcon={<IconSparkles size={14} />}
                     onClick={() =>
                       onAsk(
-                        "Plan next week's posts: look at what did well before, then put a draft for each slot on the calendar at our best times.",
+                        t("analytics.noPosts.prompt"),
                       )
                     }
                   >
-                    Plan next week with the copilot
+                    {t("analytics.noPosts.button")}
                   </Button>
                 </Empty>
               </Section>

@@ -4,6 +4,7 @@
 
 import { useMemo, useState } from "react";
 import { formatDistanceToNow, format } from "date-fns";
+import { useTranslation } from "react-i18next";
 import { cn } from "cn";
 import { LightIconButton, SegmentedControl } from "twenty-ui/components/input";
 import { Tag } from "twenty-ui/primitives/data-display";
@@ -38,6 +39,7 @@ import {
   type WatchedAccount,
   type WatchHistory,
 } from "@/lib/social";
+import i18n, { dateLocale, intlLocale } from "@/lib/i18n";
 
 type PublicPost = WatchedAccount["posts"][number];
 type Relation = WatchedAccount["relation"];
@@ -45,18 +47,11 @@ type Relation = WatchedAccount["relation"];
 const PLATFORMS = ["instagram", "tiktok", "twitter", "linkedin", "youtube"] as const;
 type Platform = (typeof PLATFORMS)[number];
 
-const PLACEHOLDERS: Record<Platform, string> = {
-  instagram: "@handle or instagram.com/handle",
-  tiktok: "@handle or tiktok.com/@handle",
-  twitter: "@handle or x.com/handle",
-  linkedin: "linkedin.com/company/… or linkedin.com/in/…",
-  youtube: "@channel or youtube.com/@channel",
-};
-
-const RELATIONS: { value: Relation; label: string; color: "red" | "violet" | "blue" }[] = [
-  { value: "competitor", label: "Competitor", color: "red" },
-  { value: "inspiration", label: "Inspiration", color: "violet" },
-  { value: "self", label: "Our own", color: "blue" },
+/** The relations; their labels are `watchlist.relations.<value>`. */
+const RELATIONS: { value: Relation; color: "red" | "violet" | "blue" }[] = [
+  { value: "competitor", color: "red" },
+  { value: "inspiration", color: "violet" },
+  { value: "self", color: "blue" },
 ];
 const relationOf = (value: Relation) => RELATIONS.find((r) => r.value === value) ?? RELATIONS[0]!;
 
@@ -129,10 +124,22 @@ function Sparkline({ points }: { points: number[] }) {
   );
 }
 
-function Metric({ icon: Icon, value, label }: { icon: typeof IconHeart; value: number | null; label: string }) {
+function Metric({
+  icon: Icon,
+  value,
+  label,
+}: {
+  icon: typeof IconHeart;
+  value: number | null;
+  label: "views" | "likes" | "comments" | "shares";
+}) {
+  const { t } = useTranslation("social");
   if (value === null) return null;
   return (
-    <span className="inline-flex items-center gap-1 tabular-nums" title={`${value.toLocaleString()} ${label}`}>
+    <span
+      className="inline-flex items-center gap-1 tabular-nums"
+      title={t(`watchlist.metrics.${label}`, { count: value, value: value.toLocaleString(intlLocale()) })}
+    >
       <Icon size={12} className="text-t-text-light" />
       {compact(value)}
     </span>
@@ -140,6 +147,7 @@ function Metric({ icon: Icon, value, label }: { icon: typeof IconHeart; value: n
 }
 
 function AddForm({ brandId, onAdded }: { brandId: string; onAdded: () => void }) {
+  const { t } = useTranslation("social");
   const [platform, setPlatform] = useState<Platform>("instagram");
   const [handle, setHandle] = useState("");
   const [relation, setRelation] = useState<Relation>("competitor");
@@ -171,7 +179,7 @@ function AddForm({ brandId, onAdded }: { brandId: string; onAdded: () => void })
     >
       <div className="flex flex-wrap items-center gap-2">
         <SimpleSelect<Platform>
-          label="Platform"
+          label={t("watchlist.add.platform")}
           value={platform}
           onValueChange={setPlatform}
           options={PLATFORMS.map((p) => ({
@@ -185,18 +193,18 @@ function AddForm({ brandId, onAdded }: { brandId: string; onAdded: () => void })
           }))}
         />
         <Input
-          aria-label="Handle or URL"
-          placeholder={PLACEHOLDERS[platform]}
+          aria-label={t("watchlist.add.handle")}
+          placeholder={t(`watchlist.add.placeholders.${platform}`)}
           value={handle}
           onChange={(event) => setHandle(event.target.value)}
           className="min-w-[180px] flex-1"
           size="sm"
         />
         <SimpleSelect<Relation>
-          label="Relation"
+          label={t("watchlist.add.relation")}
           value={relation}
           onValueChange={setRelation}
-          options={RELATIONS.map((r) => ({ value: r.value, label: r.label }))}
+          options={RELATIONS.map((r) => ({ value: r.value, label: t(`watchlist.relations.${r.value}`) }))}
         />
         <Button
           type="submit"
@@ -207,7 +215,7 @@ function AddForm({ brandId, onAdded }: { brandId: string; onAdded: () => void })
           loading={busy}
           disabled={!handle.trim() || busy}
         >
-          {busy ? "Reading the account…" : "Watch"}
+          {busy ? t("watchlist.add.reading") : t("watchlist.add.submit")}
         </Button>
       </div>
       {error && <p className="text-[12px] text-t-text-danger">{error}</p>}
@@ -230,6 +238,7 @@ function AccountRow({
   onSelect: () => void;
   onChanged: () => void;
 }) {
+  const { t } = useTranslation("social");
   const [refreshing, setRefreshing] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [rowError, setRowError] = useState<string | null>(null);
@@ -284,7 +293,7 @@ function AccountRow({
             <PlatformGlyph platform={account.platform} size={13} className="text-t-text-tertiary" />
             <span className="truncate font-medium text-t-text">{account.name || account.handle}</span>
             <Tag color={relation.color} variant="soft" className="shrink-0 text-[11px]">
-              {relation.label}
+              {t(`watchlist.relations.${relation.value}`)}
             </Tag>
           </span>
           <span className="truncate text-[12px] text-t-text-tertiary">
@@ -295,17 +304,17 @@ function AccountRow({
           {confirming ? (
             <>
               <Button size="sm" variant="ghost" onClick={() => setConfirming(false)}>
-                Keep
+                {t("watchlist.row.keep")}
               </Button>
               <Button size="sm" variant="soft" color="danger" onClick={() => void remove()}>
-                Remove
+                {t("watchlist.row.remove")}
               </Button>
             </>
           ) : (
             <>
               <LightIconButton
-                aria-label={`Refresh ${account.name}`}
-                tooltip="Read again"
+                aria-label={t("watchlist.row.refresh", { name: account.name })}
+                tooltip={t("watchlist.row.readAgain")}
                 size="sm"
                 disabled={refreshing}
                 onClick={() => void refresh()}
@@ -313,8 +322,8 @@ function AccountRow({
                 <IconRefresh size={14} className={cn(refreshing && "animate-spin")} />
               </LightIconButton>
               <LightIconButton
-                aria-label={`Stop watching ${account.name}`}
-                tooltip="Stop watching"
+                aria-label={t("watchlist.row.unwatchName", { name: account.name })}
+                tooltip={t("watchlist.row.unwatch")}
                 size="sm"
                 onClick={() => setConfirming(true)}
               >
@@ -327,7 +336,7 @@ function AccountRow({
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[12px] text-t-text-secondary">
         <span className="flex items-center gap-2">
           <span className="text-[15px] font-semibold text-t-text tabular-nums">{compact(account.followers)}</span>
-          <span className="text-t-text-tertiary">followers</span>
+          <span className="text-t-text-tertiary">{t("watchlist.row.followers", { count: account.followers ?? 0 })}</span>
           {growth !== null && growth !== 0 && (
             <span
               className={cn(
@@ -344,17 +353,25 @@ function AccountRow({
         {avg !== null && (
           <span className="tabular-nums">
             <span className="text-t-text">{compact(Math.round(avg))}</span>
-            <span className="text-t-text-tertiary"> eng./post</span>
+            <span className="text-t-text-tertiary"> {t("watchlist.row.perPost")}</span>
           </span>
         )}
         {perWeek !== null && (
           <span className="tabular-nums">
-            <span className="text-t-text">{perWeek >= 10 ? Math.round(perWeek) : perWeek.toFixed(1)}</span>
-            <span className="text-t-text-tertiary"> posts/week</span>
+            <span className="text-t-text">
+              {perWeek >= 10
+                ? Math.round(perWeek)
+                : perWeek.toLocaleString(intlLocale(), { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
+            </span>
+            <span className="text-t-text-tertiary"> {t("watchlist.row.perWeek")}</span>
           </span>
         )}
         <span className="ml-auto text-t-text-light">
-          {account.checked_at ? `Read ${formatDistanceToNow(new Date(account.checked_at), { addSuffix: true })}` : "Not read yet"}
+          {account.checked_at
+            ? t("watchlist.row.read", {
+                ago: formatDistanceToNow(new Date(account.checked_at), { addSuffix: true, locale: dateLocale() }),
+              })
+            : t("watchlist.row.notRead")}
         </span>
       </div>
       {error && (
@@ -367,21 +384,27 @@ function AccountRow({
 }
 
 function inspirationPrompt(post: PublicPost, author: WatchedAccount) {
+  const metric = (key: "views" | "likes" | "comments" | "shares", value: number | null) =>
+    value !== null && i18n.t(`social:watchlist.metrics.${key}`, { count: value, value: compact(value) });
   const metrics = [
-    post.views !== null && `${compact(post.views)} views`,
-    post.likes !== null && `${compact(post.likes)} likes`,
-    post.comments !== null && `${compact(post.comments)} comments`,
-    post.shares !== null && `${compact(post.shares)} shares`,
+    metric("views", post.views),
+    metric("likes", post.likes),
+    metric("comments", post.comments),
+    metric("shares", post.shares),
   ]
     .filter(Boolean)
     .join(", ");
-  return `This ${platformInfo(author.platform).label} post by ${author.name || author.handle} (${relationOf(author.relation).label.toLowerCase()}) did well${metrics ? ` (${metrics})` : ""}: ${post.url}
-
-"""
-${post.text.slice(0, 2000)}
-"""
-
-Work out why it works (hook, format, angle), then write one post for our brand inspired by it: our voice, our subject, never a copy. Put it on the calendar as a draft at a good time.`;
+  const values = {
+    platform: platformInfo(author.platform).label,
+    author: author.name || author.handle,
+    relation: i18n.t(`social:watchlist.relationNames.${relationOf(author.relation).value}`),
+    metrics,
+    url: post.url,
+    text: post.text.slice(0, 2000),
+  };
+  return metrics
+    ? i18n.t("social:watchlist.inspire.promptMetrics", values)
+    : i18n.t("social:watchlist.inspire.prompt", values);
 }
 
 function PostCard({
@@ -395,6 +418,7 @@ function PostCard({
   onAsk: (message: string) => void;
   showAuthor?: boolean;
 }) {
+  const { t } = useTranslation(["social", "common"]);
   const [thumbBroken, setThumbBroken] = useState(false);
   return (
     <article className="flex gap-3 rounded-lg border border-t-border p-3">
@@ -415,14 +439,14 @@ function PostCard({
             <PlatformGlyph platform={author.platform} size={12} className="text-t-text-tertiary" />
           </span>
         )}
-        <p className="line-clamp-3 leading-[1.45] whitespace-pre-line text-t-text">{post.text || "(no text)"}</p>
+        <p className="line-clamp-3 leading-[1.45] whitespace-pre-line text-t-text">{post.text || t("calendar.noText")}</p>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-t-text-secondary">
           <Metric icon={IconEye} value={post.views} label="views" />
           <Metric icon={IconHeart} value={post.likes} label="likes" />
           <Metric icon={IconMessageCircle} value={post.comments} label="comments" />
           <Metric icon={IconRepeat} value={post.shares} label="shares" />
           {post.published_at && (
-            <span className="text-t-text-light">{format(new Date(post.published_at), "d MMM yyyy")}</span>
+            <span className="text-t-text-light">{format(new Date(post.published_at), "d MMM yyyy", { locale: dateLocale() })}</span>
           )}
         </div>
         <div className="flex flex-wrap gap-3 text-[12px]">
@@ -431,7 +455,7 @@ function PostCard({
             className="inline-flex items-center gap-1 rounded-sm font-medium text-[var(--t-color-iris11)] outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring"
             onClick={() => onAsk(inspirationPrompt(post, author))}
           >
-            <IconSparkles size={13} /> Write a post inspired by this
+            <IconSparkles size={13} /> {t("watchlist.inspire.button")}
           </button>
           {post.url && (
             <a
@@ -440,7 +464,7 @@ function PostCard({
               rel="noreferrer"
               className="inline-flex items-center gap-1 text-t-text-tertiary hover:text-t-text"
             >
-              <IconExternalLink size={12} /> Open
+              <IconExternalLink size={12} /> {t("common:open")}
             </a>
           )}
         </div>
@@ -450,8 +474,9 @@ function PostCard({
 }
 
 function Loading() {
+  const { t } = useTranslation("social");
   return (
-    <div className="flex flex-col gap-2" aria-busy="true" aria-label="Loading the watchlist">
+    <div className="flex flex-col gap-2" aria-busy="true" aria-label={t("watchlist.loading")}>
       {Array.from({ length: 3 }, (_, i) => (
         <div key={i} className="flex items-center gap-3 rounded-lg border border-t-border px-3 py-3">
           <Skeleton width={36} height={36} borderRadius={18} />
@@ -467,6 +492,7 @@ function Loading() {
 
 /** The Watchlist tab of a brand. */
 export function SocialWatchlist({ brand, onAsk }: BrandViewProps) {
+  const { t } = useTranslation(["social", "common"]);
   const { data, error, reload } = useWatchlist(brand.id);
   const [filter, setFilter] = useState<"all" | Relation>("all");
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -501,9 +527,9 @@ export function SocialWatchlist({ brand, onAsk }: BrandViewProps) {
 
         {error && !data && (
           <div className="flex items-center justify-between gap-3 rounded-md border border-[var(--t-border-color-danger)] bg-[var(--t-background-danger)] px-3 py-2 text-t-text-danger">
-            <span>The watchlist could not load: {error}</span>
+            <span>{t("watchlist.error", { error })}</span>
             <Button size="sm" variant="outline" onClick={() => void reload()}>
-              Retry
+              {t("common:retry")}
             </Button>
           </div>
         )}
@@ -515,29 +541,15 @@ export function SocialWatchlist({ brand, onAsk }: BrandViewProps) {
             <IconTile size="lg" color="orange">
               <IconBinocularsFilled />
             </IconTile>
-            <h2 className="text-[16px] font-semibold text-t-text">Keep an eye on who matters</h2>
-            <p className="leading-[1.55] text-t-text-secondary">
-              Add competitors and accounts you admire. Richelieu reads them every day: how fast they grow, how often
-              they post, and which posts work, so the copilot can turn the best ideas into posts of your own.
-            </p>
+            <h2 className="text-[16px] font-semibold text-t-text">{t("watchlist.empty.title")}</h2>
+            <p className="leading-[1.55] text-t-text-secondary">{t("watchlist.empty.body")}</p>
             <div className="mt-1 flex flex-wrap justify-center gap-2">
-              {[
-                {
-                  label: "Find our competitors",
-                  message:
-                    "Who are our main competitors on social media? Look at our brief and website, suggest 3 to 5 accounts, check each with research_social_account, and add the relevant ones to the watchlist.",
-                },
-                {
-                  label: "Suggest accounts to learn from",
-                  message:
-                    "Suggest 3 accounts in our space (not competitors) whose social media is excellent, check them with research_social_account, and add them to the watchlist as inspiration.",
-                },
-                {
-                  label: "Watch our own accounts",
-                  message:
-                    "Add our own public accounts to the watchlist (relation: self), so we can compare ourselves with the others.",
-                },
-              ].map((chip) => (
+              {(["competitors", "inspiration", "own"] as const)
+                .map((chip) => ({
+                  label: t(`watchlist.empty.chips.${chip}.label`),
+                  message: t(`watchlist.empty.chips.${chip}.message`),
+                }))
+                .map((chip) => (
                 <Button
                   key={chip.label}
                   size="sm"
@@ -553,15 +565,18 @@ export function SocialWatchlist({ brand, onAsk }: BrandViewProps) {
         ) : selected ? (
           <div className="flex flex-col gap-3">
             <div className="flex items-center gap-2">
-              <LightIconButton aria-label="Back to the watchlist" size="sm" onClick={() => setSelectedId(null)}>
+              <LightIconButton aria-label={t("watchlist.back")} size="sm" onClick={() => setSelectedId(null)}>
                 <IconArrowLeft size={16} />
               </LightIconButton>
               <Avatar src={selected.avatar_url} name={selected.name || selected.handle} size={28} />
               <div className="flex min-w-0 flex-1 flex-col">
                 <span className="truncate font-semibold text-t-text">{selected.name || selected.handle}</span>
                 <span className="text-[12px] text-t-text-tertiary">
-                  {platformInfo(selected.platform).label} · {compact(selected.followers)} followers ·{" "}
-                  {selected.posts.length} recent posts, best first
+                  {t("watchlist.detail.summary", {
+                    platform: platformInfo(selected.platform).label,
+                    followers: compact(selected.followers),
+                    count: selected.posts.length,
+                  })}
                 </span>
               </div>
               {selected.profile_url && (
@@ -571,12 +586,12 @@ export function SocialWatchlist({ brand, onAsk }: BrandViewProps) {
                   startIcon={<IconExternalLink size={14} />}
                   render={<a href={selected.profile_url} target="_blank" rel="noreferrer" />}
                 >
-                  Profile
+                  {t("watchlist.detail.profile")}
                 </Button>
               )}
             </div>
             {selected.posts.length === 0 ? (
-              <p className="py-10 text-center text-t-text-tertiary">No recent posts could be read for this account.</p>
+              <p className="py-10 text-center text-t-text-tertiary">{t("watchlist.detail.empty")}</p>
             ) : (
               <div className="grid gap-2 lg:grid-cols-2">
                 {[...selected.posts]
@@ -591,22 +606,25 @@ export function SocialWatchlist({ brand, onAsk }: BrandViewProps) {
           <>
             <div className="flex flex-wrap items-center gap-2">
               <SegmentedControl<"all" | Relation>
-                aria-label="Show"
+                aria-label={t("watchlist.show")}
                 size="sm"
                 value={filter}
                 onValueChange={setFilter}
                 options={[
-                  { value: "all", label: `All ${accounts.length}` },
+                  { value: "all", label: t("watchlist.filterAll", { count: accounts.length }) },
                   ...RELATIONS.filter((r) => counts[r.value]).map((r) => ({
                     value: r.value,
-                    label: `${r.label} ${counts[r.value]}`,
+                    label: t("watchlist.filterRelation", {
+                      relation: t(`watchlist.relations.${r.value}`),
+                      count: counts[r.value] ?? 0,
+                    }),
                   })),
                 ]}
               />
             </div>
             <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
               <section className="flex min-w-0 flex-col gap-2">
-                <h2 className="text-[12px] font-semibold text-t-text-tertiary">Accounts</h2>
+                <h2 className="text-[12px] font-semibold text-t-text-tertiary">{t("watchlist.accounts")}</h2>
                 {shown.map((account) => (
                   <AccountRow
                     key={account.id}
@@ -620,10 +638,10 @@ export function SocialWatchlist({ brand, onAsk }: BrandViewProps) {
                 ))}
               </section>
               <section className="flex min-w-0 flex-col gap-2">
-                <h2 className="text-[12px] font-semibold text-t-text-tertiary">Top posts of the last 30 days</h2>
+                <h2 className="text-[12px] font-semibold text-t-text-tertiary">{t("watchlist.topPosts")}</h2>
                 {topPosts.length === 0 ? (
                   <p className="rounded-lg border border-t-border px-3 py-8 text-center text-t-text-tertiary">
-                    No posts from the last 30 days yet.
+                    {t("watchlist.topPostsEmpty")}
                   </p>
                 ) : (
                   topPosts.map(({ post, author }) => (

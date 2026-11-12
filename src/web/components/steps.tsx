@@ -1,5 +1,7 @@
 import { useState, type ComponentType } from "react";
 import { cn } from "cn";
+import type { TFunction } from "i18next";
+import { useTranslation } from "react-i18next";
 import {
   IconAlertTriangle,
   IconBox,
@@ -45,172 +47,190 @@ const arg = (step: Step, name: string) =>
   typeof step.args?.[name] === "string" ? (step.args[name] as string) : "";
 
 /** How a step reads in the chat, while it runs and once it is done. */
-function describe(step: Step): { icon: Icon; running: string; done: string } {
+function describe(step: Step, t: TFunction<"builder">): { icon: Icon; running: string; done: string } {
   const path = arg(step, "path");
   switch (step.tool) {
     case "list_files":
       return {
         icon: IconFolder,
-        running: "Looking at the files",
-        done: "Looked at the files",
+        running: t("steps.listFiles.running"),
+        done: t("steps.listFiles.done"),
       };
     case "read_file":
       return {
         icon: IconEye,
-        running: `Reading ${path}`,
-        done: `Read ${path}`,
+        running: t("steps.readFile.running", { path }),
+        done: t("steps.readFile.done", { path }),
       };
     case "write_file":
       return {
         icon: IconFileText,
-        running: `Writing ${path}`,
-        done: `Wrote ${path}`,
+        running: t("steps.writeFile.running", { path }),
+        done: t("steps.writeFile.done", { path }),
       };
     case "edit_file":
       return {
         icon: IconFilePencil,
-        running: `Editing ${path}`,
-        done: `Edited ${path}`,
+        running: t("steps.editFile.running", { path }),
+        done: t("steps.editFile.done", { path }),
       };
     case "delete_file":
       return {
         icon: IconTrash,
-        running: `Deleting ${path}`,
-        done: `Deleted ${path}`,
+        running: t("steps.deleteFile.running", { path }),
+        done: t("steps.deleteFile.done", { path }),
       };
     case "check_app":
       return {
         icon: IconListCheck,
-        running: "Checking the app",
-        done: "Checked the app",
+        running: t("steps.checkApp.running"),
+        done: t("steps.checkApp.done"),
       };
     case "add_dependencies": {
-      const packages = Array.isArray(step.args?.packages)
-        ? (step.args.packages as string[]).join(", ")
-        : "packages";
+      if (!Array.isArray(step.args?.packages))
+        return {
+          icon: IconBox,
+          running: t("steps.addDependencies.runningAny"),
+          done: t("steps.addDependencies.doneAny"),
+        };
+      const packages = (step.args.packages as string[]).join(", ");
       return {
         icon: IconBox,
-        running: `Installing ${packages}`,
-        done: `Installed ${packages}`,
+        running: t("steps.addDependencies.running", { packages }),
+        done: t("steps.addDependencies.done", { packages }),
       };
     }
     case "run_command": {
       const command = arg(step, "command");
       return {
         icon: IconTerminal,
-        running: `Running ${command}`,
-        done: `Ran ${command}`,
+        running: t("steps.runCommand.running", { command }),
+        done: t("steps.runCommand.done", { command }),
       };
     }
     case "enable_database":
       return {
         icon: IconDatabase,
-        running: "Adding a database",
-        done: "Added a database",
+        running: t("steps.enableDatabase.running"),
+        done: t("steps.enableDatabase.done"),
       };
     case "run_sql":
       return {
         icon: IconDatabaseExport,
-        running: "Changing the database",
-        done: "Changed the database",
+        running: t("steps.runSql.running"),
+        done: t("steps.runSql.done"),
       };
     case "restore_version":
       return {
         icon: IconRestore,
-        running: "Restoring a version",
-        done: "Restored a version",
+        running: t("steps.restoreVersion.running"),
+        done: t("steps.restoreVersion.done"),
       };
     case "social_overview":
-      return { icon: IconChartBar, running: "Looking at the accounts and the calendar", done: "Looked at the accounts and the calendar" };
+      return { icon: IconChartBar, running: t("steps.socialOverview.running"), done: t("steps.socialOverview.done") };
     case "social_performance":
-      return { icon: IconChartBar, running: "Reading what worked", done: "Read what worked" };
+      return { icon: IconChartBar, running: t("steps.socialPerformance.running"), done: t("steps.socialPerformance.done") };
     case "list_social_posts":
-      return { icon: IconCalendarEvent, running: "Reading the calendar", done: "Read the calendar" };
+      return { icon: IconCalendarEvent, running: t("steps.listSocialPosts.running"), done: t("steps.listSocialPosts.done") };
     case "draft_social_post": {
       const content = arg(step, "content").replace(/\s+/g, " ");
       const short = content.length > 48 ? `${content.slice(0, 48)}…` : content;
-      return { icon: IconCalendarPlus, running: `Drafting “${short}”`, done: `Drafted “${short}”` };
+      return { icon: IconCalendarPlus, running: t("steps.draftSocialPost.running", { text: short }), done: t("steps.draftSocialPost.done", { text: short }) };
     }
     case "update_social_post":
-      return { icon: IconPencil, running: "Editing a post", done: "Edited a post" };
+      return { icon: IconPencil, running: t("steps.updateSocialPost.running"), done: t("steps.updateSocialPost.done") };
     case "schedule_social_post":
-      return { icon: IconCalendarTime, running: "Scheduling a post", done: "Scheduled a post" };
+      return { icon: IconCalendarTime, running: t("steps.scheduleSocialPost.running"), done: t("steps.scheduleSocialPost.done") };
     case "delete_social_post":
-      return { icon: IconTrash, running: "Deleting a post", done: "Deleted a post" };
+      return { icon: IconTrash, running: t("steps.deleteSocialPost.running"), done: t("steps.deleteSocialPost.done") };
     case "update_brand_brief":
-      return { icon: IconId, running: "Updating the brand brief", done: "Updated the brand brief" };
+      return { icon: IconId, running: t("steps.updateBrandBrief.running"), done: t("steps.updateBrandBrief.done") };
     case "research_social_account": {
       const handle = arg(step, "handle");
-      return { icon: IconEyeSearch, running: `Looking at ${handle}`, done: `Looked at ${handle}` };
+      return { icon: IconEyeSearch, running: t("steps.researchSocialAccount.running", { handle }), done: t("steps.researchSocialAccount.done", { handle }) };
     }
     case "list_watchlist":
-      return { icon: IconBinoculars, running: "Reading the watchlist", done: "Read the watchlist" };
+      return { icon: IconBinoculars, running: t("steps.listWatchlist.running"), done: t("steps.listWatchlist.done") };
     case "watch_social_account": {
       const handle = arg(step, "handle");
-      return { icon: IconBinoculars, running: `Adding ${handle} to the watchlist`, done: `Added ${handle} to the watchlist` };
+      return { icon: IconBinoculars, running: t("steps.watchSocialAccount.running", { handle }), done: t("steps.watchSocialAccount.done", { handle }) };
     }
     case "import_social_post":
-      return { icon: IconCalendarPlus, running: "Importing a published post", done: "Imported a published post" };
+      return { icon: IconCalendarPlus, running: t("steps.importSocialPost.running"), done: t("steps.importSocialPost.done") };
     case "read_website": {
       const url = arg(step, "url").replace(/^https?:\/\//, "");
-      return { icon: IconWorldSearch, running: `Reading ${url}`, done: `Read ${url}` };
+      return { icon: IconWorldSearch, running: t("steps.readWebsite.running", { url }), done: t("steps.readWebsite.done", { url }) };
+    }
+    case "web_research": {
+      const asked = arg(step, "question").replace(/\s+/g, " ");
+      const question = asked.length > 60 ? `${asked.slice(0, 60)}…` : asked;
+      return { icon: IconWorldSearch, running: t("steps.webResearch.running", { question }), done: t("steps.webResearch.done", { question }) };
     }
     case "newsletter_overview":
-      return { icon: IconChartBar, running: "Looking at the newsletter", done: "Looked at the newsletter" };
+      return { icon: IconChartBar, running: t("steps.newsletterOverview.running"), done: t("steps.newsletterOverview.done") };
     case "newsletter_performance":
-      return { icon: IconChartBar, running: "Reading what readers opened", done: "Read what readers opened" };
+      return { icon: IconChartBar, running: t("steps.newsletterPerformance.running"), done: t("steps.newsletterPerformance.done") };
     case "list_newsletter_posts":
-      return { icon: IconFileText, running: "Reading the posts", done: "Read the posts" };
-    case "read_newsletter_post":
-      return { icon: IconEye, running: `Reading post ${arg(step, "id")}`, done: `Read post ${arg(step, "id")}` };
+      return { icon: IconFileText, running: t("steps.listNewsletterPosts.running"), done: t("steps.listNewsletterPosts.done") };
+    case "read_newsletter_post": {
+      const id = arg(step, "id");
+      return { icon: IconEye, running: t("steps.readNewsletterPost.running", { id }), done: t("steps.readNewsletterPost.done", { id }) };
+    }
     case "write_newsletter_draft": {
       const title = arg(step, "title");
       const short = title.length > 48 ? `${title.slice(0, 48)}…` : title;
-      return { icon: IconFilePlus, running: `Writing “${short}”`, done: `Wrote the draft “${short}”` };
+      return { icon: IconFilePlus, running: t("steps.writeNewsletterDraft.running", { title: short }), done: t("steps.writeNewsletterDraft.done", { title: short }) };
     }
-    case "update_newsletter_draft":
-      return { icon: IconPencil, running: `Revising draft ${arg(step, "id")}`, done: `Revised draft ${arg(step, "id")}` };
+    case "update_newsletter_draft": {
+      const id = arg(step, "id");
+      return { icon: IconPencil, running: t("steps.updateNewsletterDraft.running", { id }), done: t("steps.updateNewsletterDraft.done", { id }) };
+    }
     case "check_newsletter_post":
-      return { icon: IconFileCheck, running: "Checking the post", done: "Checked the post" };
+      return { icon: IconFileCheck, running: t("steps.checkNewsletterPost.running"), done: t("steps.checkNewsletterPost.done") };
     case "schedule_newsletter_post":
-      return { icon: IconCalendarTime, running: "Scheduling the post", done: "Scheduled the post" };
+      return { icon: IconCalendarTime, running: t("steps.scheduleNewsletterPost.running"), done: t("steps.scheduleNewsletterPost.done") };
     case "unschedule_newsletter_post":
-      return { icon: IconClockCancel, running: "Unscheduling the post", done: "Unscheduled the post" };
+      return { icon: IconClockCancel, running: t("steps.unscheduleNewsletterPost.running"), done: t("steps.unscheduleNewsletterPost.done") };
     case "delete_newsletter_draft":
-      return { icon: IconTrash, running: "Deleting a draft", done: "Deleted a draft" };
+      return { icon: IconTrash, running: t("steps.deleteNewsletterDraft.running"), done: t("steps.deleteNewsletterDraft.done") };
     case "read_newsletter_comments":
-      return { icon: IconMessageCircle, running: "Reading the comments", done: "Read the comments" };
+      return { icon: IconMessageCircle, running: t("steps.readNewsletterComments.running"), done: t("steps.readNewsletterComments.done") };
     case "update_newsletter_brief":
-      return { icon: IconId, running: "Updating the brief", done: "Updated the brief" };
+      return { icon: IconId, running: t("steps.updateNewsletterBrief.running"), done: t("steps.updateNewsletterBrief.done") };
     case "list_newsletter_ideas":
-      return { icon: IconBulb, running: "Reading the ideas", done: "Read the ideas" };
+      return { icon: IconBulb, running: t("steps.listNewsletterIdeas.running"), done: t("steps.listNewsletterIdeas.done") };
     case "save_newsletter_idea": {
       const title = arg(step, "title");
-      return { icon: IconBulb, running: title ? `Saving the idea “${title}”` : "Saving an idea", done: title ? `Saved the idea “${title}”` : "Saved an idea" };
+      return {
+        icon: IconBulb,
+        running: title ? t("steps.saveNewsletterIdea.running", { title }) : t("steps.saveNewsletterIdea.runningAny"),
+        done: title ? t("steps.saveNewsletterIdea.done", { title }) : t("steps.saveNewsletterIdea.doneAny"),
+      };
     }
     case "draft_substack_note":
-      return { icon: IconNotes, running: "Drafting a Note", done: "Drafted a Note" };
+      return { icon: IconNotes, running: t("steps.draftSubstackNote.running"), done: t("steps.draftSubstackNote.done") };
     case "schedule_substack_note":
-      return { icon: IconCalendarTime, running: "Scheduling a Note", done: "Scheduled a Note" };
+      return { icon: IconCalendarTime, running: t("steps.scheduleSubstackNote.running"), done: t("steps.scheduleSubstackNote.done") };
     case "add_newsletter_image":
-      return { icon: IconPhotoUp, running: "Uploading an image to Substack", done: "Uploaded an image to Substack" };
+      return { icon: IconPhotoUp, running: t("steps.addNewsletterImage.running"), done: t("steps.addNewsletterImage.done") };
     case "substack_mcp_tools":
-      return { icon: IconPlug, running: "Listing the Substack MCP's tools", done: "Listed the Substack MCP's tools" };
+      return { icon: IconPlug, running: t("steps.substackMcpTools.running"), done: t("steps.substackMcpTools.done") };
     case "call_substack_mcp": {
       const tool = arg(step, "tool");
-      return { icon: IconPlug, running: `Asking Substack (${tool})`, done: `Asked Substack (${tool})` };
+      return { icon: IconPlug, running: t("steps.callSubstackMcp.running", { tool }), done: t("steps.callSubstackMcp.done", { tool }) };
     }
     case "list_mail":
     case "search_mail":
     case "read_mail":
-      return { icon: IconEye, running: "Reading mail", done: "Read mail" };
+      return { icon: IconEye, running: t("steps.readMail.running"), done: t("steps.readMail.done") };
     default:
       return { icon: IconCheck, running: step.tool, done: step.tool };
   }
 }
 
 function StepLine({ step }: { step: Step }) {
-  const { icon: StepIcon, running, done } = describe(step);
+  const { t } = useTranslation("builder");
+  const { icon: StepIcon, running, done } = describe(step, t);
   const isRunning = step.status === "running";
   const failed = step.status === "error";
   return (
@@ -244,6 +264,7 @@ function StepLine({ step }: { step: Step }) {
 
 /** What the agent did for an answer: the running step in full, the finished ones folded once there are many. */
 export function Steps({ steps: all, live }: { steps: Step[]; live: boolean }) {
+  const { t } = useTranslation("builder");
   const [open, setOpen] = useState(false);
   // Only well-formed steps: a malformed one must not take the chat down.
   const steps = all.filter(
@@ -279,9 +300,9 @@ export function Steps({ steps: all, live }: { steps: Step[]; live: boolean }) {
       >
         <IconListCheck size={14} />
         <span>
-          {steps.length} steps
-          {edited.size > 0 &&
-            ` · ${edited.size} file${edited.size === 1 ? "" : "s"} changed`}
+          {edited.size > 0
+            ? t("steps.summaryWithFiles", { steps: steps.length, count: edited.size })
+            : t("steps.summary", { count: steps.length })}
         </span>
         <IconChevronDown
           size={14}

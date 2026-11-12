@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -9,6 +10,7 @@ import {
 } from "@/components/auth-ui";
 
 export function UpdatePasswordForm() {
+  const { t } = useTranslation("auth");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -25,7 +27,7 @@ export function UpdatePasswordForm() {
       // Update this route to redirect to an authenticated route. The user already has an active session.
       location.href = "/";
     } catch (error: unknown) {
-      setError(error instanceof Error ? error.message : "An error occurred");
+      setError(error instanceof Error ? error.message : t("error"));
     } finally {
       setIsLoading(false);
     }
@@ -34,12 +36,12 @@ export function UpdatePasswordForm() {
   return (
     <form onSubmit={handleForgotPassword} className="flex flex-col">
       <AuthHeader
-        title="Choose a new password"
-        description="You will stay signed in with it."
+        title={t("update.title")}
+        description={t("update.description")}
       />
       <div className="flex flex-col gap-4">
         <AuthField
-          label="New password"
+          label={t("update.newPassword")}
           type="password"
           autoComplete="new-password"
           required
@@ -47,7 +49,7 @@ export function UpdatePasswordForm() {
           onValueChange={setPassword}
         />
         {error && <AuthError>{error}</AuthError>}
-        <AuthSubmit loading={isLoading}>Save the password</AuthSubmit>
+        <AuthSubmit loading={isLoading}>{t("update.submit")}</AuthSubmit>
       </div>
     </form>
   );

@@ -10,6 +10,7 @@
 @import "@fontsource-variable/inter";
 @import "@fontsource/dm-mono/400.css";
 @import "@fontsource/dm-mono/500.css";
+@import "./components/rich-editor/rich-editor.css" layer(components);
 @source "../../node_modules/streamdown/dist/*.js";
 
 /* The light sweeping across <Shimmer> text. */

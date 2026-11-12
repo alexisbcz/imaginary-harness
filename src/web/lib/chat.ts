@@ -1,3 +1,4 @@
+import i18n from "@/lib/i18n";
 import { createClient } from "@/lib/supabase/client";
 
 export type Thread = {
@@ -30,6 +31,7 @@ export type ChatMessage = {
 };
 
 export const MESSAGE_COLUMNS =
+  // i18n-ignore: database columns
   "id, thread_id, role, content, status, error, steps, mode, attachments, created_at";
 
 /** Longest side of an attached image, in pixels: enough for a screenshot to be read, small enough to send. */
@@ -111,7 +113,7 @@ export async function sendMessage(threadId: string, message: Outgoing) {
 export async function startThread(message: Outgoing) {
   const id = crypto.randomUUID();
   const title =
-    message.content.replace(/\s+/g, " ").trim().slice(0, 60) || "New project";
+    message.content.replace(/\s+/g, " ").trim().slice(0, 60) || i18n.t("common:sections.newProject");
   const { error } = await createClient().from("threads").insert({ id, title });
   if (error) throw error;
   await sendMessage(id, message);

@@ -7,6 +7,9 @@ import {
   useParams,
   useRouteLoaderData,
 } from "react-router";
+import { useTranslation } from "react-i18next";
+import { setLanguage } from "@/lib/i18n";
+import { LANGUAGES } from "@/locales";
 import { LightIconButton } from "twenty-ui/components/input";
 import { Skeleton } from "twenty-ui/primitives/feedback";
 import { Button } from "twenty-ui/primitives/input";
@@ -87,6 +90,8 @@ export function AppLayout() {
   const [threads, setThreads] = useThreads();
   const unread = useUnreadCount();
   const inMail = useLocation().pathname.startsWith("/mail");
+  const { t } = useTranslation("layout");
+  const { t: tc } = useTranslation("common");
   const inSocial = useLocation().pathname.startsWith("/social");
   const inNewsletter = useLocation().pathname.startsWith("/newsletter");
   const isMobile = useIsMobile();
@@ -116,7 +121,7 @@ export function AppLayout() {
       <div className="flex h-svh overflow-hidden bg-t-secondary">
         {drawerOpen && (
           <nav
-            aria-label="Projects"
+            aria-label={t("sidebar.projectsLabel")}
             className={
               isMobile
                 ? "fixed inset-y-0 left-0 z-50 flex w-[264px] flex-col bg-t-secondary px-2 pb-2 shadow-xl"
@@ -134,8 +139,8 @@ export function AppLayout() {
                 </span>
               </Link>
               <LightIconButton
-                aria-label="Close the sidebar"
-                tooltip="Close the sidebar"
+                aria-label={t("sidebar.close")}
+                tooltip={t("sidebar.close")}
                 size="sm"
                 onClick={() => setDrawerOpen(false)}
               >
@@ -153,7 +158,7 @@ export function AppLayout() {
               shortcut={["Mod", "K"]}
               onClick={() => setMenuOpen(true)}
             >
-              Search
+              {t("sidebar.search")}
             </ListItem>
             <ListItem
               render={<Link to="/" />}
@@ -164,7 +169,7 @@ export function AppLayout() {
               }
               selected={!threadId && !inMail && !inSocial && !inNewsletter}
             >
-              New project
+              {tc("sections.newProject")}
             </ListItem>
             <ListItem
               render={<Link to="/mail" />}
@@ -183,7 +188,7 @@ export function AppLayout() {
               }
               descriptionPlacement="end"
             >
-              Mail
+              {tc("sections.mail")}
             </ListItem>
             <ListItem
               render={<Link to="/social" />}
@@ -194,7 +199,7 @@ export function AppLayout() {
               }
               selected={inSocial}
             >
-              Social
+              {tc("sections.social")}
             </ListItem>
             <ListItem
               render={<Link to="/newsletter" />}
@@ -205,10 +210,10 @@ export function AppLayout() {
               }
               selected={inNewsletter}
             >
-              Newsletter
+              {tc("sections.newsletter")}
             </ListItem>
 
-            <SectionLabel>Projects</SectionLabel>
+            <SectionLabel>{tc("sections.projects")}</SectionLabel>
             <div className="-mx-2 flex min-h-0 flex-1 flex-col gap-px overflow-y-auto px-2">
               {threads === null &&
                 Array.from({ length: 4 }, (_, index) => (
@@ -222,7 +227,7 @@ export function AppLayout() {
                 ))}
               {threads?.length === 0 && (
                 <p className="px-1 py-1 text-t-text-tertiary">
-                  Your projects show here.
+                  {t("sidebar.empty")}
                 </p>
               )}
               {threads?.map((thread) => (
@@ -234,7 +239,7 @@ export function AppLayout() {
                   actionsVisibility="hover"
                   actions={
                     <LightIconButton
-                      aria-label={`Delete ${thread.title}`}
+                      aria-label={t("sidebar.deleteProject", { title: thread.title })}
                       size="xs"
                       onClick={(event) => {
                         event.preventDefault();
@@ -256,9 +261,10 @@ export function AppLayout() {
               <span className="min-w-0 flex-1 truncate text-t-text-secondary">
                 {name}
               </span>
+              <LanguageToggle />
               <LightIconButton
-                aria-label="Sign out"
-                tooltip="Sign out"
+                aria-label={t("sidebar.signOut")}
+                tooltip={t("sidebar.signOut")}
                 size="sm"
                 onClick={() => void supabase.auth.signOut()}
               >
@@ -287,22 +293,22 @@ export function AppLayout() {
           <AlertDialog.Viewport>
             <AlertDialog.Popup size="sm">
               <AlertDialog.Header>
-                <AlertDialog.Title>Delete “{deleting?.title}”?</AlertDialog.Title>
+                <AlertDialog.Title>{t("sidebar.deleteTitle", { title: deleting?.title ?? "" })}</AlertDialog.Title>
               </AlertDialog.Header>
               <AlertDialog.Body>
                 <AlertDialog.Description>
-                  The project and its conversation leave Richelieu for good. This cannot be undone.
+                  {t("sidebar.deleteBody")}
                 </AlertDialog.Description>
               </AlertDialog.Body>
               <AlertDialog.Footer>
-                <AlertDialog.Close render={<Button variant="outline" />}>Cancel</AlertDialog.Close>
+                <AlertDialog.Close render={<Button variant="outline" />}>{tc("cancel")}</AlertDialog.Close>
                 <AlertDialog.Close
                   render={<Button variant="solid" color="danger" />}
                   onClick={() => {
                     if (deleting) void remove(deleting.id);
                   }}
                 >
-                  Delete the project
+                  {t("sidebar.deleteConfirm")}
                 </AlertDialog.Close>
               </AlertDialog.Footer>
             </AlertDialog.Popup>
@@ -315,5 +321,23 @@ export function AppLayout() {
         threads={threads}
       />
     </DrawerContext>
+  );
+}
+
+/** EN / FR, beside the user's name: switches the whole app's language. */
+function LanguageToggle() {
+  const { t, i18n } = useTranslation("common");
+  const next = LANGUAGES.find((l) => l.code !== i18n.resolvedLanguage) ?? LANGUAGES[0];
+  return (
+    <button
+      type="button"
+      aria-label={`${t("language.change")}: ${next.label}`}
+      title={`${t("language.change")}: ${next.label}`}
+      onClick={() => setLanguage(next.code)}
+      className="h-6 shrink-0 rounded-md px-1.5 text-[11px] font-semibold tracking-wide text-t-text-tertiary uppercase hover:bg-t-hover hover:text-t-text"
+    >
+      {/* i18n-ignore: the language codes read the same everywhere */}
+      {next.code}
+    </button>
   );
 }

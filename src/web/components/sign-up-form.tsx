@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import { createClient } from "@/lib/supabase/client";
 import { cleanName, NAME_MAX_LENGTH } from "@/lib/profile";
@@ -11,6 +12,7 @@ import {
 } from "@/components/auth-ui";
 
 export function SignUpForm() {
+  const { t } = useTranslation("auth");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -25,12 +27,12 @@ export function SignUpForm() {
     setError(null);
 
     if (password !== repeatPassword) {
-      setError("Passwords do not match");
+      setError(t("signUp.passwordsMismatch"));
       return;
     }
     const cleaned = cleanName(name);
     if (!cleaned) {
-      setError("Enter your name");
+      setError(t("enterName"));
       return;
     }
     setIsLoading(true);
@@ -46,7 +48,7 @@ export function SignUpForm() {
       if (data.session) location.href = "/";
       else setSuccess(true);
     } catch (error: unknown) {
-      setError(error instanceof Error ? error.message : "An error occurred");
+      setError(error instanceof Error ? error.message : t("error"));
     } finally {
       setIsLoading(false);
     }
@@ -55,22 +57,22 @@ export function SignUpForm() {
   if (success)
     return (
       <AuthHeader
-        title="Check your email"
-        description="Confirm your account from the link we sent, then sign in."
+        title={t("checkEmail")}
+        description={t("signUp.confirm")}
       />
     );
 
   return (
     <form onSubmit={handleSignUp} className="flex flex-col">
       <AuthHeader
-        title="Create your account"
-        description="Describe an app, and watch Richelieu build it."
+        title={t("signUp.title")}
+        description={t("signUp.description")}
       />
       <div className="flex flex-col gap-4">
         <AuthField
-          label="Name"
+          label={t("name")}
           type="text"
-          placeholder="Ada Lovelace"
+          placeholder={t("namePlaceholder")}
           autoComplete="name"
           required
           maxLength={NAME_MAX_LENGTH}
@@ -78,7 +80,7 @@ export function SignUpForm() {
           onValueChange={setName}
         />
         <AuthField
-          label="Email"
+          label={t("email")}
           type="email"
           placeholder="you@example.com"
           autoComplete="email"
@@ -87,7 +89,7 @@ export function SignUpForm() {
           onValueChange={setEmail}
         />
         <AuthField
-          label="Password"
+          label={t("password")}
           type="password"
           autoComplete="new-password"
           required
@@ -95,7 +97,7 @@ export function SignUpForm() {
           onValueChange={setPassword}
         />
         <AuthField
-          label="Repeat the password"
+          label={t("signUp.repeatPassword")}
           type="password"
           autoComplete="new-password"
           required
@@ -103,10 +105,11 @@ export function SignUpForm() {
           onValueChange={setRepeatPassword}
         />
         {error && <AuthError>{error}</AuthError>}
-        <AuthSubmit loading={isLoading}>Create the account</AuthSubmit>
+        <AuthSubmit loading={isLoading}>{t("signUp.submit")}</AuthSubmit>
       </div>
       <p className="mt-6 text-center text-t-text-tertiary">
-        Already have an account? <AuthLink href="/login">Sign in</AuthLink>
+        {t("signUp.haveAccount")}{" "}
+        <AuthLink href="/login">{t("signIn")}</AuthLink>
       </p>
     </form>
   );

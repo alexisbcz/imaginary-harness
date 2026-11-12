@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import { safeNextPath } from "@/lib/safe-next-path";
 import { createClient } from "@/lib/supabase/client";
@@ -11,6 +12,7 @@ import {
 } from "@/components/auth-ui";
 
 export function LoginForm() {
+  const { t } = useTranslation("auth");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -32,7 +34,7 @@ export function LoginForm() {
       const next = new URLSearchParams(window.location.search).get("next");
       location.href = safeNextPath(next, "/");
     } catch (error: unknown) {
-      setError(error instanceof Error ? error.message : "An error occurred");
+      setError(error instanceof Error ? error.message : t("error"));
     } finally {
       setIsLoading(false);
     }
@@ -41,12 +43,12 @@ export function LoginForm() {
   return (
     <form onSubmit={handleLogin} className="flex flex-col">
       <AuthHeader
-        title="Welcome to Richelieu"
-        description="Sign in to build apps by describing them."
+        title={t("login.title")}
+        description={t("login.description")}
       />
       <div className="flex flex-col gap-4">
         <AuthField
-          label="Email"
+          label={t("email")}
           type="email"
           placeholder="you@example.com"
           autoComplete="email"
@@ -55,8 +57,8 @@ export function LoginForm() {
           onValueChange={setEmail}
         />
         <AuthField
-          label="Password"
-          aside={<AuthLink href="/forgot-password">Forgot it?</AuthLink>}
+          label={t("password")}
+          aside={<AuthLink href="/forgot-password">{t("login.forgot")}</AuthLink>}
           type="password"
           autoComplete="current-password"
           required
@@ -64,10 +66,11 @@ export function LoginForm() {
           onValueChange={setPassword}
         />
         {error && <AuthError>{error}</AuthError>}
-        <AuthSubmit loading={isLoading}>Sign in</AuthSubmit>
+        <AuthSubmit loading={isLoading}>{t("signIn")}</AuthSubmit>
       </div>
       <p className="mt-6 text-center text-t-text-tertiary">
-        No account yet? <AuthLink href="/sign-up">Sign up</AuthLink>
+        {t("login.noAccount")}{" "}
+        <AuthLink href="/sign-up">{t("login.signUp")}</AuthLink>
       </p>
     </form>
   );

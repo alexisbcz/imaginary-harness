@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { formatDistanceToNow } from "date-fns";
+import { useTranslation } from "react-i18next";
 import { PatchDiff } from "@pierre/diffs/react";
 import { Skeleton } from "twenty-ui/primitives/feedback";
 import { Loader } from "twenty-ui/primitives/feedback";
@@ -9,6 +10,7 @@ import { IconRestore } from "twenty-ui/icon";
 import { cn } from "cn";
 
 import { api } from "@/lib/api";
+import { dateLocale } from "@/lib/i18n";
 
 type Version = { sha: string; message: string; author: string; date: string };
 type FileDiff = {
@@ -33,6 +35,8 @@ export function HistoryPanel({
   /** Changes whenever the project does, to reload the list. */
   revision: string;
 }) {
+  const { t } = useTranslation("builder");
+  const { t: tc } = useTranslation("common");
   const [versions, setVersions] = useState<Version[] | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [diff, setDiff] = useState<FileDiff[] | null>(null);
@@ -69,7 +73,7 @@ export function HistoryPanel({
       await api(`/api/projects/${threadId}/restore`, { body: { sha } });
       setSelected(null);
     } catch (error) {
-      setError(error instanceof Error ? error.message : "Could not restore");
+      setError(error instanceof Error ? error.message : t("history.restoreFailed"));
     } finally {
       setRestoring(false);
     }
@@ -90,7 +94,7 @@ export function HistoryPanel({
   if (versions.length === 0)
     return (
       <div className="flex h-full items-center justify-center text-t-text-tertiary">
-        {error ?? "No versions yet"}
+        {error ?? t("history.empty")}
       </div>
     );
 
@@ -111,10 +115,11 @@ export function HistoryPanel({
                 {version.message}
               </span>
               <span className="text-[12px] text-t-text-tertiary">
-                {index === 0 ? "Current · " : ""}
+                {index === 0 ? `${t("history.current")} · ` : ""}
                 {version.author} ·{" "}
                 {formatDistanceToNow(new Date(version.date), {
                   addSuffix: true,
+                  locale: dateLocale(),
                 })}
               </span>
             </button>
@@ -125,7 +130,7 @@ export function HistoryPanel({
         <div className="flex h-10 shrink-0 items-center gap-2 border-b border-t-border-light px-3">
           <span className="min-w-0 flex-1 truncate font-mono text-[12px] text-t-text-tertiary">
             {current?.slice(0, 7)}
-            {diff && ` · ${diff.length} file${diff.length === 1 ? "" : "s"}`}
+            {diff && ` · ${t("history.files", { count: diff.length })}`}
           </span>
           {error && <span className="text-t-text-danger">{error}</span>}
           {current && current !== versions[0]!.sha && (
@@ -141,7 +146,7 @@ export function HistoryPanel({
                   />
                 }
               >
-                Restore this version
+                {t("history.restoreThis")}
               </AlertDialog.Trigger>
               <AlertDialog.Portal>
                 <AlertDialog.Backdrop />
@@ -149,25 +154,23 @@ export function HistoryPanel({
                   <AlertDialog.Popup size="sm">
                     <AlertDialog.Header>
                       <AlertDialog.Title>
-                        Restore this version?
+                        {t("history.confirmTitle")}
                       </AlertDialog.Title>
                     </AlertDialog.Header>
                     <AlertDialog.Body>
                       <AlertDialog.Description>
-                        Every file goes back to how it was at this version. The
-                        restore is a new version on top, so you can undo it the
-                        same way.
+                        {t("history.confirmBody")}
                       </AlertDialog.Description>
                     </AlertDialog.Body>
                     <AlertDialog.Footer>
                       <AlertDialog.Close render={<Button variant="outline" />}>
-                        Cancel
+                        {tc("cancel")}
                       </AlertDialog.Close>
                       <AlertDialog.Close
                         render={<Button variant="solid" color="accent" />}
                         onClick={() => void restore(current)}
                       >
-                        Restore
+                        {t("history.restore")}
                       </AlertDialog.Close>
                     </AlertDialog.Footer>
                   </AlertDialog.Popup>

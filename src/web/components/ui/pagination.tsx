@@ -1,4 +1,5 @@
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 import { cn } from "cn";
 
 import { Button } from "@/components/ui/button";
@@ -69,12 +70,13 @@ function PaginationLink({
 
 function PaginationPrevious({
   className,
-  text = "Previous",
+  text,
   ...props
 }: React.ComponentProps<typeof PaginationLink> & { text?: string }) {
+  const { t } = useTranslation("common");
   return (
     <PaginationLink
-      aria-label="Go to previous page"
+      aria-label={t("ui.previousPage")}
       size="default"
       className={cn("pl-2!", className)}
       {...props}
@@ -84,24 +86,25 @@ function PaginationPrevious({
         strokeWidth={2}
         data-icon="inline-start"
       />
-      <span className="hidden sm:block">{text}</span>
+      <span className="hidden sm:block">{text ?? t("previous")}</span>
     </PaginationLink>
   );
 }
 
 function PaginationNext({
   className,
-  text = "Next",
+  text,
   ...props
 }: React.ComponentProps<typeof PaginationLink> & { text?: string }) {
+  const { t } = useTranslation("common");
   return (
     <PaginationLink
-      aria-label="Go to next page"
+      aria-label={t("ui.nextPage")}
       size="default"
       className={cn("pr-2!", className)}
       {...props}
     >
-      <span className="hidden sm:block">{text}</span>
+      <span className="hidden sm:block">{text ?? t("next")}</span>
       <HugeiconsIcon
         icon={ArrowRight01Icon}
         strokeWidth={2}
@@ -115,6 +118,7 @@ function PaginationEllipsis({
   className,
   ...props
 }: React.ComponentProps<"span">) {
+  const { t } = useTranslation("common");
   return (
     <span
       aria-hidden
@@ -126,7 +130,7 @@ function PaginationEllipsis({
       {...props}
     >
       <HugeiconsIcon icon={MoreHorizontalCircle01Icon} strokeWidth={2} />
-      <span className="sr-only">More pages</span>
+      <span className="sr-only">{t("ui.morePages")}</span>
     </span>
   );
 }

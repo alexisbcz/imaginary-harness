@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactElement, type ReactNode } from "react";
 import { formatDistanceToNow } from "date-fns";
+import { useTranslation } from "react-i18next";
 import { LightIconButton } from "twenty-ui/components/input";
 import { Loader } from "twenty-ui/primitives/feedback";
 import { Button, Input, InputGroup } from "twenty-ui/primitives/input";
@@ -13,13 +14,16 @@ import {
 } from "twenty-ui/icon";
 
 import { api } from "@/lib/api";
+import { dateLocale } from "@/lib/i18n";
 
+/** `label` names the action in full, e.g. "Copy the address". */
 function CopyButton({ value, label }: { value: string; label: string }) {
+  const { t } = useTranslation("common");
   const [copied, setCopied] = useState(false);
   return (
     <LightIconButton
-      aria-label={`Copy the ${label.toLowerCase()}`}
-      tooltip={copied ? "Copied" : "Copy"}
+      aria-label={label}
+      tooltip={copied ? t("copied") : t("copy")}
       size="sm"
       onClick={() => {
         // Only confirm a copy that happened: the browser can refuse clipboard access.
@@ -86,6 +90,8 @@ export function PublishButton({
   threadId: string;
   disabled: boolean;
 }) {
+  const { t } = useTranslation("builder");
+  const { t: tc } = useTranslation("common");
   const [status, setStatus] = useState<{
     url: string | null;
     publishedAt: string | null;
@@ -112,7 +118,7 @@ export function PublishButton({
       );
       setStatus({ url: result.url, publishedAt: new Date().toISOString() });
     } catch (error) {
-      setError(error instanceof Error ? error.message : "Could not publish");
+      setError(error instanceof Error ? error.message : t("ship.publishFailed"));
     } finally {
       setWorking(null);
     }
@@ -125,7 +131,7 @@ export function PublishButton({
       await api(`/api/projects/${threadId}/publish`, { method: "DELETE" });
       setStatus({ url: null, publishedAt: null });
     } catch (error) {
-      setError(error instanceof Error ? error.message : "Could not unpublish");
+      setError(error instanceof Error ? error.message : t("ship.unpublishFailed"));
     } finally {
       setWorking(null);
     }
@@ -135,11 +141,16 @@ export function PublishButton({
   return (
     <Panel
       width={360}
-      title={published ? "Your app is online" : "Publish your app"}
+      title={published ? t("ship.onlineTitle") : t("ship.publishTitle")}
       description={
         published
-          ? `Published ${formatDistanceToNow(new Date(status!.publishedAt!), { addSuffix: true })}. Publish again to put your latest changes online.`
-          : "Build the app and put it online at its own address, for anyone with the link."
+          ? t("ship.onlineBody", {
+              when: formatDistanceToNow(new Date(status!.publishedAt!), {
+                addSuffix: true,
+                locale: dateLocale(),
+              }),
+            })
+          : t("ship.publishBody")
       }
       trigger={
         <Button
@@ -149,7 +160,7 @@ export function PublishButton({
           disabled={disabled}
           startIcon={<IconWorld size={14} />}
         >
-          {published ? "Published" : "Publish"}
+          {published ? t("ship.published") : t("ship.publish")}
         </Button>
       }
     >
@@ -166,10 +177,10 @@ export function PublishButton({
             }
             endElement={
               <div className="flex items-center">
-                <CopyButton value={status!.url!} label="Address" />
+                <CopyButton value={status!.url!} label={t("ship.copyAddress")} />
                 <LightIconButton
-                  aria-label="Open the published app"
-                  tooltip="Open"
+                  aria-label={t("ship.openApp")}
+                  tooltip={tc("open")}
                   size="sm"
                   onClick={() =>
                     window.open(status!.url!, "_blank", "noopener")
@@ -182,7 +193,7 @@ export function PublishButton({
           >
             <Input
               readOnly
-              aria-label="Address"
+              aria-label={t("ship.address")}
               value={status!.url!}
               className="font-mono"
               onFocus={(event) => event.target.select()}
@@ -204,7 +215,7 @@ export function PublishButton({
             loading={working === "unpublish"}
             onClick={() => void unpublish()}
           >
-            Unpublish
+            {t("ship.unpublish")}
           </Button>
         )}
         <Button
@@ -217,10 +228,10 @@ export function PublishButton({
           onClick={() => void publish()}
         >
           {working === "publish"
-            ? "Building…"
+            ? t("ship.building")
             : published
-              ? "Publish changes"
-              : "Publish"}
+              ? t("ship.publishChanges")
+              : t("ship.publish")}
         </Button>
       </div>
     </Panel>
@@ -235,13 +246,14 @@ export function CloneButton({
   threadId: string;
   disabled: boolean;
 }) {
+  const { t } = useTranslation("builder");
   const [url, setUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   return (
     <Panel
       width={440}
-      title="Clone the code"
-      description="Every change is a commit in this project's git repository. The link can read it for an hour."
+      title={t("ship.cloneTitle")}
+      description={t("ship.cloneBody")}
       onOpenChange={(open) => {
         if (!open) return;
         setUrl(null);
@@ -257,7 +269,7 @@ export function CloneButton({
           disabled={disabled}
           startIcon={<IconGitBranch size={14} />}
         >
-          Clone
+          {t("ship.clone")}
         </Button>
       }
     >
@@ -266,9 +278,10 @@ export function CloneButton({
           <div className="flex h-8 items-center gap-1 rounded-sm border border-t-border-light bg-t-secondary pr-1 pl-2.5 font-mono text-[12px]">
             <span className="shrink-0 text-t-text-light">$</span>
             <span className="min-w-0 flex-1 truncate text-t-text-secondary">
+              {/* i18n-ignore: a shell command */}
               git clone {url} app
             </span>
-            <CopyButton value={`git clone ${url} app`} label="Clone command" />
+            <CopyButton value={`git clone ${url} app`} label={t("ship.copyClone")} />
           </div>
         ) : error ? (
           <p className="text-t-text-danger">{error}</p>

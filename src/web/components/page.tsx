@@ -2,6 +2,7 @@ import { createContext, useContext, type ReactNode } from "react";
 import { LightIconButton } from "twenty-ui/components/input";
 import { IconLayoutSidebarLeftExpand } from "twenty-ui/icon";
 import { cn } from "cn";
+import { useTranslation } from "react-i18next";
 
 /** Whether the navigation drawer is open, and how to open or close it. */
 export const DrawerContext = createContext<{
@@ -29,6 +30,7 @@ export function Page({
   bodyClassName?: string;
 }) {
   const drawer = useDrawer();
+  const { t } = useTranslation("layout");
   return (
     <div
       className={cn(
@@ -39,8 +41,8 @@ export function Page({
       <header className="flex h-12 shrink-0 items-center gap-2 pl-1">
         {!drawer.open && (
           <LightIconButton
-            aria-label="Open the sidebar"
-            tooltip="Open the sidebar"
+            aria-label={t("sidebar.open")}
+            tooltip={t("sidebar.open")}
             onClick={() => drawer.setOpen(true)}
           >
             <IconLayoutSidebarLeftExpand size={16} />

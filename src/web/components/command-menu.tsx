@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import { useNavigate, useParams } from "react-router";
 import {
   IconDeviceDesktopFilled,
+  IconLanguage,
   IconLayoutSidebarLeftCollapseFilled,
   IconLayoutSidebarLeftExpandFilled,
   IconMoonFilled,
@@ -33,6 +35,8 @@ import {
   type ThemePreference,
 } from "@/hooks/use-color-scheme";
 import type { Thread } from "@/lib/chat";
+import { currentLanguage, setLanguage } from "@/lib/i18n";
+import { LANGUAGES } from "@/locales";
 import { createClient } from "@/lib/supabase/client";
 
 const supabase = createClient();
@@ -76,22 +80,16 @@ type Command = {
 
 type Group = { value: string; label: string; items: Command[] };
 
-type View = "root" | "theme";
+type View = "root" | "theme" | "language";
 
 const themes: {
   value: ThemePreference;
-  label: string;
   icon: ReactNode;
   color: ThemeColor;
 }[] = [
-  {
-    value: "system",
-    label: "System",
-    icon: <IconDeviceDesktopFilled />,
-    color: "gray",
-  },
-  { value: "light", label: "Light", icon: <IconSunFilled />, color: "orange" },
-  { value: "dark", label: "Dark", icon: <IconMoonFilled />, color: "iris" },
+  { value: "system", icon: <IconDeviceDesktopFilled />, color: "gray" },
+  { value: "light", icon: <IconSunFilled />, color: "orange" },
+  { value: "dark", icon: <IconMoonFilled />, color: "iris" },
 ];
 
 /** Projects shown before anything is typed; typing searches all of them. */
@@ -111,6 +109,7 @@ export function CommandMenu({
   threads: Thread[] | null;
 }) {
   const navigate = useNavigate();
+  const { t, i18n } = useTranslation("layout");
   const { threadId } = useParams();
   const drawer = useDrawer();
   const theme = useThemePreference();
@@ -140,14 +139,30 @@ export function CommandMenu({
   }
 
   const groups: Group[] = (() => {
+    if (view === "language") {
+      return [
+        {
+          value: "language",
+          label: t("commands.language"),
+          items: LANGUAGES.map((language) => ({
+            value: `language-${language.code}`,
+            label: language.label,
+            icon: <IconLanguage />,
+            color: "blue" as ThemeColor,
+            end: language.code === currentLanguage() && <IconCheck size={16} />,
+            run: close(() => setLanguage(language.code)),
+          })),
+        },
+      ];
+    }
     if (view === "theme") {
       return [
         {
           value: "theme",
-          label: "Theme",
+          label: t("commands.theme"),
           items: themes.map((option) => ({
             value: `theme-${option.value}`,
-            label: option.label,
+            label: t(`commands.themes.${option.value}`),
             icon: option.icon,
             color: option.color,
             end: option.value === theme && <IconCheck size={16} />,
@@ -161,36 +176,36 @@ export function CommandMenu({
     return [
       {
         value: "actions",
-        label: "Actions",
+        label: t("commands.actions"),
         items: [
           {
             value: "new-project",
-            label: "New project",
-            keywords: "create start app",
+            label: t("commands.newProject"),
+            keywords: t("commands.newProjectKeywords"),
             icon: <IconSquareRoundedPlusFilled />,
             color: "pink",
             run: close(() => void navigate("/")),
           },
           {
             value: "social",
-            label: "Social: calendar and copilot",
-            keywords: "social media posts calendar schedule linkedin twitter instagram analytics",
+            label: t("commands.social"),
+            keywords: t("commands.socialKeywords"),
             icon: <IconSpeakerphone />,
             color: "violet",
             run: close(() => void navigate("/social")),
           },
           {
             value: "newsletter",
-            label: "Newsletter: Substack posts, ideas and copilot",
-            keywords: "newsletter substack post draft publish email notes subscribers",
+            label: t("commands.newsletter"),
+            keywords: t("commands.newsletterKeywords"),
             icon: <IconNews />,
             color: "orange",
             run: close(() => void navigate("/newsletter")),
           },
           {
             value: "sidebar",
-            label: drawer.open ? "Hide the sidebar" : "Show the sidebar",
-            keywords: "toggle drawer navigation panel",
+            label: drawer.open ? t("commands.hideSidebar") : t("commands.showSidebar"),
+            keywords: t("commands.sidebarKeywords"),
             icon: drawer.open ? (
               <IconLayoutSidebarLeftCollapseFilled />
             ) : (
@@ -202,13 +217,13 @@ export function CommandMenu({
       },
       {
         value: "projects",
-        label: "Projects",
+        label: t("commands.projects"),
         items: (threads ?? [])
           .filter((thread) => thread.id !== threadId)
           .map((thread) => ({
             value: `project-${thread.id}`,
             label: thread.title,
-            keywords: "project open go",
+            keywords: t("commands.projectKeywords"),
             icon: <NameTile name={thread.title} />,
             bare: true,
             run: close(() => void navigate(`/t/${thread.id}`)),
@@ -216,22 +231,32 @@ export function CommandMenu({
       },
       {
         value: "settings",
-        label: "Settings",
+        label: t("commands.settings"),
         items: [
           {
             value: "theme",
-            label: "Change theme",
-            keywords: "appearance dark light mode color scheme",
+            label: t("commands.changeTheme"),
+            keywords: t("commands.themeKeywords"),
             icon: <IconPaletteFilled />,
             color: "plum",
-            description: currentTheme.label,
+            description: t(`commands.themes.${currentTheme.value}`),
             end: <IconChevronRight size={16} />,
             run: () => go("theme"),
           },
           {
+            value: "language",
+            label: t("commands.changeLanguage"),
+            keywords: t("commands.languageKeywords"),
+            icon: <IconLanguage />,
+            color: "blue",
+            description: LANGUAGES.find((l) => l.code === i18n.resolvedLanguage)?.label,
+            end: <IconChevronRight size={16} />,
+            run: () => go("language"),
+          },
+          {
             value: "sign-out",
-            label: "Sign out",
-            keywords: "log out logout account leave",
+            label: t("commands.signOut"),
+            keywords: t("commands.signOutKeywords"),
             icon: <IconLogout />,
             color: "tomato",
             run: close(() => void supabase.auth.signOut()),
@@ -278,7 +303,7 @@ export function CommandMenu({
             initialFocus={inputRef}
             className="w-[600px] overflow-hidden"
           >
-            <Dialog.Title className="sr-only">Command menu</Dialog.Title>
+            <Dialog.Title className="sr-only">{t("commands.title")}</Dialog.Title>
             <Autocomplete.Root
               inline
               open
@@ -303,20 +328,22 @@ export function CommandMenu({
                   <Chip
                     variant="soft"
                     clickable
-                    aria-label="Back to all commands"
+                    aria-label={t("commands.back")}
                     startElement={<IconArrowLeft size={12} />}
                     onClick={() => go("root")}
                   >
-                    Theme
+                    {view === "theme" ? t("commands.theme") : t("commands.language")}
                   </Chip>
                 )}
                 <Autocomplete.Input
                   ref={inputRef}
-                  aria-label="Search commands and projects"
+                  aria-label={t("commands.searchLabel")}
                   placeholder={
                     view === "root"
-                      ? "Search projects, actions and settings…"
-                      : "Search themes…"
+                      ? t("commands.searchPlaceholder")
+                      : view === "theme"
+                        ? t("commands.searchThemes")
+                        : t("commands.searchLanguages")
                   }
                   onKeyDown={(event) => {
                     // Backspace in an empty search goes back to the first page.
@@ -376,28 +403,28 @@ export function CommandMenu({
                 )}
               </Autocomplete.List>
               <Autocomplete.Empty className="px-4 py-8 text-center empty:hidden">
-                Nothing matches “{query.trim()}”.
+                {t("commands.nothing", { query: query.trim() })}
               </Autocomplete.Empty>
 
               <div className="hidden h-10 shrink-0 items-center gap-4 border-t border-t-border-light px-4 text-[12px] text-t-text-tertiary md:flex">
                 <span className="flex items-center gap-1.5">
                   <Shortcut shortcut={["↑"]} />
                   <Shortcut shortcut={["↓"]} />
-                  Move
+                  {t("commands.move")}
                 </span>
                 <span className="flex items-center gap-1.5">
                   <Shortcut shortcut={["Enter"]} />
-                  Select
+                  {t("commands.select")}
                 </span>
                 {view !== "root" && (
                   <span className="flex items-center gap-1.5">
                     <Shortcut shortcut={["⌫"]} />
-                    Back
+                    {t("commands.goBack")}
                   </span>
                 )}
                 <span className="ml-auto flex items-center gap-1.5">
                   <Shortcut shortcut={["Mod", "K"]} />
-                  Toggle
+                  {t("commands.toggle")}
                 </span>
               </div>
             </Autocomplete.Root>

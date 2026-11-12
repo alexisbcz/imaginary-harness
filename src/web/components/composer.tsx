@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { cn } from "cn";
+import type { TFunction } from "i18next";
+import { useTranslation } from "react-i18next";
 import {
   IconButton,
   LightIconButton,
@@ -29,12 +31,16 @@ export type PickedElement = {
 const MAX_IMAGES = 6;
 
 /** What the agent reads about a picked element, before the user's request. */
-function withPicked(content: string, picked: PickedElement | null) {
+function withPicked(
+  content: string,
+  picked: PickedElement | null,
+  t: TFunction<"builder">,
+) {
   if (!picked) return content;
   const lines = [
-    `About this element of the preview: <${picked.tag}> rendered at ${picked.loc}`,
-    picked.text && `Its text: "${picked.text}"`,
-    picked.className && `Its classes: ${picked.className}`,
+    t("composer.picked.about", { tag: picked.tag, loc: picked.loc }),
+    picked.text && t("composer.picked.text", { text: picked.text }),
+    picked.className && t("composer.picked.classes", { classes: picked.className }),
   ].filter(Boolean);
   return `${lines.join("\n")}\n\n${content}`;
 }
@@ -44,7 +50,7 @@ export function Composer({
   onSend,
   disabled = false,
   autoFocus = false,
-  placeholder = "Ask Richelieu…",
+  placeholder: placeholderProp,
   picked = null,
   onClearPicked,
   value: controlledValue,
@@ -62,6 +68,8 @@ export function Composer({
   /** Offer the build and chat modes: a project's conversation does, a brand's copilot does not. */
   modes?: boolean;
 }) {
+  const { t } = useTranslation("builder");
+  const placeholder = placeholderProp ?? t("composer.placeholder");
   const [ownValue, setOwnValue] = useState("");
   const value = controlledValue ?? ownValue;
   const setValue = onValueChange ?? setOwnValue;
@@ -113,7 +121,7 @@ export function Composer({
     setError(null);
     try {
       await onSend({
-        content: withPicked(content, picked),
+        content: withPicked(content, picked, t),
         mode,
         images: images.map((image) => image.file),
       });
@@ -123,7 +131,7 @@ export function Composer({
       onClearPicked?.();
     } catch (error) {
       setError(
-        error instanceof Error ? error.message : "Could not send the message",
+        error instanceof Error ? error.message : t("composer.sendFailed"),
       );
     } finally {
       setSending(false);
@@ -171,7 +179,7 @@ export function Composer({
                 endElement={
                   <button
                     type="button"
-                    aria-label="Forget the picked element"
+                    aria-label={t("composer.forgetPicked")}
                     className="flex rounded-xs text-t-text-tertiary hover:text-t-text"
                     onClick={onClearPicked}
                   >
@@ -196,7 +204,7 @@ export function Composer({
                 />
                 <button
                   type="button"
-                  aria-label={`Remove ${image.file.name}`}
+                  aria-label={t("composer.removeImage", { name: image.file.name })}
                   className="absolute top-0.5 right-0.5 flex size-4 items-center justify-center rounded-full bg-black/60 text-white opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
                   onClick={() => removeImage(image.url)}
                 >
@@ -208,13 +216,13 @@ export function Composer({
         )}
         <Textarea
           ref={textarea}
-          aria-label="Message"
+          aria-label={t("composer.message")}
           variant="plain"
           autoResize
           maxRows={12}
           rows={2}
           placeholder={
-            mode === "chat" ? "Ask a question or plan a change…" : placeholder
+            mode === "chat" ? t("composer.chatPlaceholder") : placeholder
           }
           value={value}
           autoFocus={autoFocus}
@@ -241,8 +249,8 @@ export function Composer({
         <div className="flex items-center justify-between gap-2 px-2 pb-2">
           <div className="flex items-center gap-1">
             <LightIconButton
-              aria-label="Attach images"
-              tooltip="Attach images"
+              aria-label={t("composer.attach")}
+              tooltip={t("composer.attach")}
               tooltipPlace="top"
               disabled={images.length >= MAX_IMAGES}
               onClick={() => fileInput.current?.click()}
@@ -262,22 +270,22 @@ export function Composer({
             />
             {modes && (
             <SegmentedControl<Mode>
-              aria-label="Mode"
+              aria-label={t("composer.mode")}
               size="sm"
               value={mode}
               onValueChange={(next) => setMode(next)}
               options={[
                 {
                   value: "build",
-                  label: "Build",
+                  label: t("composer.build"),
                   startIcon: <IconTool size={14} />,
-                  "aria-label": "Build: the agent changes the app",
+                  "aria-label": t("composer.buildLabel"),
                 },
                 {
                   value: "chat",
-                  label: "Chat",
+                  label: t("composer.chat"),
                   startIcon: <IconMessageCircle size={14} />,
-                  "aria-label": "Chat: discuss without changing the app",
+                  "aria-label": t("composer.chatLabel"),
                 },
               ]}
             />
@@ -285,7 +293,7 @@ export function Composer({
           </div>
           <IconButton
             type="submit"
-            aria-label="Send"
+            aria-label={t("composer.send")}
             variant="solid"
             color="accent"
             shape="round"

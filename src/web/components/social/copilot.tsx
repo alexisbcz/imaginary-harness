@@ -2,6 +2,8 @@
 // agent with the social tools only; what it drafts lands on the calendar, which reloads as its answers move along.
 
 import { useEffect } from "react";
+import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import { AssistantAvatar } from "twenty-ui/components/data-display";
 import { LightIconButton } from "twenty-ui/components/input";
 import { IconX } from "twenty-ui/icon";
@@ -22,20 +24,21 @@ import type { Brand, SocialAccount } from "@/lib/social";
 import { ChatBubble, useMessages } from "@/routes/chat";
 
 /** What a new copilot offers to do, depending on what the brand has yet. */
-function suggestionsFor(brand: Brand, accounts: SocialAccount[] | null) {
+function suggestionsFor(t: TFunction<"social">, brand: Brand, accounts: SocialAccount[] | null) {
   const thin = !brand.description && !brand.voice;
-  return [
+  const suggestions: (string | null)[] = [
     thin && brand.website
-      ? `Read ${brand.website} and fill in our brand brief`
+      ? t("copilot.suggestions.readWebsite", { website: brand.website })
       : thin
-        ? "Interview me to write our brand brief"
+        ? t("copilot.suggestions.interview")
         : null,
-    accounts?.length ? "Plan next week's posts on the calendar" : null,
-    accounts?.length ? "What worked best for us lately, and why?" : null,
-    "Write a LinkedIn post about something we shipped recently",
-    "Find 3 competitors worth watching",
-    "Turn one idea into posts for each of our platforms",
-  ].filter((s): s is string => Boolean(s));
+    accounts?.length ? t("copilot.suggestions.planWeek") : null,
+    accounts?.length ? t("copilot.suggestions.whatWorked") : null,
+    t("copilot.suggestions.linkedinPost"),
+    t("copilot.suggestions.competitors"),
+    t("copilot.suggestions.repurpose"),
+  ];
+  return suggestions.filter((s): s is string => Boolean(s));
 }
 
 export function Copilot({
@@ -50,6 +53,7 @@ export function Copilot({
   onActivity: (revision: string) => void;
   onClose?: () => void;
 }) {
+  const { t } = useTranslation("social");
   const threadId = brand.thread_id!;
   const messages = useMessages(threadId);
   const last = messages?.at(-1);
@@ -67,9 +71,9 @@ export function Copilot({
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex h-10 shrink-0 items-center gap-2 border-b border-t-border-light px-3">
         <AssistantAvatar size={16} shape="cookie" color="red" face="happy" />
-        <span className="min-w-0 flex-1 truncate font-medium text-t-text">Copilot</span>
+        <span className="min-w-0 flex-1 truncate font-medium text-t-text">{t("copilot.title")}</span>
         {onClose && (
-          <LightIconButton aria-label="Close the copilot" size="sm" onClick={onClose}>
+          <LightIconButton aria-label={t("copilot.close")} size="sm" onClick={onClose}>
             <IconX size={16} />
           </LightIconButton>
         )}
@@ -83,19 +87,18 @@ export function Copilot({
                   <div className="flex flex-col gap-4 pt-6">
                     <AssistantAvatar size={40} shape="cookie" color="red" face="happy" />
                     <div className="flex flex-col gap-1">
-                      <p className="text-[15px] font-semibold text-t-text">{brand.name}'s social copilot</p>
+                      <p className="text-[15px] font-semibold text-t-text">{t("copilot.heading", { brand: brand.name })}</p>
                       <p className="leading-[1.55] text-t-text-secondary">
-                        I plan the calendar, write posts in your voice, read your numbers and watch your
-                        competitors. Everything I write lands as a draft: nothing goes out until you say so.
+                        {t("copilot.intro")}
                       </p>
                     </div>
                     <Suggestions className="items-start">
-                      {suggestionsFor(brand, accounts).map((suggestion) => (
+                      {suggestionsFor(t, brand, accounts).map((suggestion) => (
                         <Suggestion
                           key={suggestion}
                           suggestion={suggestion}
                           onClick={(text) => void send(text)}
-                          className="h-auto min-h-8 py-1.5 text-left whitespace-normal"
+                          className="h-auto min-h-8 max-w-full py-1.5 text-left whitespace-normal"
                         />
                       ))}
                     </Suggestions>
@@ -111,7 +114,7 @@ export function Copilot({
                 <MessageScrollerItem>
                   <div className="flex items-center gap-2.5">
                     <AssistantAvatar size={20} shape="cookie" color="red" face="happy" isAnimated />
-                    <Shimmer>Thinking…</Shimmer>
+                    <Shimmer>{t("copilot.thinking")}</Shimmer>
                   </div>
                 </MessageScrollerItem>
               )}
@@ -121,7 +124,7 @@ export function Copilot({
         </MessageScroller>
       </MessageScrollerProvider>
       <div className="mx-auto w-full max-w-2xl px-3 pb-3">
-        <Composer modes={false} placeholder="Ask your copilot…" onSend={(message) => sendMessage(threadId, message)} />
+        <Composer modes={false} placeholder={t("copilot.placeholder")} onSend={(message) => sendMessage(threadId, message)} />
       </div>
     </div>
   );

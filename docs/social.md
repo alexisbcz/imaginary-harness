@@ -66,6 +66,7 @@ Pi Durable agent with a different set of tools (`src/social/agent.ts`):
 | `delete_social_post`                    | deletes a draft or a scheduled post, only when asked                                |
 | `update_brand_brief`                    | saves what it learned about the brand                                               |
 | `read_website`                          | reads a public page (the brand's site, a launch post)                               |
+| `web_research`                          | searches the web and reads pages: a cited answer (blade.sh)                         |
 | `research_social_account`               | any public account and its most engaging posts                                      |
 | `list_watchlist`, `watch_social_account` | the watchlist                                                                       |
 | `import_social_post`                    | imports a post published outside Richelieu, from its link                           |

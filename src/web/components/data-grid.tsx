@@ -1,6 +1,7 @@
 import { useEffect, useRef, type ReactNode } from "react";
 import { format } from "date-fns";
 import { cn } from "cn";
+import { useTranslation } from "react-i18next";
 import { Tag } from "twenty-ui/primitives/data-display";
 import {
   IconArrowDown,
@@ -194,6 +195,7 @@ function ColumnHeader({
   column: GridColumn;
   sort: GridSort;
 }) {
+  const { t } = useTranslation("builder");
   const direction = sort?.column === column.name ? sort.direction : null;
   return (
     <div className="flex items-center gap-1.5">
@@ -204,7 +206,7 @@ function ColumnHeader({
           >
             <IconKey size={13} />
           </TooltipTrigger>
-          <TooltipContent>Primary key</TooltipContent>
+          <TooltipContent>{t("grid.primaryKey")}</TooltipContent>
         </Tooltip>
       )}
       {column.references && (
@@ -214,18 +216,18 @@ function ColumnHeader({
           >
             <IconLink size={13} />
           </TooltipTrigger>
-          <TooltipContent>Points to {column.references}</TooltipContent>
+          <TooltipContent>{t("grid.pointsTo", { table: column.references })}</TooltipContent>
         </Tooltip>
       )}
       <span className="font-medium text-t-text">{column.name}</span>
       {direction === "asc" && (
-        <IconArrowUp size={13} className="text-t-blue" aria-label="Ascending" />
+        <IconArrowUp size={13} className="text-t-blue" aria-label={t("grid.ascending")} />
       )}
       {direction === "desc" && (
         <IconArrowDown
           size={13}
           className="text-t-blue"
-          aria-label="Descending"
+          aria-label={t("grid.descending")}
         />
       )}
       <TypeTag type={column.type} className="ml-auto" />
@@ -241,7 +243,7 @@ function ColumnHeader({
 export function DataGrid({
   columns,
   rows,
-  empty = "No rows",
+  empty: emptyProp,
   rowOffset = 0,
   sort = null,
   onSort,
@@ -267,6 +269,8 @@ export function DataGrid({
   /** Text to mark in the values: the current search. */
   highlight?: string;
 }) {
+  const { t } = useTranslation("builder");
+  const empty = emptyProp ?? t("grid.noRows");
   const kinds = columns.map((column) => typeKind(column.type));
   const gridRef = useRef<HTMLDivElement>(null);
   const interactive = Boolean(onSelect);
@@ -355,7 +359,7 @@ export function DataGrid({
                 {onSort ? (
                   <button
                     type="button"
-                    title="Sort by this column"
+                    title={t("grid.sort")}
                     onClick={() => onSort(column.name)}
                     className="flex h-9 w-full items-center px-2.5 outline-none hover:bg-t-hover focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
                   >
@@ -422,8 +426,8 @@ export function DataGrid({
                       {followable && (
                         <button
                           type="button"
-                          aria-label={`Open the ${column.references} row`}
-                          title={`Open the ${column.references} row`}
+                          aria-label={t("grid.openReferenced", { table: column.references ?? "" })}
+                          title={t("grid.openReferenced", { table: column.references ?? "" })}
                           onClick={(event) => {
                             event.stopPropagation();
                             onFollow(column, value);

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router";
+import { Trans, useTranslation } from "react-i18next";
 import { LightIconButton } from "twenty-ui/components/input";
 import { Loader } from "twenty-ui/primitives/feedback";
 import { Button, Input } from "twenty-ui/primitives/input";
@@ -37,12 +38,13 @@ import {
   type SocialStatus,
 } from "@/lib/social";
 
+/** The brand's views; their labels are `views.<value>`. */
 const VIEWS = [
-  { value: "calendar", label: "Calendar", icon: IconCalendarFilled, color: "violet" as const },
-  { value: "analytics", label: "Analytics", icon: IconChartAreaLineFilled, color: "green" as const },
-  { value: "watchlist", label: "Watchlist", icon: IconBinocularsFilled, color: "orange" as const },
-  { value: "brand", label: "Brand", icon: IconBuildingStore, color: "blue" as const },
-];
+  { value: "calendar", icon: IconCalendarFilled, color: "violet" as const },
+  { value: "analytics", icon: IconChartAreaLineFilled, color: "green" as const },
+  { value: "watchlist", icon: IconBinocularsFilled, color: "orange" as const },
+  { value: "brand", icon: IconBuildingStore, color: "blue" as const },
+] as const;
 type View = (typeof VIEWS)[number]["value"];
 
 const browserZone = () => Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
@@ -59,6 +61,7 @@ function CreateBrand({
   onCreated: (brand: Brand) => void;
   first: boolean;
 }) {
+  const { t } = useTranslation("social");
   const [name, setName] = useState("");
   const [website, setWebsite] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
@@ -91,16 +94,13 @@ function CreateBrand({
         </IconTile>
         <div className="flex flex-col gap-1.5">
           <h1 className="text-[22px] font-semibold text-t-text">
-            {first ? "Your social media, run with an agent" : "A new brand"}
+            {first ? t("create.titleFirst") : t("create.title")}
           </h1>
-          <p className="leading-[1.55] text-t-text-secondary">
-            Connect a brand's accounts, and Richelieu plans the calendar, writes posts in its voice, tracks what
-            works, and keeps an eye on competitors. Nothing goes out until you approve it.
-          </p>
+          <p className="leading-[1.55] text-t-text-secondary">{t("create.intro")}</p>
         </div>
         {!status.publishing && (
           <p className="rounded-md border border-t-border bg-t-secondary px-3 py-2 text-t-text-secondary">
-            Set <code>ZERNIO_API_KEY</code> in <code>.env</code> to connect accounts and publish.
+            <Trans t={t} i18nKey="create.setKey" components={{ code: <code /> }} />
           </p>
         )}
         <form
@@ -111,15 +111,15 @@ function CreateBrand({
           }}
         >
           <Input
-            aria-label="Brand name"
-            placeholder="Brand or company name"
+            aria-label={t("create.name")}
+            placeholder={t("create.namePlaceholder")}
             value={name}
             onChange={(event) => setName(event.target.value)}
             autoFocus
           />
           <Input
-            aria-label="Website"
-            placeholder="Website (optional): the copilot reads it to learn the brand"
+            aria-label={t("create.website")}
+            placeholder={t("create.websitePlaceholder")}
             value={website}
             onChange={(event) => setWebsite(event.target.value)}
           />
@@ -130,12 +130,12 @@ function CreateBrand({
             loading={busy === "new"}
             disabled={!name.trim() || busy !== null || !status.publishing}
           >
-            Create the brand
+            {t("create.submit")}
           </Button>
         </form>
         {linkable.length > 0 && (
           <div className="flex flex-col gap-2">
-            <p className="text-[12px] font-medium text-t-text-tertiary">Or start from a Zernio profile you already have</p>
+            <p className="text-[12px] font-medium text-t-text-tertiary">{t("create.fromProfile")}</p>
             {linkable.map((profile) => (
               <button
                 key={profile.id}
@@ -148,10 +148,10 @@ function CreateBrand({
                 <span className="min-w-0 flex-1">
                   <span className="block truncate font-medium text-t-text">{profile.name}</span>
                   <span className="block truncate text-[12px] text-t-text-tertiary">
-                    {profile.accounts.length ? profile.accounts.join(", ") : "No accounts"}
+                    {profile.accounts.length ? profile.accounts.join(", ") : t("create.noAccounts")}
                   </span>
                 </span>
-                {busy === profile.id ? <Loader /> : <span className="text-[12px] text-t-text-secondary">Use</span>}
+                {busy === profile.id ? <Loader /> : <span className="text-[12px] text-t-text-secondary">{t("create.use")}</span>}
               </button>
             ))}
           </div>
@@ -164,6 +164,7 @@ function CreateBrand({
 
 /** A brand's social media: its calendar, analytics, watchlist and brief, with its copilot beside them. */
 export function Social() {
+  const { t } = useTranslation(["social", "common"]);
   const { brandId, view: viewParam } = useParams();
   const navigate = useNavigate();
   const isMobile = useIsMobile();
@@ -200,13 +201,13 @@ export function Social() {
 
   if (error && !brands)
     return (
-      <Page title="Social" icon={<IconTile color="violet"><IconSpeakerphone /></IconTile>}>
+      <Page title={t("common:sections.social")} icon={<IconTile color="violet"><IconSpeakerphone /></IconTile>}>
         <p className="m-auto text-t-text-danger">{error}</p>
       </Page>
     );
   if (!brands || !data)
     return (
-      <Page title="Social" icon={<IconTile color="violet"><IconSpeakerphone /></IconTile>}>
+      <Page title={t("common:sections.social")} icon={<IconTile color="violet"><IconSpeakerphone /></IconTile>}>
         <div className="m-auto">
           <Loader />
         </div>
@@ -215,12 +216,12 @@ export function Social() {
   if (brands.length === 0 || creating || !brand)
     return (
       <Page
-        title="Social"
+        title={t("common:sections.social")}
         icon={<IconTile color="violet"><IconSpeakerphone /></IconTile>}
         actions={
           creating && brands.length > 0 ? (
             <Button size="sm" variant="ghost" onClick={() => setCreating(false)}>
-              Cancel
+              {t("common:cancel")}
             </Button>
           ) : undefined
         }
@@ -241,7 +242,7 @@ export function Social() {
               // A new brand with a website: the copilot starts by learning it.
               if (created.website && created.thread_id)
                 void sendMessage(created.thread_id, {
-                  content: `Here is our website: ${created.website}. Read it and fill in our brand brief (what we do, audience, voice, content pillars). Then tell me in a few lines what you understood, and which accounts I should connect.`,
+                  content: t("create.firstPrompt", { website: created.website }),
                 });
             }}
           />
@@ -264,8 +265,8 @@ export function Social() {
       className="flex h-full min-h-0 flex-col"
     >
       <div className="flex h-10 shrink-0 items-end">
-        <Tabs.List aria-label="Social views" className="relative w-full overflow-x-auto px-3">
-          {VIEWS.map(({ value, label, icon: TabIcon, color }) => (
+        <Tabs.List aria-label={t("views.label")} className="relative w-full overflow-x-auto px-3">
+          {VIEWS.map(({ value, icon: TabIcon, color }) => (
             <Tabs.Tab
               key={value}
               value={value}
@@ -275,7 +276,7 @@ export function Social() {
                 </IconTile>
               }
             >
-              {label}
+              {t(`views.${value}`)}
             </Tabs.Tab>
           ))}
           <Tabs.Indicator />
@@ -318,13 +319,13 @@ export function Social() {
     <Page
       title={
         <SimpleSelect
-          label="Brand"
+          label={t("views.brandSelect")}
           bare
           value={brand.id}
           onValueChange={(id) => (id === "new" ? setCreating(true) : navigate(`/social/${id}/${view}`))}
           options={[
             ...brands.map((b) => ({ value: b.id, label: b.name })),
-            { value: "new", label: "New brand…" },
+            { value: "new", label: t("views.newBrand") },
           ]}
           className="-ml-2 font-medium"
         />
@@ -339,11 +340,11 @@ export function Social() {
             startIcon={<IconPencilPlus size={14} />}
             onClick={() => setEditor({})}
           >
-            New post
+            {t("editor.titles.new")}
           </Button>
           <LightIconButton
-            aria-label={copilotOpen ? "Hide the copilot" : "Show the copilot"}
-            tooltip={copilotOpen ? "Hide the copilot" : "Show the copilot"}
+            aria-label={copilotOpen ? t("views.hideCopilot") : t("views.showCopilot")}
+            tooltip={copilotOpen ? t("views.hideCopilot") : t("views.showCopilot")}
             onClick={() => setCopilotOpen((open) => !open)}
           >
             {copilotOpen ? <IconLayoutSidebarRightCollapse size={16} /> : <IconSparkles size={16} />}

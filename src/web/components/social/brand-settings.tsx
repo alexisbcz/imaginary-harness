@@ -3,6 +3,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router";
+import { useTranslation } from "react-i18next";
 import { Loader } from "twenty-ui/primitives/feedback";
 import { Button, Input, Textarea } from "twenty-ui/primitives/input";
 import { IconCircleCheck, IconExternalLink, IconSparkles } from "@tabler/icons-react";
@@ -83,6 +84,7 @@ export function BrandSettings({
   onAccountsChanged,
   onDeleted,
 }: BrandViewProps & { onAccountsChanged: () => void; onDeleted: () => void }) {
+  const { t } = useTranslation(["social", "common"]);
   const [params, setParams] = useSearchParams();
   const connected = params.get("connected");
   const [draft, setDraft] = useState(() => draftOf(brand));
@@ -173,17 +175,17 @@ export function BrandSettings({
           <div className="flex items-center gap-2 rounded-md border border-t-border bg-t-secondary px-3 py-2 text-t-text">
             <IconCircleCheck size={16} className="text-[var(--t-color-green9)]" />
             <span className="flex-1">
-              {platformInfo(connected).label} is connected. Your copilot can now plan and draft posts for it.
+              {t("brand.connected", { platform: platformInfo(connected).label })}
             </span>
             <Button size="sm" variant="ghost" onClick={() => setParams({}, { replace: true })}>
-              Dismiss
+              {t("common:dismiss")}
             </Button>
           </div>
         )}
 
         <Section
-          title="Accounts"
-          description="Where the brand posts. Accounts connect through each platform's own sign-in; Richelieu never sees passwords."
+          title={t("brand.accounts.title")}
+          description={t("brand.accounts.description")}
         >
           {accounts === null ? (
             <div className="flex h-16 items-center justify-center">
@@ -199,7 +201,7 @@ export function BrandSettings({
                     <div className="truncate text-[12px] text-t-text-tertiary">
                       {platformInfo(account.platform).label}
                       {account.username !== account.name ? ` · ${account.username}` : ""}
-                      {!account.active && " · needs reconnecting"}
+                      {!account.active && ` · ${t("brand.accounts.reconnect")}`}
                     </div>
                   </div>
                   {account.url && (
@@ -208,24 +210,24 @@ export function BrandSettings({
                       target="_blank"
                       rel="noreferrer"
                       className="rounded p-1 text-t-text-tertiary hover:bg-t-hover hover:text-t-text"
-                      aria-label={`Open ${account.name} on ${platformInfo(account.platform).label}`}
+                      aria-label={t("brand.accounts.open", { name: account.name, platform: platformInfo(account.platform).label })}
                     >
                       <IconExternalLink size={15} />
                     </a>
                   )}
                   {confirm === account.id ? (
                     <span className="flex items-center gap-1.5">
-                      <span className="text-[12px] text-t-text-secondary">Disconnect?</span>
+                      <span className="text-[12px] text-t-text-secondary">{t("brand.accounts.confirmDisconnect")}</span>
                       <Button size="sm" variant="solid" color="danger" loading={busy === account.id} onClick={() => void disconnect(account.id)}>
-                        Disconnect
+                        {t("brand.accounts.disconnect")}
                       </Button>
                       <Button size="sm" variant="ghost" onClick={() => setConfirm(null)}>
-                        Keep
+                        {t("brand.accounts.keep")}
                       </Button>
                     </span>
                   ) : (
                     <Button size="sm" variant="ghost" onClick={() => setConfirm(account.id)}>
-                      Disconnect
+                      {t("brand.accounts.disconnect")}
                     </Button>
                   )}
                 </li>
@@ -233,7 +235,7 @@ export function BrandSettings({
             </ul>
           ) : (
             <p className="rounded-md border border-dashed border-t-border px-4 py-3 text-t-text-secondary">
-              No account yet. Connect one below: the copilot can write drafts before, but nothing can be scheduled.
+              {t("brand.accounts.empty")}
             </p>
           )}
           <div className="grid grid-cols-[repeat(auto-fill,minmax(170px,1fr))] gap-2">
@@ -253,7 +255,7 @@ export function BrandSettings({
                   <Loader />
                 ) : (
                   <span className="text-[12px] text-t-text-tertiary">
-                    {platformsPresent.includes(platform.id) ? "Add" : "Connect"}
+                    {platformsPresent.includes(platform.id) ? t("brand.accounts.add") : t("brand.accounts.connect")}
                   </span>
                 )}
               </button>
@@ -262,8 +264,8 @@ export function BrandSettings({
         </Section>
 
         <Section
-          title="Brief"
-          description="What every post is written from. The copilot fills it from your website, and keeps it up to date as it learns."
+          title={t("brand.brief.title")}
+          description={t("brand.brief.description")}
           actions={
             <Button
               size="sm"
@@ -272,12 +274,12 @@ export function BrandSettings({
               onClick={() =>
                 onAsk(
                   draft.website || brand.website
-                    ? `Read our website ${draft.website || brand.website} and our recent posts, then improve our brand brief: what we do, audience, voice, content pillars, what to avoid, and two example posts. Tell me what you changed.`
-                    : "Ask me the questions you need to write our brand brief (what we do, audience, voice, content pillars, what to avoid), then save it.",
+                    ? t("brand.brief.promptWebsite", { website: draft.website || brand.website })
+                    : t("brand.brief.promptInterview"),
                 )
               }
             >
-              Fill with the copilot
+              {t("brand.brief.fill")}
             </Button>
           }
         >
@@ -289,33 +291,33 @@ export function BrandSettings({
             }}
           >
             <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Name">
+              <Field label={t("brand.brief.name")}>
                 <Input value={draft.name} onChange={(e) => set("name", e.target.value)} />
               </Field>
-              <Field label="Website">
+              <Field label={t("brand.brief.website")}>
                 <Input value={draft.website} placeholder="https://" onChange={(e) => set("website", e.target.value)} />
               </Field>
             </div>
-            <Field label="What the brand does" hint="Products, what makes them different, proof points.">
+            <Field label={t("brand.brief.does")} hint={t("brand.brief.doesHint")}>
               <Textarea rows={3} value={draft.description} onChange={(e) => set("description", e.target.value)} />
             </Field>
-            <Field label="Audience" hint="Who reads the posts, and what they care about.">
+            <Field label={t("brand.brief.audience")} hint={t("brand.brief.audienceHint")}>
               <Textarea rows={2} value={draft.audience} onChange={(e) => set("audience", e.target.value)} />
             </Field>
-            <Field label="Voice" hint="How it sounds: e.g. “direct, warm, first person plural, no jargon, one emoji at most”.">
+            <Field label={t("brand.brief.voice")} hint={t("brand.brief.voiceHint")}>
               <Textarea rows={2} value={draft.voice} onChange={(e) => set("voice", e.target.value)} />
             </Field>
-            <Field label="Content pillars" hint="The themes it posts about, one per line.">
+            <Field label={t("brand.brief.pillars")} hint={t("brand.brief.pillarsHint")}>
               <Textarea rows={4} value={draft.pillars} onChange={(e) => set("pillars", e.target.value)} />
             </Field>
-            <Field label="Never" hint="Words, topics or habits to avoid.">
+            <Field label={t("brand.brief.avoid")} hint={t("brand.brief.avoidHint")}>
               <Textarea rows={2} value={draft.avoid} onChange={(e) => set("avoid", e.target.value)} />
             </Field>
-            <Field label="Example posts" hint="Two or three posts that sound exactly right.">
+            <Field label={t("brand.brief.examples")} hint={t("brand.brief.examplesHint")}>
               <Textarea rows={5} value={draft.examples} onChange={(e) => set("examples", e.target.value)} />
             </Field>
             <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Time zone" hint="Posts are planned and analyzed in it.">
+              <Field label={t("brand.brief.timezone")} hint={t("brand.brief.timezoneHint")}>
                 <Input list="social-zones" value={draft.timezone} onChange={(e) => set("timezone", e.target.value)} />
                 <datalist id="social-zones">
                   {ZONES.map((zone) => (
@@ -325,7 +327,7 @@ export function BrandSettings({
               </Field>
             </div>
             {platformsPresent.length > 0 && (
-              <Field label="Posts per week" hint="The copilot plans towards these goals.">
+              <Field label={t("brand.brief.cadence")} hint={t("brand.brief.cadenceHint")}>
                 <div className="flex flex-wrap gap-2">
                   {platformsPresent.map((platform) => (
                     <span key={platform} className="flex items-center gap-2 rounded-md border border-t-border py-1 pr-1 pl-2">
@@ -335,7 +337,7 @@ export function BrandSettings({
                         type="number"
                         min={0}
                         max={50}
-                        aria-label={`Posts per week on ${platformInfo(platform).label}`}
+                        aria-label={t("brand.brief.cadenceOn", { platform: platformInfo(platform).label })}
                         className="w-16 tabular-nums"
                         value={draft.cadence[platform] ?? ""}
                         placeholder="0"
@@ -348,35 +350,31 @@ export function BrandSettings({
             )}
             <div className="flex items-center gap-3">
               <Button type="submit" variant="solid" color="accent" size="sm" loading={saving} disabled={!dirty}>
-                Save the brief
+                {t("brand.brief.save")}
               </Button>
-              {saved && !dirty && <span className="text-[12px] text-t-text-tertiary">Saved</span>}
+              {saved && !dirty && <span className="text-[12px] text-t-text-tertiary">{t("common:saved")}</span>}
               {error && <span className="text-t-text-danger">{error}</span>}
             </div>
           </form>
         </Section>
 
         <Section
-          title="Delete the brand"
-          description={
-            brand.zernio_profile_owned
-              ? "Removes its brief, watchlist and copilot conversation, disconnects its accounts and deletes its Zernio profile. Published posts stay on the platforms."
-              : "Removes its brief, watchlist and copilot conversation. Its Zernio profile and accounts stay as they were."
-          }
+          title={t("brand.delete.title")}
+          description={brand.zernio_profile_owned ? t("brand.delete.owned") : t("brand.delete.linked")}
         >
           <div className="flex items-center gap-2">
             {confirm === "brand" ? (
               <>
                 <Button size="sm" variant="solid" color="danger" loading={busy === "brand"} onClick={() => void remove()}>
-                  Delete {brand.name}
+                  {t("brand.delete.confirm", { name: brand.name })}
                 </Button>
                 <Button size="sm" variant="ghost" onClick={() => setConfirm(null)}>
-                  Cancel
+                  {t("common:cancel")}
                 </Button>
               </>
             ) : (
               <Button size="sm" variant="outline" color="danger" onClick={() => setConfirm("brand")}>
-                Delete the brand…
+                {t("brand.delete.button")}
               </Button>
             )}
           </div>

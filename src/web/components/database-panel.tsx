@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { IconDatabaseFilled } from "@tabler/icons-react";
+import { Trans, useTranslation } from "react-i18next";
 import { SegmentedControl } from "twenty-ui/components/input";
 import { Loader } from "twenty-ui/primitives/feedback";
 import { Button } from "twenty-ui/primitives/input";
@@ -21,6 +22,7 @@ import { IconTile } from "@/components/icon-tile";
 import { SqlEditor } from "@/components/sql-editor";
 import { TableBrowser, type Filter } from "@/components/table-browser";
 import { api } from "@/lib/api";
+import { intlLocale } from "@/lib/i18n";
 
 type Column = GridColumn & {
   nullable: boolean;
@@ -57,16 +59,17 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 
 /** Each column with its type, whether it may be empty, its default and its keys. */
 function Structure({ table }: { table: Table }) {
+  const { t } = useTranslation("builder");
   return (
     <table className="w-full border-separate border-spacing-0 text-[13px]">
       <thead>
         <tr className="text-left text-[12px] text-t-text-tertiary">
-          {["Column", "Type", "Empty", "Default", "Keys"].map((label) => (
+          {(["column", "type", "empty", "default", "keys"] as const).map((label) => (
             <th
               key={label}
               className="sticky top-0 h-9 border-b border-t-border-light bg-t-secondary px-3 font-medium"
             >
-              {label}
+              {t(`database.structure.${label}`)}
             </th>
           ))}
         </tr>
@@ -82,9 +85,9 @@ function Structure({ table }: { table: Table }) {
             </td>
             <td className="border-b border-t-border-light px-3 text-t-text-secondary">
               {column.nullable ? (
-                "Allowed"
+                t("database.structure.allowed")
               ) : (
-                <span className="text-t-text-tertiary">Required</span>
+                <span className="text-t-text-tertiary">{t("database.structure.required")}</span>
               )}
             </td>
             <td className="max-w-72 truncate border-b border-t-border-light px-3 font-mono text-[12px] text-t-text-tertiary">
@@ -94,7 +97,7 @@ function Structure({ table }: { table: Table }) {
               <span className="flex items-center gap-1.5">
                 {column.primary && (
                   <span className="inline-flex items-center gap-1 rounded-sm bg-[var(--t-color-amber3)] px-1.5 py-0.5 text-[11px] font-medium text-[var(--t-color-amber11)]">
-                    <IconKey size={12} /> Primary
+                    <IconKey size={12} /> {t("database.structure.primary")}
                   </span>
                 )}
                 {column.references && (
@@ -122,6 +125,8 @@ export function DatabasePanel({
   threadId: string;
   revision: string;
 }) {
+  const { t } = useTranslation("builder");
+  const { t: tc } = useTranslation("common");
   const [database, setDatabase] = useState<Database | null | undefined>(
     undefined,
   );
@@ -155,7 +160,7 @@ export function DatabasePanel({
       setError(
         error instanceof Error
           ? error.message
-          : "Could not create the database",
+          : t("database.createFailed"),
       );
     } finally {
       setEnabling(false);
@@ -204,10 +209,9 @@ export function DatabasePanel({
           <IconDatabaseFilled />
         </IconTile>
         <div className="flex max-w-sm flex-col gap-1">
-          <p className="font-semibold text-t-text">No database yet</p>
+          <p className="font-semibold text-t-text">{t("database.emptyTitle")}</p>
           <p className="leading-[1.45] text-t-text-tertiary">
-            Give the app a database to keep data and sign users in. Richelieu
-            adds one by itself when you ask for something that needs it.
+            {t("database.emptyBody")}
           </p>
         </div>
         <Button
@@ -219,7 +223,7 @@ export function DatabasePanel({
           startIcon={<IconDatabase size={14} />}
           onClick={() => void enable()}
         >
-          Add a database
+          {t("database.add")}
         </Button>
         {error && <p className="text-t-text-danger">{error}</p>}
       </div>
@@ -236,7 +240,7 @@ export function DatabasePanel({
   return (
     <div className="flex h-full min-h-0">
       <nav
-        aria-label="Database"
+        aria-label={t("database.nav")}
         className="flex w-56 shrink-0 flex-col overflow-y-auto border-r border-t-border-light p-2"
       >
         <ListItem
@@ -249,39 +253,41 @@ export function DatabasePanel({
           selected={view.kind === "sql"}
           onClick={() => view.kind !== "sql" && query()}
         >
-          SQL editor
+          {t("database.sqlEditor")}
         </ListItem>
-        <SectionLabel>Tables</SectionLabel>
+        <SectionLabel>{t("database.tables")}</SectionLabel>
         <div className="flex flex-col gap-px">
           {database.tables.length === 0 && (
             <p className="px-1 py-1 leading-[1.45] text-t-text-tertiary">
-              No tables yet. Ask Richelieu to create some, or write a{" "}
-              <code className="font-mono text-[12px]">create table</code> in the
-              SQL editor.
+              <Trans
+                t={t}
+                i18nKey="database.noTables"
+                components={{ code: <code className="font-mono text-[12px]" /> }}
+              />
             </p>
           )}
-          {database.tables.map((t) => (
+          {database.tables.map((item) => (
             <ListItem
-              key={t.name}
+              key={item.name}
               render={<button type="button" />}
               startIcon={
                 <IconTile color="green">
                   <IconTable />
                 </IconTile>
               }
-              selected={view.kind === "table" && t.name === table?.name}
-              description={t.count.toLocaleString()}
+              selected={view.kind === "table" && item.name === table?.name}
+              description={item.count.toLocaleString(intlLocale())}
               descriptionPlacement="end"
               onClick={() =>
                 open({
                   kind: "table",
-                  name: t.name,
+                  name: item.name,
                   tab: view.kind === "table" ? view.tab : "data",
                   key: Date.now(),
                 })
               }
             >
-              {t.name}
+              {item.name}
             </ListItem>
           ))}
         </div>
@@ -307,8 +313,12 @@ export function DatabasePanel({
             <div className="flex h-10 shrink-0 items-center gap-2 border-b border-t-border-light px-3">
               {trail.length > 0 ? (
                 <LightIconButton
-                  aria-label="Back"
-                  tooltip={`Back to ${previousName ?? "the previous table"}`}
+                  aria-label={tc("back")}
+                  tooltip={
+                    previousName
+                      ? t("database.backTo", { table: previousName })
+                      : t("database.backToPrevious")
+                  }
                   size="sm"
                   onClick={back}
                 >
@@ -324,13 +334,15 @@ export function DatabasePanel({
                 {table.name}
               </span>
               <span className="shrink-0 text-t-text-tertiary">
-                {table.count.toLocaleString()}{" "}
-                {table.count === 1 ? "row" : "rows"} · {table.columns.length}{" "}
-                columns
+                {t("database.rows", {
+                  count: table.count,
+                  formatted: table.count.toLocaleString(intlLocale()),
+                })}{" "}
+                · {t("database.columns", { count: table.columns.length })}
               </span>
               <span className="flex-1" />
               <SegmentedControl<"data" | "structure">
-                aria-label="View"
+                aria-label={t("database.view")}
                 size="sm"
                 value={view.tab}
                 onValueChange={(tab) => setView({ ...view, tab })}
@@ -338,12 +350,12 @@ export function DatabasePanel({
                   {
                     value: "data",
                     startIcon: <IconLayoutList size={14} />,
-                    label: "Data",
+                    label: t("database.data"),
                   },
                   {
                     value: "structure",
                     startIcon: <IconColumns size={14} />,
-                    label: "Structure",
+                    label: t("database.structure.title"),
                   },
                 ]}
               />
@@ -370,14 +382,14 @@ export function DatabasePanel({
           </>
         ) : (
           <div className="flex flex-1 flex-col items-center justify-center gap-3 text-center text-t-text-tertiary">
-            <p>This database has no tables yet.</p>
+            <p>{t("database.noTablesYet")}</p>
             <Button
               size="sm"
               variant="outline"
               startIcon={<IconTerminal2 size={14} />}
               onClick={() => query()}
             >
-              Open the SQL editor
+              {t("database.openSql")}
             </Button>
           </div>
         )}

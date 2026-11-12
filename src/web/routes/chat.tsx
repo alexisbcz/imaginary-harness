@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useOutletContext, useParams } from "react-router";
 import { AssistantAvatar } from "twenty-ui/components/data-display";
 import { Chip } from "twenty-ui/primitives/data-display";
@@ -50,6 +51,7 @@ import {
 } from "@/lib/chat";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { createClient } from "@/lib/supabase/client";
+import { resources } from "@/locales";
 import type { LayoutContext } from "@/routes/app-layout";
 
 const supabase = createClient();
@@ -139,12 +141,26 @@ function MessageImages({ ids }: { ids: string[] }) {
   );
 }
 
+/** The first line of a picked element's context, in every language: a message sent in either one reads back. */
+const PICKED_PATTERNS = Object.values(resources).map(
+  (language) =>
+    new RegExp(
+      "^" +
+        language.builder.composer.picked.about
+          .replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+          .replace("\\{\\{tag\\}\\}", "([\\w-]+)")
+          .replace("\\{\\{loc\\}\\}", "(\\S+)") +
+        "\\n(?:.*\\n)*?\\n",
+    ),
+);
+
 /** A message about a picked element starts with the element's context (see the composer): show it as a chip. */
 function splitPicked(content: string) {
-  const match =
-    /^About this element of the preview: <([\w-]+)> rendered at (\S+)\n(?:.*\n)*?\n/.exec(
-      content,
-    );
+  let match: RegExpExecArray | null = null;
+  for (const pattern of PICKED_PATTERNS) {
+    match = pattern.exec(content);
+    if (match) break;
+  }
   if (!match) return { picked: null, text: content };
   return {
     picked: { tag: match[1]!, loc: match[2]! },
@@ -153,6 +169,7 @@ function splitPicked(content: string) {
 }
 
 export function ChatBubble({ message }: { message: ChatMessage }) {
+  const { t } = useTranslation("builder");
   if (message.role === "user") {
     const { picked, text } = splitPicked(message.content);
     return (
@@ -179,7 +196,7 @@ export function ChatBubble({ message }: { message: ChatMessage }) {
         )}
         {message.mode === "chat" && (
           <span className="flex items-center gap-1 text-[11px] text-t-text-light">
-            <IconMessageCircle size={12} /> Chat only
+            <IconMessageCircle size={12} /> {t("chat.chatOnly")}
           </span>
         )}
       </div>
@@ -203,7 +220,7 @@ export function ChatBubble({ message }: { message: ChatMessage }) {
         {message.status === "failed" ? (
           <div className="flex items-start gap-2 rounded-md border border-[var(--t-border-color-danger)] bg-[var(--t-background-danger)] px-3 py-2 text-t-text-danger">
             <IconAlertTriangle size={14} className="mt-0.5 shrink-0" />
-            <span>{message.error ?? "No answer"}</span>
+            <span>{message.error ?? t("chat.noAnswer")}</span>
           </div>
         ) : message.content ? (
           <div className="min-w-0 leading-[1.6] text-t-text">
@@ -212,7 +229,7 @@ export function ChatBubble({ message }: { message: ChatMessage }) {
         ) : (
           live &&
           !message.steps.some((step) => step.status === "running") && (
-            <Shimmer>Thinking…</Shimmer>
+            <Shimmer>{t("chat.thinking")}</Shimmer>
           )
         )}
       </div>
@@ -222,6 +239,7 @@ export function ChatBubble({ message }: { message: ChatMessage }) {
 
 /** A project: the conversation that builds it, and the app itself, live, with its code and its history. */
 export function Chat() {
+  const { t } = useTranslation("builder");
   const { threadId } = useParams() as { threadId: string };
   const messages = useMessages(threadId);
   const files = useWorkspaceFiles(threadId);
@@ -272,7 +290,7 @@ export function Chat() {
                       face="happy"
                       isAnimated
                     />
-                    <Shimmer>Thinking…</Shimmer>
+                    <Shimmer>{t("chat.thinking")}</Shimmer>
                   </div>
                 </MessageScrollerItem>
               )}
@@ -284,7 +302,7 @@ export function Chat() {
       <div className="mx-auto w-full max-w-2xl px-3 pb-3">
         <Composer
           autoFocus
-          placeholder="Ask for a change…"
+          placeholder={t("chat.placeholder")}
           picked={picked}
           onClearPicked={() => setPicked(null)}
           onSend={(message) => sendMessage(threadId, message)}
@@ -298,7 +316,7 @@ export function Chat() {
       ? [
           {
             value: "chat",
-            label: "Chat",
+            label: t("chat.tabs.chat"),
             icon: IconMessageCircleFilled,
             color: "jade" as const,
           },
@@ -306,20 +324,20 @@ export function Chat() {
       : []),
     {
       value: "preview",
-      label: "Preview",
+      label: t("chat.tabs.preview"),
       icon: IconLayoutFilled,
       color: "blue" as const,
     },
-    { value: "code", label: "Code", icon: IconCode, color: "iris" as const },
+    { value: "code", label: t("chat.tabs.code"), icon: IconCode, color: "iris" as const },
     {
       value: "history",
-      label: "History",
+      label: t("chat.tabs.history"),
       icon: IconHistory,
       color: "orange" as const,
     },
     {
       value: "database",
-      label: "Database",
+      label: t("chat.tabs.database"),
       icon: IconDatabaseFilled,
       color: "green" as const,
     },
@@ -335,7 +353,7 @@ export function Chat() {
     >
       <div className="flex h-10 shrink-0 items-end">
         <Tabs.List
-          aria-label="Project views"
+          aria-label={t("chat.views")}
           className="relative w-full overflow-x-auto px-3"
         >
           {tabs.map(({ value, label, icon: TabIcon, color }) => (
@@ -372,9 +390,10 @@ export function Chat() {
           onPicked={onPicked}
           onFix={(errors) =>
             void sendMessage(threadId, {
-              content: `The preview shows ${errors.length === 1 ? "an error" : "errors"}. Find the cause and fix ${errors.length === 1 ? "it" : "them"}:\n\n${errors
-                .map((error) => `- ${error.message}`)
-                .join("\n")}`,
+              content: t("chat.fixPrompt", {
+                count: errors.length,
+                errors: errors.map((error) => `- ${error.message}`).join("\n"),
+              }),
             })
           }
         />

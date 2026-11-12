@@ -3,6 +3,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
+import i18n from "@/lib/i18n";
 import { createClient } from "@/lib/supabase/client";
 
 const supabase = createClient();
@@ -133,6 +134,7 @@ const FOLDER_ORDER: Record<string, number> = {
 };
 
 const LIST_COLUMNS =
+  // i18n-ignore: database column names
   "id, folder_id, flags, subject, from_name, from_address, to_addresses, snippet, summary, category, assistant_status, internal_date, sent_at, thread_key, attachments";
 
 export const isUnread = (m: { flags: string[] }) => !m.flags.includes("\\Seen");
@@ -321,6 +323,8 @@ export type Draft = {
   bcc: string;
   subject: string;
   text: string;
+  /** The rich editor's HTML; at sending, with its styles inlined and its images as inline parts. */
+  html?: string;
   replyTo?: string;
   draftId?: string;
   attachments: {
@@ -328,6 +332,8 @@ export type Draft = {
     contentType: string;
     data: string;
     size: number;
+    /** An image shown in the text (cid:), rather than attached. */
+    contentId?: string;
   }[];
 };
 
@@ -344,7 +350,7 @@ export async function download(path: string, filename: string) {
   const response = await fetch(path, {
     headers: { Authorization: `Bearer ${data.session?.access_token ?? ""}` },
   });
-  if (!response.ok) throw new Error(`Download failed (${response.status})`);
+  if (!response.ok) throw new Error(i18n.t("mail:downloadFailed", { status: response.status }));
   const url = URL.createObjectURL(await response.blob());
   const link = document.createElement("a");
   link.href = url;
@@ -356,7 +362,28 @@ export async function download(path: string, filename: string) {
 export const formatAddress = (a: MailAddress) =>
   a.name ? `${a.name} <${a.address}>` : a.address;
 export const senderName = (m: { from_name: string; from_address: string }) =>
-  m.from_name || m.from_address.split("@")[0] || "Unknown sender";
+  m.from_name || m.from_address.split("@")[0] || i18n.t("mail:unknownSender");
+
+/** A folder's name: the well-known ones (inbox, sent…) in the app's language, the others as their owner named them. */
+export const folderName = (f: Pick<MailFolder, "name" | "special_use">) =>
+  f.special_use ? i18n.t(`mail:folders.${f.special_use}`) : f.name;
+
+const CATEGORIES = [
+  "personal",
+  "work",
+  "newsletter",
+  "notification",
+  "finance",
+  "travel",
+  "spam",
+  "other",
+] as const;
+
+/** The category the agent gave a message, in the app's language. */
+export const categoryLabel = (category: string) =>
+  (CATEGORIES as readonly string[]).includes(category)
+    ? i18n.t(`mail:categories.${category as (typeof CATEGORIES)[number]}`)
+    : category;
 
 /** Whether the sender is who they say: DMARC passed, or DKIM passed for the From domain. */
 export function trust(
