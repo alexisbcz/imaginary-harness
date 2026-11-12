@@ -2,10 +2,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { cn } from "cn";
 import { LightIconButton, SegmentedControl } from "twenty-ui/components/input";
 import { Button, Input, InputGroup } from "twenty-ui/primitives/input";
-// Twenty UI's icons are Tabler's; it does not re-export these two.
+// Twenty UI's icons are Tabler's; it does not re-export these.
 import {
   IconDeviceMobile,
   IconDeviceTablet,
+  IconMoon,
+  IconSun,
   IconLayoutFilled,
 } from "@tabler/icons-react";
 import {
@@ -85,6 +87,8 @@ export function PreviewPanel({
   const [device, setDevice] = useState<Device>("desktop");
   const [reloads, setReloads] = useState(0);
   const [picking, setPicking] = useState(false);
+  // The theme the app shows, as its bridge reports it; null until the preview has loaded.
+  const [appTheme, setAppTheme] = useState<"light" | "dark" | null>(null);
   const [errors, setErrors] = useState<PreviewError[]>([]);
   const frame = useRef<HTMLIFrameElement>(null);
   const url = status.state === "running" ? status.url : undefined;
@@ -112,6 +116,7 @@ export function PreviewPanel({
   // Start once the project has files: a new one gets them when the agent picks up its first message.
   useEffect(() => {
     setStatus({ state: "stopped" });
+    setAppTheme(null);
     setPath("/");
     setAddress("/");
     setErrors([]);
@@ -168,6 +173,9 @@ export function PreviewPanel({
         case "picking":
           setPicking(Boolean(data.on));
           break;
+        case "theme":
+          setAppTheme(data.theme === "dark" ? "dark" : "light");
+          break;
         case "picked":
           onPicked({
             loc: String(data.loc),
@@ -185,6 +193,16 @@ export function PreviewPanel({
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
   }, [threadId, onPicked]);
+
+  /** Switches the app between light and dark; the app remembers it, as with its own toggle. */
+  function toggleTheme() {
+    const theme = appTheme === "dark" ? "light" : "dark";
+    frame.current?.contentWindow?.postMessage(
+      { source: "richelieu-builder", type: "theme", theme },
+      "*",
+    );
+    setAppTheme(theme);
+  }
 
   function togglePicking() {
     const on = !picking;
@@ -275,6 +293,14 @@ export function PreviewPanel({
           ]}
         />
         <div className="mx-1 h-4 w-px bg-t-border" />
+        <LightIconButton
+          aria-label={appTheme === "dark" ? "Show the app in light mode" : "Show the app in dark mode"}
+          tooltip={appTheme === "dark" ? "Light mode" : "Dark mode"}
+          disabled={!url || appTheme === null}
+          onClick={toggleTheme}
+        >
+          {appTheme === "dark" ? <IconSun size={16} /> : <IconMoon size={16} />}
+        </LightIconButton>
         <LightIconButton
           aria-label="Pick an element to change"
           aria-pressed={picking}

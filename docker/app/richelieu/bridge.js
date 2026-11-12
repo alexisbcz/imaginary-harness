@@ -1,5 +1,6 @@
-// Runs in the preview, inside the builder's iframe. It reports errors and navigation to the builder, and lets the
-// user pick an element to ask a change about. Messages carry `source: "richelieu-preview"`.
+// Runs in the preview, inside the builder's iframe. It reports errors and navigation to the builder, lets the
+// user pick an element to ask a change about, and switches the app between light and dark. Messages carry
+// `source: "richelieu-preview"`.
 (() => {
   if (window.parent === window) return;
   const post = (message) =>
@@ -134,6 +135,44 @@
     )
       return;
     if (event.data.type === "pick") setPicking(Boolean(event.data.on));
+    if (event.data.type === "theme") setTheme(event.data.theme);
+  });
+
+  // Theme: the template's ThemeProvider keeps the choice in localStorage ("theme") and follows storage events, so
+  // writing it there switches the app the way its own toggle does. An app without the provider still gets the
+  // `dark` class Tailwind's dark variant reads.
+  const THEME_KEY = "theme";
+  const currentTheme = () => {
+    const root = document.documentElement;
+    if (root.classList.contains("dark")) return "dark";
+    if (root.classList.contains("light")) return "light";
+    return matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  };
+  const setTheme = (theme) => {
+    if (theme !== "light" && theme !== "dark") return;
+    try {
+      const previous = localStorage.getItem(THEME_KEY);
+      localStorage.setItem(THEME_KEY, theme);
+      dispatchEvent(
+        new StorageEvent("storage", { key: THEME_KEY, oldValue: previous, newValue: theme, storageArea: localStorage }),
+      );
+    } catch {}
+    const root = document.documentElement;
+    root.classList.remove("light", "dark");
+    root.classList.add(theme);
+    root.style.colorScheme = theme;
+  };
+  // Tell the builder whenever the theme changes, whoever changed it (the app's own toggle, its "d" shortcut).
+  let reportedTheme = null;
+  const reportTheme = () => {
+    const theme = currentTheme();
+    if (theme === reportedTheme) return;
+    reportedTheme = theme;
+    post({ type: "theme", theme });
+  };
+  new MutationObserver(reportTheme).observe(document.documentElement, {
+    attributes: true,
+    attributeFilter: ["class"],
   });
   window.addEventListener(
     "keydown",
@@ -143,5 +182,7 @@
   addEventListener("DOMContentLoaded", () => {
     post({ type: "ready" });
     location();
+    reportedTheme = null;
+    reportTheme();
   });
 })();
