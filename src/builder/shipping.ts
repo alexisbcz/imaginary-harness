@@ -6,7 +6,7 @@ import type { GitStorage } from "@pierre/storage";
 import { config } from "../config.ts";
 import type { Previews } from "./previews.ts";
 import { untar } from "./tar.ts";
-import type { Thread, WorkspaceStore } from "../agent/workspace.ts";
+import type { Project, WorkspaceStore } from "../agent/workspace.ts";
 
 const BUILD_DIR = "/tmp/richelieu-build";
 const CLONE_TTL_SECONDS = 60 * 60;
@@ -141,8 +141,8 @@ const contentTypeOf = (path: string) =>
   CONTENT_TYPES[path.split(".").pop()?.toLowerCase() ?? ""] ??
   "application/octet-stream";
 
-/** A URL-friendly name from the project's title, with a short suffix of its id so names stay unique. */
-function slugFor(title: string, threadId: string) {
+/** A URL-friendly name from the project's name, with a short suffix of its id so names stay unique. */
+function slugFor(title: string, projectId: string) {
   const base =
     title
       .toLowerCase()
@@ -154,7 +154,7 @@ function slugFor(title: string, threadId: string) {
       .slice(0, 28)
       .replace(/-[^-]*$/, "")
       .replace(/-+$/, "") || "app";
-  return `${base}-${threadId.replace(/-/g, "").slice(0, 6)}`;
+  return `${base}-${projectId.replace(/-/g, "").slice(0, 6)}`;
 }
 
 export function createShipping({
@@ -171,15 +171,15 @@ export function createShipping({
   // Publishing ------------------------------------------------------------------------------------------------------
 
   /** Builds the project for production and serves it at `<sites>/<slug>/`, replacing a previous build. */
-  async function publish(thread: Thread) {
+  async function publish(project: Project) {
     if (!previews)
       throw new Error("Publishing needs Docker, which this server lacks");
-    const [row] = await sql<{ title: string; published_slug: string | null }[]>`
-      SELECT title, published_slug FROM public.threads WHERE id = ${thread.id}`;
-    const slug = row?.published_slug ?? slugFor(row?.title ?? "app", thread.id);
+    const [row] = await sql<{ name: string; published_slug: string | null }[]>`
+      SELECT name, published_slug FROM public.projects WHERE id = ${project.id}`;
+    const slug = row?.published_slug ?? slugFor(row?.name ?? "app", project.id);
 
     const build = await previews.exec(
-      thread.id,
+      project.id,
       [
         "node",
         "node_modules/vite/bin/vite.js",
@@ -198,7 +198,7 @@ export function createShipping({
       throw new Error(
         `The build failed:\n${(build.stdout + build.stderr).trim().slice(-3000)}`,
       );
-    const archive = await previews.copyOut(thread.id, BUILD_DIR);
+    const archive = await previews.copyOut(project.id, BUILD_DIR);
     const files = Object.entries(untar(archive))
       .map(
         ([path, content]) =>
@@ -214,18 +214,18 @@ export function createShipping({
         await tx`
           INSERT INTO public.published_files (slug, path, content, content_type)
           VALUES (${slug}, ${path}, ${content}, ${contentTypeOf(path)})`;
-      await tx`UPDATE public.threads SET published_slug = ${slug}, published_at = now() WHERE id = ${thread.id}`;
+      await tx`UPDATE public.projects SET published_slug = ${slug}, published_at = now() WHERE id = ${project.id}`;
     });
     return { url: `${config.sitesUrl}/${slug}/`, files: files.length };
   }
 
-  async function unpublish(thread: Thread) {
+  async function unpublish(project: Project) {
     await sql.begin(async (tx) => {
       const [row] = await tx<{ published_slug: string | null }[]>`
-        SELECT published_slug FROM public.threads WHERE id = ${thread.id} FOR UPDATE`;
+        SELECT published_slug FROM public.projects WHERE id = ${project.id} FOR UPDATE`;
       if (row?.published_slug)
         await tx`DELETE FROM public.published_files WHERE slug = ${row.published_slug}`;
-      await tx`UPDATE public.threads SET published_slug = NULL, published_at = NULL WHERE id = ${thread.id}`;
+      await tx`UPDATE public.projects SET published_slug = NULL, published_at = NULL WHERE id = ${project.id}`;
     });
   }
 
@@ -266,9 +266,9 @@ export function createShipping({
     password: string;
   };
 
-  async function databaseOf(threadId: string) {
+  async function databaseOf(projectId: string) {
     const [row] = await sql<AppDatabase[]>`
-      SELECT schema_name, role_name, password FROM public.app_databases WHERE thread_id = ${threadId}`;
+      SELECT schema_name, role_name, password FROM public.app_databases WHERE project_id = ${projectId}`;
     return row;
   }
 
@@ -301,10 +301,10 @@ export function createShipping({
    * Gives the project a database: its schema and role, exposed through the API, and the app wired to it
    * (supabase-js installed, `src/lib/supabase.ts` and `.env` committed). Does nothing the second time.
    */
-  async function enableDatabase(thread: Thread) {
-    let database = await databaseOf(thread.id);
+  async function enableDatabase(project: Project) {
+    let database = await databaseOf(project.id);
     if (!database) {
-      const schema = `app_${thread.id.replace(/-/g, "")}`;
+      const schema = `app_${project.id.replace(/-/g, "")}`;
       const role = `${schema}_owner`;
       const password =
         crypto.randomUUID().replace(/-/g, "") +
@@ -326,11 +326,11 @@ export function createShipping({
           `GRANT USAGE ON SCHEMA ${schema} TO anon, authenticated, service_role`,
         );
         await tx`
-          INSERT INTO public.app_databases (thread_id, schema_name, role_name, password)
-          VALUES (${thread.id}, ${schema}, ${role}, ${password})`;
-        await tx`UPDATE public.threads SET database_schema = ${schema} WHERE id = ${thread.id}`;
+          INSERT INTO public.app_databases (project_id, schema_name, role_name, password)
+          VALUES (${project.id}, ${schema}, ${role}, ${password})`;
+        await tx`UPDATE public.projects SET database_schema = ${schema} WHERE id = ${project.id}`;
       });
-      database = (await databaseOf(thread.id))!;
+      database = (await databaseOf(project.id))!;
       // The signed-in user's id, as row level security policies need it. `auth` is out of the role's reach, so the
       // schema has its own `uid()`, reading the request's JWT as auth.uid() does.
       const connection = connect(database);
@@ -350,7 +350,7 @@ export function createShipping({
 
     // Wire the app: the client, its settings, and the package.
     await store.commitFiles(
-      thread,
+      project,
       {
         ".env": [
           "# This app's database: Supabase, in its own schema. The anon key is public; row level security protects the data.",
@@ -375,13 +375,13 @@ export function createShipping({
     );
     if (previews) {
       const manifest = JSON.parse(
-        (await store.files(thread.id))["package.json"] ?? "{}",
+        (await store.files(project.id))["package.json"] ?? "{}",
       ) as {
         dependencies?: Record<string, string>;
       };
       if (!manifest.dependencies?.["@supabase/supabase-js"]) {
         const install = await previews.exec(
-          thread.id,
+          project.id,
           [
             "npm",
             "install",
@@ -396,25 +396,25 @@ export function createShipping({
           throw new Error(
             `Could not install @supabase/supabase-js: ${install.stderr.slice(-2000)}`,
           );
-        const packageJson = await previews.exec(thread.id, [
+        const packageJson = await previews.exec(project.id, [
           "cat",
           "package.json",
         ]);
         await store.commitFiles(
-          thread,
+          project,
           { "package.json": packageJson.stdout },
           "Add @supabase/supabase-js",
         );
       }
       // The dev server reads .env at start.
-      await previews.restart(thread.id);
+      await previews.restart(project.id);
     }
     return database.schema_name;
   }
 
   /** Runs SQL as the app's role, in its schema, in one transaction; returns the last statement's rows. */
-  async function runSql(threadId: string, text: string) {
-    const database = await databaseOf(threadId);
+  async function runSql(projectId: string, text: string) {
+    const database = await databaseOf(projectId);
     if (!database)
       throw new Error("This project has no database yet: enable it first");
     const connection = connect(database);
@@ -434,10 +434,10 @@ export function createShipping({
 
   /** Runs SQL typed in the Database tab as the app's role, in one transaction, and describes what came back. */
   async function querySql(
-    threadId: string,
+    projectId: string,
     text: string,
   ): Promise<QueryResult> {
-    const database = await databaseOf(threadId);
+    const database = await databaseOf(projectId);
     if (!database)
       throw new Error("This project has no database yet: enable it first");
     if (!text.trim()) throw new Error("Write a query first");
@@ -520,10 +520,10 @@ export function createShipping({
    * against the schema and quoted; every value the user typed is a parameter.
    */
   async function browseTable(
-    threadId: string,
+    projectId: string,
     request: BrowseRequest,
   ): Promise<BrowseResult> {
-    const database = await databaseOf(threadId);
+    const database = await databaseOf(projectId);
     if (!database)
       throw new Error("This project has no database yet: enable it first");
     const connection = connect(database);
@@ -659,8 +659,8 @@ export function createShipping({
   }
 
   /** The app's tables, their columns and first rows, for the Database tab. */
-  async function inspectDatabase(threadId: string) {
-    const database = await databaseOf(threadId);
+  async function inspectDatabase(projectId: string) {
+    const database = await databaseOf(projectId);
     if (!database) return null;
     const connection = connect(database);
     try {
@@ -734,8 +734,8 @@ export function createShipping({
   // Git -----------------------------------------------------------------------------------------------------------
 
   /** A read-only clone URL with a token that expires within the hour. Pushes would bypass the app's mirror. */
-  async function cloneUrl(threadId: string) {
-    const repo = await storage.findOne({ id: threadId });
+  async function cloneUrl(projectId: string) {
+    const repo = await storage.findOne({ id: projectId });
     if (!repo) throw new Error("This project has no files yet");
     const url = new URL(
       await repo.getRemoteURL({

@@ -28,10 +28,10 @@ function patchOf(file: FileDiff) {
 
 /** Every version of the project, newest first: what each changed, and a way back to any of them. */
 export function HistoryPanel({
-  threadId,
+  projectId,
   revision,
 }: {
-  threadId: string;
+  projectId: string;
   /** Changes whenever the project does, to reload the list. */
   revision: string;
 }) {
@@ -45,32 +45,32 @@ export function HistoryPanel({
 
   useEffect(() => {
     let active = true;
-    api<{ versions: Version[] }>(`/api/projects/${threadId}/history`)
+    api<{ versions: Version[] }>(`/api/projects/${projectId}/history`)
       .then((result) => active && setVersions(result.versions))
       .catch((error) => active && setError(String(error.message ?? error)));
     return () => {
       active = false;
     };
-  }, [threadId, revision]);
+  }, [projectId, revision]);
 
   const current = selected ?? versions?.[0]?.sha ?? null;
   useEffect(() => {
     if (!current) return;
     let active = true;
     setDiff(null);
-    api<{ files: FileDiff[] }>(`/api/projects/${threadId}/history/${current}`)
+    api<{ files: FileDiff[] }>(`/api/projects/${projectId}/history/${current}`)
       .then((result) => active && setDiff(result.files))
       .catch(() => active && setDiff([]));
     return () => {
       active = false;
     };
-  }, [threadId, current]);
+  }, [projectId, current]);
 
   async function restore(sha: string) {
     setRestoring(true);
     setError(null);
     try {
-      await api(`/api/projects/${threadId}/restore`, { body: { sha } });
+      await api(`/api/projects/${projectId}/restore`, { body: { sha } });
       setSelected(null);
     } catch (error) {
       setError(error instanceof Error ? error.message : t("history.restoreFailed"));

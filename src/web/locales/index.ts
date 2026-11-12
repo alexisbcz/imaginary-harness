@@ -7,6 +7,7 @@ import enEditor from "./en/editor";
 import enLayout from "./en/layout";
 import enMail from "./en/mail";
 import enNewsletter from "./en/newsletter";
+import enProjects from "./en/projects";
 import enSocial from "./en/social";
 import frAuth from "./fr/auth";
 import frBuilder from "./fr/builder";
@@ -15,6 +16,7 @@ import frEditor from "./fr/editor";
 import frLayout from "./fr/layout";
 import frMail from "./fr/mail";
 import frNewsletter from "./fr/newsletter";
+import frProjects from "./fr/projects";
 import frSocial from "./fr/social";
 
 export const en = {
@@ -22,6 +24,7 @@ export const en = {
   auth: enAuth,
   layout: enLayout,
   builder: enBuilder,
+  projects: enProjects,
   mail: enMail,
   social: enSocial,
   newsletter: enNewsletter,
@@ -35,6 +38,7 @@ export const resources = {
     auth: frAuth,
     layout: frLayout,
     builder: frBuilder,
+    projects: frProjects,
     mail: frMail,
     social: frSocial,
     newsletter: frNewsletter,

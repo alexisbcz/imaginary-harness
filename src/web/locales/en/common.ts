@@ -23,12 +23,16 @@ export default {
   open: "Open",
   apply: "Apply",
   untitled: "Untitled",
+  rename: "Rename",
+  saveFailed: "Not saved",
   sections: {
+    newChat: "New chat",
     newProject: "New project",
     mail: "Mail",
     social: "Social",
     newsletter: "Newsletter",
     projects: "Projects",
+    chats: "Chats",
   },
   ui: {
     previousSlide: "Previous slide",

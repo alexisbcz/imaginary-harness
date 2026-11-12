@@ -40,10 +40,10 @@ function languageOf(path: string) {
 
 /** The project's code: the tree to pick a file, an editor to change it by hand (each save is a commit). */
 export function CodePanel({
-  threadId,
+  projectId,
   files,
 }: {
-  threadId: string;
+  projectId: string;
   files: WorkspaceFile[];
 }) {
   const { t } = useTranslation("builder");
@@ -82,7 +82,7 @@ export function CodePanel({
     setSaving(true);
     setError(null);
     try {
-      await api(`/api/projects/${threadId}/files`, {
+      await api(`/api/projects/${projectId}/files`, {
         method: "PUT",
         body: { path: selected.path, contents: draft },
       });

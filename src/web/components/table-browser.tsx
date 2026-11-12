@@ -388,7 +388,7 @@ function RowInspector({
  * Searching, filtering and sorting happen in Postgres, over the whole table.
  */
 export function TableBrowser({
-  threadId,
+  projectId,
   table,
   columns,
   total,
@@ -397,7 +397,7 @@ export function TableBrowser({
   onFollow,
   onQuery,
 }: {
-  threadId: string;
+  projectId: string;
   table: string;
   columns: GridColumn[];
   /** Rows in the whole table, unfiltered. */
@@ -448,7 +448,7 @@ export function TableBrowser({
   useEffect(() => {
     const id = ++requestId.current;
     setLoading(true);
-    api<BrowseResult>(`/api/projects/${threadId}/database/browse`, {
+    api<BrowseResult>(`/api/projects/${projectId}/database/browse`, {
       method: "POST",
       body: {
         table,
@@ -476,7 +476,7 @@ export function TableBrowser({
         if (id === requestId.current) setLoading(false);
       });
   }, [
-    threadId,
+    projectId,
     table,
     debouncedSearch,
     debouncedFilters,

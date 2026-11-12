@@ -1,4 +1,4 @@
-// A sandbox for the agent to run code: each call starts a throwaway Docker container holding a copy of the thread's
+// A sandbox for the agent to run code: each call starts a throwaway Docker container holding a copy of the project's
 // workspace, runs one shell command in it without network, and returns its output. Nothing it changes outlives the
 // call; the agent keeps a result by writing it to the workspace with write_file.
 
@@ -12,6 +12,7 @@ import {
   section,
 } from "@earendil-works/pi-durable";
 import { int, obj, oneOf, opt, str } from "@earendil-works/pi-schema";
+import { findProjectOfConversation } from "./workspace.ts";
 
 /** The images a command can run in, each with its language's usual tools. */
 const IMAGES = {
@@ -96,12 +97,11 @@ export function createSandbox(sql: SQL) {
     // The container starts from the workspace each time and reaches nothing outside it, so a rerun is harmless.
     replay: "safe",
     execute: async (args, api) => {
-      const [thread] = await sql<{ id: string }[]>`
-        SELECT id FROM public.threads WHERE conversation_id = ${api.conversationId}`;
-      if (thread === undefined)
-        throw new Error("This conversation has no workspace");
+      const project = await findProjectOfConversation(sql, api.conversationId);
+      if (project === undefined)
+        throw new Error("This chat is not part of a project: it has no workspace");
       const files = await sql<{ path: string; contents: string }[]>`
-        SELECT path, contents FROM public.files WHERE thread_id = ${thread.id}`;
+        SELECT path, contents FROM public.files WHERE project_id = ${project.id}`;
 
       const image = IMAGES[args.runtime ?? "python"];
       await ensureImage(image);

@@ -26,8 +26,8 @@ import { createResearchExtension } from "../research/agent.ts";
 import { NewsletterService } from "../newsletter/service.ts";
 import { createSocialExtension } from "../social/agent.ts";
 import { SocialService } from "../social/service.ts";
-import { Agent, NEWSLETTER_INSTRUCTIONS, SOCIAL_INSTRUCTIONS } from "./agent.ts";
-import { createBuilder } from "./builder.ts";
+import { Agent, CHAT_INSTRUCTIONS, NEWSLETTER_INSTRUCTIONS, SOCIAL_INSTRUCTIONS } from "./agent.ts";
+import { createBuilder, createSteps } from "./builder.ts";
 import { createSandbox } from "./sandbox.ts";
 import {
   createWorkspace,
@@ -51,7 +51,7 @@ export async function openAgent(
   const models = createModels();
   models.setProvider(anthropicProvider());
   const registry = createRegistry();
-  // What a project's conversations get: every extension but a brand copilot's, which its own conversations select.
+  // What a project's chats get: every extension but a copilot's or a plain chat's, which their conversations select.
   const projectExtensions: Extension[] = [];
   const install = (extension: Extension, forProjects = true) => {
     registry.install(extension);
@@ -60,13 +60,13 @@ export async function openAgent(
   let store: WorkspaceStore | undefined;
   let shipping: Shipping | undefined;
   if (storage) {
-    store = createWorkspaceStore(sql, storage, (threadId, changes) => {
+    store = createWorkspaceStore(sql, storage, (projectId, changes) => {
       previews
-        ?.apply(threadId, changes)
+        ?.apply(projectId, changes)
         .catch((error) => console.error("[preview] sync:", error));
     });
     shipping = createShipping({ sql, store, storage, previews });
-    install(createWorkspace(store));
+    install(createWorkspace(sql, store));
     install(createBuilder(sql, store, previews, shipping));
   } else
     console.warn(
@@ -98,6 +98,9 @@ export async function openAgent(
   const newsletterService = options.newsletterService ?? new NewsletterService(sql);
   const newsletter = createNewsletterExtension(sql, newsletterService);
   install(newsletter.extension, false);
+  // A chat outside any project talks, researches and handles mail; its steps show as a project's do.
+  const steps = createSteps(sql);
+  install(steps, false);
   const harness = await Harness.open(
     await PostgresStorage.open(sql, {
       schema: "pi",
@@ -112,6 +115,10 @@ export async function openAgent(
     context,
   );
   const agent = new Agent(sql, harness, context, store, {
+    chat: {
+      instructions: CHAT_INSTRUCTIONS,
+      extensions: [steps, mail.extension, ...(research ? [research] : [])],
+    },
     social: { instructions: SOCIAL_INSTRUCTIONS, extensions: [social.extension, ...(research ? [research] : [])] },
     newsletter: { instructions: NEWSLETTER_INSTRUCTIONS, extensions: [newsletter.extension, ...(research ? [research] : [])] },
   });

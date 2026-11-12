@@ -34,10 +34,10 @@ export function createBuilderApi({
   /** The project, when the request's user owns it. */
   async function project(request: Request) {
     const userId = await userOf(request);
-    const [thread] = await sql<{ id: string; user_id: string }[]>`
-      SELECT id, user_id FROM public.threads WHERE id = ${request.params.id} AND user_id = ${userId}`;
-    if (!thread) throw new HttpError(404, "No such project");
-    return thread;
+    const [found] = await sql<{ id: string; user_id: string }[]>`
+      SELECT id, user_id FROM public.projects WHERE id = ${request.params.id} AND user_id = ${userId}`;
+    if (!found) throw new HttpError(404, "No such project");
+    return found;
   }
 
   function need<T>(value: T | undefined, what: string): T {
@@ -49,32 +49,32 @@ export function createBuilderApi({
   return {
     "/api/projects/:id/preview": {
       GET: handle(async (request) => {
-        const thread = await project(request);
-        return await need(previews, "Previews").status(thread.id);
+        const app = await project(request);
+        return await need(previews, "Previews").status(app.id);
       }),
       POST: handle(async (request) => {
-        const thread = await project(request);
-        const url = await need(previews, "Previews").ensure(thread.id);
+        const app = await project(request);
+        const url = await need(previews, "Previews").ensure(app.id);
         return { state: "running", url };
       }),
     },
     "/api/projects/:id/preview/restart": {
       POST: handle(async (request) => {
-        const thread = await project(request);
-        const url = await need(previews, "Previews").restart(thread.id);
+        const app = await project(request);
+        const url = await need(previews, "Previews").restart(app.id);
         return { state: "running", url };
       }),
     },
     "/api/projects/:id/preview/errors": {
       POST: handle(async (request) => {
-        const thread = await project(request);
+        const app = await project(request);
         const body = (await request.json()) as {
           message?: unknown;
           stack?: unknown;
         };
         if (typeof body.message !== "string")
           throw new HttpError(400, "message is required");
-        need(previews, "Previews").reportError(thread.id, {
+        need(previews, "Previews").reportError(app.id, {
           message: body.message.slice(0, 4000),
           stack:
             typeof body.stack === "string"
@@ -86,20 +86,20 @@ export function createBuilderApi({
     },
     "/api/projects/:id/history": {
       GET: handle(async (request) => {
-        const thread = await project(request);
+        const app = await project(request);
         return {
-          versions: await need(store, "The workspace").history(thread.id),
+          versions: await need(store, "The workspace").history(app.id),
         };
       }),
     },
     "/api/projects/:id/history/:sha": {
       GET: handle(async (request) => {
-        const thread = await project(request);
+        const app = await project(request);
         if (!/^[0-9a-f]{40}$/.test(request.params.sha!))
           throw new HttpError(400, "Invalid version");
         return {
           files: await need(store, "The workspace").diff(
-            thread.id,
+            app.id,
             request.params.sha!,
           ),
         };
@@ -107,25 +107,25 @@ export function createBuilderApi({
     },
     "/api/projects/:id/restore": {
       POST: handle(async (request) => {
-        const thread = await project(request);
+        const app = await project(request);
         const { sha } = (await request.json()) as { sha?: unknown };
         if (typeof sha !== "string" || !/^[0-9a-f]{40}$/.test(sha))
           throw new HttpError(400, "Invalid version");
         const changed = await need(store, "The workspace").restore(
-          thread,
+          app,
           sha,
-          await authorOf(thread.user_id),
+          await authorOf(app.user_id),
         );
         return { changed };
       }),
     },
     "/api/projects/:id/publish": {
       GET: handle(async (request) => {
-        const thread = await project(request);
+        const app = await project(request);
         const [row] = await sql<
           { published_slug: string | null; published_at: Date | null }[]
         >`
-          SELECT published_slug, published_at FROM public.threads WHERE id = ${thread.id}`;
+          SELECT published_slug, published_at FROM public.projects WHERE id = ${app.id}`;
         return {
           url: row?.published_slug
             ? `${config.sitesUrl}/${row.published_slug}/`
@@ -134,58 +134,58 @@ export function createBuilderApi({
         };
       }),
       POST: handle(async (request) => {
-        const thread = await project(request);
-        return need(shipping, "Publishing").publish(thread);
+        const app = await project(request);
+        return need(shipping, "Publishing").publish(app);
       }),
       DELETE: handle(async (request) => {
-        const thread = await project(request);
-        await need(shipping, "Publishing").unpublish(thread);
+        const app = await project(request);
+        await need(shipping, "Publishing").unpublish(app);
         return { ok: true };
       }),
     },
     "/api/projects/:id/database": {
       GET: handle(async (request) => {
-        const thread = await project(request);
+        const app = await project(request);
         return {
           database: await need(shipping, "Databases").inspectDatabase(
-            thread.id,
+            app.id,
           ),
         };
       }),
       POST: handle(async (request) => {
-        const thread = await project(request);
+        const app = await project(request);
         return {
-          schema: await need(shipping, "Databases").enableDatabase(thread),
+          schema: await need(shipping, "Databases").enableDatabase(app),
         };
       }),
     },
     "/api/projects/:id/database/browse": {
       POST: handle(async (request) => {
-        const thread = await project(request);
+        const app = await project(request);
         const body = (await request.json()) as BrowseRequest;
         if (typeof body?.table !== "string")
           throw new HttpError(400, "Name the table to browse");
-        return need(shipping, "Databases").browseTable(thread.id, body);
+        return need(shipping, "Databases").browseTable(app.id, body);
       }),
     },
     "/api/projects/:id/database/query": {
       POST: handle(async (request) => {
-        const thread = await project(request);
+        const app = await project(request);
         const { sql: text } = (await request.json()) as { sql?: unknown };
         if (typeof text !== "string")
           throw new HttpError(400, "Send the query as `sql`");
-        return need(shipping, "Databases").querySql(thread.id, text);
+        return need(shipping, "Databases").querySql(app.id, text);
       }),
     },
     "/api/projects/:id/clone": {
       GET: handle(async (request) => {
-        const thread = await project(request);
-        return { url: await need(shipping, "Git").cloneUrl(thread.id) };
+        const app = await project(request);
+        return { url: await need(shipping, "Git").cloneUrl(app.id) };
       }),
     },
     "/api/projects/:id/files": {
       PUT: handle(async (request) => {
-        const thread = await project(request);
+        const app = await project(request);
         const { path, contents } = (await request.json()) as {
           path?: unknown;
           contents?: unknown;
@@ -196,10 +196,10 @@ export function createBuilderApi({
         )
           throw new HttpError(400, "path and contents are required");
         const changed = await need(store, "The workspace").commitFiles(
-          thread,
+          app,
           { [path]: contents },
           contents === null ? `Delete ${path}` : `Edit ${path}`,
-          await authorOf(thread.user_id),
+          await authorOf(app.user_id),
         );
         return { changed };
       }),

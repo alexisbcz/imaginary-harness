@@ -1,4 +1,4 @@
-// The agent's workspace: one git repository per project (thread) on the forge, written through the
+// The agent's workspace: one git repository per project on the forge, written through the
 // `@pierre/storage` SDK (each change is a commit). `public.files` mirrors each repository's head, so the app shows it
 // through Supabase (RLS + Realtime). The store is shared by the agent's tools, the app's API (hand edits, history,
 // restore) and the previews, which `onChange` keeps in sync.
@@ -15,7 +15,8 @@ import { GitStorage, type Repo } from "@pierre/storage";
 const MAX_FILE_CHARACTERS = 200_000;
 const AGENT = { name: "Richelieu", email: "agent@richelieu.ai" };
 
-export type Thread = { id: string; user_id: string };
+/** A project: the owner of a workspace, which every chat of the project shares. */
+export type Project = { id: string; user_id: string };
 /** New contents per path; `null` deletes the file. */
 export type FileChanges = Record<string, string | null>;
 export type Version = {
@@ -64,40 +65,73 @@ export function templateFiles() {
   return template;
 }
 
+/** The project a chat's conversation belongs to, if any. */
+export async function findProjectOfConversation(sql: SQL, conversationId: number) {
+  const [project] = await sql<Project[]>`
+    SELECT p.id, p.user_id FROM public.threads t JOIN public.projects p ON p.id = t.project_id
+    WHERE t.conversation_id = ${conversationId}`;
+  return project;
+}
+
+/** What the agent knows of the project in every chat of it: its name, what it is, and the user's instructions. */
+export async function projectBrief(sql: SQL, conversationId: number) {
+  const [project] = await sql<
+    { name: string; description: string; instructions: string; chats: number }[]
+  >`
+    SELECT p.name, p.description, p.instructions,
+      (SELECT count(*)::int FROM public.threads c WHERE c.project_id = p.id) AS chats
+    FROM public.threads t JOIN public.projects p ON p.id = t.project_id
+    WHERE t.conversation_id = ${conversationId}`;
+  if (!project) return undefined;
+  const lines = [`The project is named "${project.name}".`];
+  if (project.description.trim())
+    lines.push(`What it is, in the user's words:\n${project.description.trim()}`);
+  if (project.instructions.trim())
+    lines.push(
+      `The user's instructions for every chat of this project; follow them:\n${project.instructions.trim()}`,
+    );
+  if (project.chats > 1)
+    lines.push(
+      "The project has other chats besides this one, which change the same app: read the files before you change " +
+        "them rather than trusting what you remember of them.",
+    );
+  return lines.join("\n\n");
+}
+
 export type WorkspaceStore = ReturnType<typeof createWorkspaceStore>;
 
 export function createWorkspaceStore(
   sql: SQL,
   storage: GitStorage,
-  onChange: (threadId: string, changes: FileChanges) => void = () => {},
+  onChange: (projectId: string, changes: FileChanges) => void = () => {},
 ) {
-  async function threadOfConversation(conversationId: number) {
-    const [thread] = await sql<Thread[]>`
-      SELECT id, user_id FROM public.threads WHERE conversation_id = ${conversationId}`;
-    if (thread === undefined)
-      throw new Error("This conversation has no workspace");
-    return thread;
+  /** The project of a chat's conversation; a chat outside any project has no workspace. */
+  async function projectOfConversation(conversationId: number) {
+    const project = await findProjectOfConversation(sql, conversationId);
+    if (project === undefined)
+      throw new Error("This chat is not part of a project: it has no workspace");
+    return project;
   }
 
-  async function thread(threadId: string) {
-    const [found] = await sql<Thread[]>`
-      SELECT id, user_id FROM public.threads WHERE id = ${threadId}`;
-    if (found === undefined) throw new Error(`Unknown project ${threadId}`);
+  async function project(projectId: string) {
+    const [found] = await sql<Project[]>`
+      SELECT id, user_id FROM public.projects WHERE id = ${projectId}`;
+    if (found === undefined) throw new Error(`Unknown project ${projectId}`);
     return found;
   }
 
-  /** The thread's repository, created with its first commit. */
+  /** The project's repository, created with its first commit. */
   async function repoOf(
-    threadId: string,
+    projectId: string,
     create: boolean,
   ): Promise<Repo | undefined> {
-    const found = await storage.findOne({ id: threadId });
+    const found = await storage.findOne({ id: projectId });
     if (found || !create) return found ?? undefined;
     try {
-      return await storage.createRepo({ id: threadId });
+      return await storage.createRepo({ id: projectId });
     } catch (error) {
       if (error instanceof Error && error.message.includes("already exists"))
-        return (await storage.findOne({ id: threadId }))!;
+        return (await storage.findOne({ id: projectId }))!;
       throw error;
     }
   }
@@ -134,12 +168,12 @@ export function createWorkspaceStore(
    * Returns the paths that changed, empty when nothing did.
    */
   async function commitFiles(
-    thread: Thread,
+    project: Project,
     changes: FileChanges,
     message: string,
     author = AGENT,
   ) {
-    const repo = (await repoOf(thread.id, true))!;
+    const repo = (await repoOf(project.id, true))!;
     const effective: {
       path: string;
       contents: string | null;
@@ -172,29 +206,29 @@ export function createWorkspaceStore(
     await sql.begin(async (tx) => {
       for (const { path, contents, previous } of effective) {
         if (contents === null) {
-          await tx`DELETE FROM public.files WHERE thread_id = ${thread.id} AND path = ${path}`;
+          await tx`DELETE FROM public.files WHERE project_id = ${project.id} AND path = ${path}`;
         } else {
           await tx`
-            INSERT INTO public.files (thread_id, user_id, path, contents, previous, commit_sha)
-            VALUES (${thread.id}, ${thread.user_id}, ${path}, ${contents}, ${previous ?? null}, ${result.commitSha})
-            ON CONFLICT (thread_id, path) DO UPDATE
+            INSERT INTO public.files (project_id, user_id, path, contents, previous, commit_sha)
+            VALUES (${project.id}, ${project.user_id}, ${path}, ${contents}, ${previous ?? null}, ${result.commitSha})
+            ON CONFLICT (project_id, path) DO UPDATE
               SET contents = excluded.contents, previous = excluded.previous, commit_sha = excluded.commit_sha, updated_at = now()`;
         }
       }
     });
     onChange(
-      thread.id,
+      project.id,
       Object.fromEntries(effective.map((c) => [c.path, c.contents])),
     );
     return effective.map((c) => c.path);
   }
 
   /** Starts an empty project from the app template, in one commit. Does nothing once the project has files. */
-  async function seed(thread: Thread) {
-    const repo = await repoOf(thread.id, false);
+  async function seed(project: Project) {
+    const repo = await repoOf(project.id, false);
     if (repo && (await listPaths(repo)).length > 0) return false;
     await commitFiles(
-      thread,
+      project,
       await templateFiles(),
       "Start from the app template",
     );
@@ -202,8 +236,8 @@ export function createWorkspaceStore(
   }
 
   /** The project's commits, newest first. */
-  async function history(threadId: string, limit = 100): Promise<Version[]> {
-    const repo = await repoOf(threadId, false);
+  async function history(projectId: string, limit = 100): Promise<Version[]> {
+    const repo = await repoOf(projectId, false);
     if (!repo) return [];
     const { commits } = await repo
       .listCommits({ branch: "main", limit })
@@ -217,16 +251,16 @@ export function createWorkspaceStore(
   }
 
   /** The unified diff a commit made. */
-  async function diff(threadId: string, sha: string) {
-    const repo = await repoOf(threadId, false);
+  async function diff(projectId: string, sha: string) {
+    const repo = await repoOf(projectId, false);
     if (!repo) throw new Error("This project has no history");
     const result = await repo.getCommitDiff({ sha });
     return result.files;
   }
 
   /** Brings every file back to what it was at `sha`, as a new commit on top. */
-  async function restore(thread: Thread, sha: string, author = AGENT) {
-    const repo = await repoOf(thread.id, false);
+  async function restore(project: Project, sha: string, author = AGENT) {
+    const repo = await repoOf(project.id, false);
     if (!repo) throw new Error("This project has no history");
     const [then, now] = await Promise.all([
       listPaths(repo, sha),
@@ -237,7 +271,7 @@ export function createWorkspaceStore(
     for (const path of then)
       changes[path] = (await readFile(repo, path, sha)) ?? null;
     return commitFiles(
-      thread,
+      project,
       changes,
       `Restore the version ${sha.slice(0, 7)}`,
       author,
@@ -245,15 +279,15 @@ export function createWorkspaceStore(
   }
 
   /** Every file at the head, from the mirror. */
-  async function files(threadId: string) {
+  async function files(projectId: string) {
     const rows = await sql<{ path: string; contents: string }[]>`
-      SELECT path, contents FROM public.files WHERE thread_id = ${threadId}`;
+      SELECT path, contents FROM public.files WHERE project_id = ${projectId}`;
     return Object.fromEntries(rows.map((row) => [row.path, row.contents]));
   }
 
   return {
-    thread,
-    threadOfConversation,
+    project,
+    projectOfConversation,
     repoOf,
     readFile,
     listPaths,
@@ -267,15 +301,15 @@ export function createWorkspaceStore(
 }
 
 /** The agent's file tools over the store. */
-export function createWorkspace(store: WorkspaceStore) {
+export function createWorkspace(sql: SQL, store: WorkspaceStore) {
   const listFiles = defineTool({
     name: "list_files",
     description: "List the paths of the files in this project.",
     parameters: obj({}),
     replay: "safe",
     execute: async (_args, api) => {
-      const thread = await store.threadOfConversation(api.conversationId);
-      const repo = await store.repoOf(thread.id, false);
+      const project = await store.projectOfConversation(api.conversationId);
+      const repo = await store.repoOf(project.id, false);
       const paths = repo ? await store.listPaths(repo) : [];
       return text(
         paths.length === 0 ? "The project is empty." : paths.join("\n"),
@@ -291,10 +325,10 @@ export function createWorkspace(store: WorkspaceStore) {
     }),
     replay: "safe",
     execute: async (args, api) => {
-      const thread = await store.threadOfConversation(api.conversationId);
+      const project = await store.projectOfConversation(api.conversationId);
       const path = normalizePath(args.path);
       const contents = await store.readFile(
-        await store.repoOf(thread.id, false),
+        await store.repoOf(project.id, false),
         path,
       );
       if (contents === undefined) throw new Error(`No file at ${path}`);
@@ -319,13 +353,13 @@ export function createWorkspace(store: WorkspaceStore) {
     // Writing the same contents again changes nothing, so a rerun after a crash is harmless.
     replay: "safe",
     execute: async (args, api) => {
-      const thread = await store.threadOfConversation(api.conversationId);
+      const project = await store.projectOfConversation(api.conversationId);
       const path = normalizePath(args.path);
       const existed =
-        (await store.readFile(await store.repoOf(thread.id, false), path)) !==
+        (await store.readFile(await store.repoOf(project.id, false), path)) !==
         undefined;
       const changed = await store.commitFiles(
-        thread,
+        project,
         { [path]: args.contents },
         args.message ?? `Write ${path}`,
       );
@@ -350,10 +384,10 @@ export function createWorkspace(store: WorkspaceStore) {
       message: messageParameter,
     }),
     execute: async (args, api) => {
-      const thread = await store.threadOfConversation(api.conversationId);
+      const project = await store.projectOfConversation(api.conversationId);
       const path = normalizePath(args.path);
       const contents = await store.readFile(
-        await store.repoOf(thread.id, false),
+        await store.repoOf(project.id, false),
         path,
       );
       if (contents === undefined) throw new Error(`No file at ${path}`);
@@ -369,7 +403,7 @@ export function createWorkspace(store: WorkspaceStore) {
         args.new_text +
         contents.slice(first + args.old_text.length);
       await store.commitFiles(
-        thread,
+        project,
         { [path]: next },
         args.message ?? `Edit ${path}`,
       );
@@ -386,10 +420,10 @@ export function createWorkspace(store: WorkspaceStore) {
     }),
     replay: "safe",
     execute: async (args, api) => {
-      const thread = await store.threadOfConversation(api.conversationId);
+      const project = await store.projectOfConversation(api.conversationId);
       const path = normalizePath(args.path);
       const changed = await store.commitFiles(
-        thread,
+        project,
         { [path]: null },
         args.message ?? `Delete ${path}`,
       );
@@ -412,10 +446,11 @@ export function createWorkspace(store: WorkspaceStore) {
       section(
         "workspace",
         () =>
-          "This conversation is a project: a git repository holding a web app, which the user sees running in a " +
+          "This chat belongs to a project: a git repository holding a web app, which the user sees running in a " +
           "live preview next to the chat. Change it with write_file and edit_file; every change is a commit and " +
           "reaches the preview at once.",
       ),
+      section("project", (input) => projectBrief(sql, input.conversationId)),
     ],
   });
 }

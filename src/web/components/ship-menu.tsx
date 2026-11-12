@@ -84,10 +84,10 @@ function Panel({
 
 /** Publishing: build the app and put it online, update it, or take it down. */
 export function PublishButton({
-  threadId,
+  projectId,
   disabled,
 }: {
-  threadId: string;
+  projectId: string;
   disabled: boolean;
 }) {
   const { t } = useTranslation("builder");
@@ -102,18 +102,18 @@ export function PublishButton({
   useEffect(() => {
     setStatus(null);
     api<{ url: string | null; publishedAt: string | null }>(
-      `/api/projects/${threadId}/publish`,
+      `/api/projects/${projectId}/publish`,
     )
       .then(setStatus)
       .catch(() => setStatus({ url: null, publishedAt: null }));
-  }, [threadId]);
+  }, [projectId]);
 
   async function publish() {
     setWorking("publish");
     setError(null);
     try {
       const result = await api<{ url: string }>(
-        `/api/projects/${threadId}/publish`,
+        `/api/projects/${projectId}/publish`,
         { method: "POST" },
       );
       setStatus({ url: result.url, publishedAt: new Date().toISOString() });
@@ -128,7 +128,7 @@ export function PublishButton({
     setWorking("unpublish");
     setError(null);
     try {
-      await api(`/api/projects/${threadId}/publish`, { method: "DELETE" });
+      await api(`/api/projects/${projectId}/publish`, { method: "DELETE" });
       setStatus({ url: null, publishedAt: null });
     } catch (error) {
       setError(error instanceof Error ? error.message : t("ship.unpublishFailed"));
@@ -240,10 +240,10 @@ export function PublishButton({
 
 /** The project's code as a git repository: a read-only clone command with a token that expires within the hour. */
 export function CloneButton({
-  threadId,
+  projectId,
   disabled,
 }: {
-  threadId: string;
+  projectId: string;
   disabled: boolean;
 }) {
   const { t } = useTranslation("builder");
@@ -258,7 +258,7 @@ export function CloneButton({
         if (!open) return;
         setUrl(null);
         setError(null);
-        api<{ url: string }>(`/api/projects/${threadId}/clone`)
+        api<{ url: string }>(`/api/projects/${projectId}/clone`)
           .then((result) => setUrl(result.url))
           .catch((error) => setError(error.message));
       }}

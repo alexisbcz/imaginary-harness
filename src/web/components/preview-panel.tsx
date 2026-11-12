@@ -69,13 +69,13 @@ function EmptyState({
 
 /** The project's app, running live in its dev server, with the tools to look at it and point at its parts. */
 export function PreviewPanel({
-  threadId,
+  projectId,
   hasFiles,
   busy,
   onPicked,
   onFix,
 }: {
-  threadId: string;
+  projectId: string;
   hasFiles: boolean;
   /** The agent is answering: errors are likely mid-change, so fixing waits. */
   busy: boolean;
@@ -100,7 +100,7 @@ export function PreviewPanel({
       setStatus({ state: "starting" });
       try {
         const result = await api<{ url: string }>(
-          `/api/projects/${threadId}/preview${restart ? "/restart" : ""}`,
+          `/api/projects/${projectId}/preview${restart ? "/restart" : ""}`,
           { method: "POST" },
         );
         setStatus({ state: "running", url: result.url });
@@ -112,7 +112,7 @@ export function PreviewPanel({
         });
       }
     },
-    [threadId],
+    [projectId],
   );
 
   // Start once the project has files: a new one gets them when the agent picks up its first message.
@@ -122,7 +122,7 @@ export function PreviewPanel({
     setPath("/");
     setAddress("/");
     setErrors([]);
-  }, [threadId]);
+  }, [projectId]);
   useEffect(() => {
     if (hasFiles && status.state === "stopped") void start();
   }, [hasFiles, status.state, start]);
@@ -133,7 +133,7 @@ export function PreviewPanel({
     const timer = setInterval(async () => {
       if (document.hidden) return;
       const current = await api<Status>(
-        `/api/projects/${threadId}/preview`,
+        `/api/projects/${projectId}/preview`,
       ).catch(() => undefined);
       if (!current) return;
       if (current.state === "running" && current.url !== url)
@@ -141,7 +141,7 @@ export function PreviewPanel({
       else if (current.state === "stopped") void start();
     }, STATUS_POLL_MS);
     return () => clearInterval(timer);
-  }, [status.state, threadId, url, start]);
+  }, [status.state, projectId, url, start]);
 
   // Messages from the bridge inside the preview.
   useEffect(() => {
@@ -163,7 +163,7 @@ export function PreviewPanel({
               ? current
               : [...current, error].slice(-10),
           );
-          void api(`/api/projects/${threadId}/preview/errors`, {
+          void api(`/api/projects/${projectId}/preview/errors`, {
             body: error,
           }).catch(() => {});
           break;
@@ -194,7 +194,7 @@ export function PreviewPanel({
     }
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
-  }, [threadId, onPicked]);
+  }, [projectId, onPicked]);
 
   /** Switches the app between light and dark; the app remembers it, as with its own toggle. */
   function toggleTheme() {

@@ -31,8 +31,8 @@ async function boot() {
   // Previews run in Docker; without it the app builds but shows no preview.
   let previews: Previews | undefined;
   if (await dockerAvailable()) {
-    previews = new Previews((threadId) =>
-      opened.store ? opened.store.files(threadId) : Promise.resolve({}),
+    previews = new Previews((projectId) =>
+      opened.store ? opened.store.files(projectId) : Promise.resolve({}),
     );
     await previews.start();
   } else console.warn("[preview] Docker is not available: previews are off");

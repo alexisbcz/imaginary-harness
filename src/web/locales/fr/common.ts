@@ -26,12 +26,16 @@ const fr: Messages<typeof en> = {
   open: "Ouvrir",
   apply: "Appliquer",
   untitled: "Sans titre",
+  rename: "Renommer",
+  saveFailed: "Non enregistré",
   sections: {
+    newChat: "Nouvelle discussion",
     newProject: "Nouveau projet",
     mail: "Mail",
     social: "Réseaux sociaux",
     newsletter: "Newsletter",
     projects: "Projets",
+    chats: "Discussions",
   },
   ui: {
     previousSlide: "Diapositive précédente",

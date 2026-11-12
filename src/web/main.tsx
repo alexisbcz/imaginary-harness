@@ -17,11 +17,13 @@ import { createClient } from "@/lib/supabase/client";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { AppLayout } from "@/routes/app-layout";
 import { AuthPage } from "@/routes/auth-page";
-import { Chat } from "@/routes/chat";
+import { PlainChat, ProjectChat } from "@/routes/chat";
 import { Mail } from "@/routes/mail";
 import { MailSettings } from "@/routes/mail-settings";
 import { NewChat } from "@/routes/new-chat";
 import { NewsletterPage } from "@/routes/newsletter";
+import { ProjectPage } from "@/routes/project";
+import { chatPath } from "@/lib/chat";
 import { Social } from "@/routes/social";
 
 const supabase = createClient();
@@ -72,6 +74,16 @@ async function requireName() {
   return null;
 }
 
+/** A link from before projects held chats: a thread opens where it lives now. */
+async function redirectThread({ params }: { params: { threadId?: string } }) {
+  const { data } = await supabase
+    .from("threads")
+    .select("id, project_id")
+    .eq("id", params.threadId ?? "")
+    .maybeSingle();
+  throw redirect(data ? chatPath(data) : "/");
+}
+
 const router = createBrowserRouter([
   {
     path: "/login",
@@ -103,7 +115,10 @@ const router = createBrowserRouter([
     element: <AppLayout />,
     children: [
       { index: true, element: <NewChat /> },
-      { path: "t/:threadId", element: <Chat /> },
+      { path: "c/:chatId", element: <PlainChat /> },
+      { path: "p/:projectId", element: <ProjectPage /> },
+      { path: "p/:projectId/c/:chatId", element: <ProjectChat /> },
+      { path: "t/:threadId", loader: redirectThread },
       { path: "mail/settings", element: <MailSettings /> },
       { path: "mail/:folderId?/:messageId?", element: <Mail /> },
       { path: "social/:brandId?/:view?", element: <Social /> },

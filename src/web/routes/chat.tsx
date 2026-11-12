@@ -1,13 +1,16 @@
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useOutletContext, useParams } from "react-router";
+import { Link, useNavigate, useOutletContext, useParams } from "react-router";
 import { AssistantAvatar } from "twenty-ui/components/data-display";
 import { Chip } from "twenty-ui/primitives/data-display";
 import { Tabs } from "twenty-ui/primitives/navigation";
+import { Button } from "twenty-ui/primitives/input";
 import {
   IconAlertTriangle,
+  IconChevronRight,
   IconClick,
   IconMessageCircle,
+  IconPlus,
 } from "twenty-ui/icon";
 
 import { Shimmer } from "@/components/ai-elements/shimmer";
@@ -21,6 +24,7 @@ import {
 
 import { CodePanel } from "@/components/code-panel";
 import { IconTile, NameTile } from "@/components/icon-tile";
+import { IconMessageCircleFilled as IconChatTile } from "@tabler/icons-react";
 import { DatabasePanel } from "@/components/database-panel";
 import { CloneButton, PublishButton } from "@/components/ship-menu";
 import { Composer, type PickedElement } from "@/components/composer";
@@ -46,9 +50,11 @@ import {
 import {
   attachmentUrl,
   MESSAGE_COLUMNS,
+  renameChat,
   sendMessage,
   type ChatMessage,
 } from "@/lib/chat";
+import { EditableName } from "@/components/editable-name";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { createClient } from "@/lib/supabase/client";
 import { resources } from "@/locales";
@@ -237,41 +243,36 @@ export function ChatBubble({ message }: { message: ChatMessage }) {
   );
 }
 
-/** A project: the conversation that builds it, and the app itself, live, with its code and its history. */
-export function Chat() {
+/** The messages of a chat and the box to write the next one. */
+function Conversation({
+  threadId,
+  messages,
+  modes = true,
+  placeholder,
+  picked = null,
+  onClearPicked,
+  empty,
+}: {
+  threadId: string;
+  messages: ChatMessage[] | null;
+  modes?: boolean;
+  placeholder: string;
+  picked?: PickedElement | null;
+  onClearPicked?: () => void;
+  /** Shown while the chat has no message yet. */
+  empty?: React.ReactNode;
+}) {
   const { t } = useTranslation("builder");
-  const { threadId } = useParams() as { threadId: string };
-  const messages = useMessages(threadId);
-  const files = useWorkspaceFiles(threadId);
-  const [picked, setPicked] = useState<PickedElement | null>(null);
-  const isMobile = useIsMobile();
-  const [tab, setTab] = useState(() =>
-    window.innerWidth < 768 ? "chat" : "preview",
-  );
-  const { threads } = useOutletContext<LayoutContext>();
-  const thread = threads?.find((item) => item.id === threadId);
-
   const last = messages?.at(-1);
   // Waiting for the agent to pick the message up: the reply row does not exist yet.
   const waiting = last?.role === "user" && last.status === "pending";
-  const busy = waiting || last?.status === "streaming";
-  const revision = files.reduce(
-    (latest, file) => (file.updated_at > latest ? file.updated_at : latest),
-    "",
-  );
-
-  useEffect(() => setPicked(null), [threadId]);
-
-  const onPicked = useCallback((element: PickedElement) => {
-    setPicked(element);
-  }, []);
-
-  const conversation = (
+  return (
     <div className="flex h-full min-h-0 flex-1 flex-col">
       <MessageScrollerProvider>
         <MessageScroller className="flex-1">
           <MessageScrollerViewport>
             <MessageScrollerContent className="mx-auto w-full max-w-2xl gap-6 px-5 py-6">
+              {messages?.length === 0 && empty}
               {messages?.map((message, index) => (
                 <MessageScrollerItem
                   key={message.id}
@@ -302,13 +303,102 @@ export function Chat() {
       <div className="mx-auto w-full max-w-2xl px-3 pb-3">
         <Composer
           autoFocus
-          placeholder={t("chat.placeholder")}
+          modes={modes}
+          placeholder={placeholder}
           picked={picked}
-          onClearPicked={() => setPicked(null)}
+          onClearPicked={onClearPicked}
           onSend={(message) => sendMessage(threadId, message)}
         />
       </div>
     </div>
+  );
+}
+
+/** A chat's name in a page's header, renamed in place. */
+function ChatName({ id, title }: { id: string; title: string }) {
+  const { t } = useTranslation("projects");
+  return (
+    <EditableName
+      value={title}
+      label={t("chat.rename")}
+      maxLength={120}
+      onRename={(name) => renameChat(id, name)}
+      className="font-medium text-t-text"
+      inputClassName="w-full max-w-[420px] font-medium"
+    />
+  );
+}
+
+/** A chat outside any project: a plain conversation with the agent, which builds nothing. */
+export function PlainChat() {
+  const { t } = useTranslation("projects");
+  const { chatId } = useParams() as { chatId: string };
+  const messages = useMessages(chatId);
+  const { chats } = useOutletContext<LayoutContext>();
+  const chat = chats?.find((item) => item.id === chatId);
+
+  return (
+    <Page
+      title={chat ? <ChatName id={chat.id} title={chat.title} /> : ""}
+      icon={
+        <IconTile color="jade">
+          <IconChatTile />
+        </IconTile>
+      }
+    >
+      <Conversation
+        threadId={chatId}
+        messages={messages}
+        modes={false}
+        placeholder={t("chat.placeholder")}
+      />
+    </Page>
+  );
+}
+
+/** A chat of a project: the conversation that builds the project's app, and the app itself, live, with its code and its history. */
+export function ProjectChat() {
+  const { t } = useTranslation("builder");
+  const { t: tp } = useTranslation("projects");
+  const navigate = useNavigate();
+  const { projectId, chatId } = useParams() as {
+    projectId: string;
+    chatId: string;
+  };
+  const messages = useMessages(chatId);
+  const files = useWorkspaceFiles(projectId);
+  const [picked, setPicked] = useState<PickedElement | null>(null);
+  const isMobile = useIsMobile();
+  const [tab, setTab] = useState(() =>
+    window.innerWidth < 768 ? "chat" : "preview",
+  );
+  const { projects, chats } = useOutletContext<LayoutContext>();
+  const project = projects?.find((item) => item.id === projectId);
+  const chat = chats?.find((item) => item.id === chatId);
+
+  const last = messages?.at(-1);
+  const waiting = last?.role === "user" && last.status === "pending";
+  const busy = waiting || last?.status === "streaming";
+  const revision = files.reduce(
+    (latest, file) => (file.updated_at > latest ? file.updated_at : latest),
+    "",
+  );
+
+  useEffect(() => setPicked(null), [chatId]);
+
+
+  const onPicked = useCallback((element: PickedElement) => {
+    setPicked(element);
+  }, []);
+
+  const conversation = (
+    <Conversation
+      threadId={chatId}
+      messages={messages}
+      placeholder={t("chat.placeholder")}
+      picked={picked}
+      onClearPicked={() => setPicked(null)}
+    />
   );
 
   const tabs = [
@@ -384,12 +474,12 @@ export function Chat() {
         className="min-h-0 flex-1 data-[hidden]:hidden"
       >
         <PreviewPanel
-          threadId={threadId}
+          projectId={projectId}
           hasFiles={files.length > 0}
           busy={busy}
           onPicked={onPicked}
           onFix={(errors) =>
-            void sendMessage(threadId, {
+            void sendMessage(chatId, {
               content: t("chat.fixPrompt", {
                 count: errors.length,
                 errors: errors.map((error) => `- ${error.message}`).join("\n"),
@@ -399,15 +489,15 @@ export function Chat() {
         />
       </Tabs.Panel>
       <Tabs.Panel value="code" className="min-h-0 flex-1">
-        <CodePanel threadId={threadId} files={files} />
+        <CodePanel projectId={projectId} files={files} />
       </Tabs.Panel>
       <Tabs.Panel value="history" className="min-h-0 flex-1">
-        <HistoryPanel threadId={threadId} revision={revision} />
+        <HistoryPanel projectId={projectId} revision={revision} />
       </Tabs.Panel>
       <Tabs.Panel value="database" className="min-h-0 flex-1">
         {/* The agent changes the database without touching files: reload as its answers move along. */}
         <DatabasePanel
-          threadId={threadId}
+          projectId={projectId}
           revision={`${revision}:${last?.id}:${last?.status}:${last?.steps?.length ?? 0}`}
         />
       </Tabs.Panel>
@@ -416,14 +506,34 @@ export function Chat() {
 
   return (
     <Page
-      title={thread?.title ?? ""}
-      icon={thread && <NameTile name={thread.title} />}
+      title={
+        <span className="flex min-w-0 items-center gap-1">
+          <Link
+            to={`/p/${projectId}`}
+            className="max-w-[40%] shrink-0 truncate rounded-sm px-1 text-t-text-secondary outline-none hover:bg-t-hover hover:text-t-text focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            {project?.name ?? ""}
+          </Link>
+          <IconChevronRight size={14} className="shrink-0 text-t-text-light" />
+          {chat && <ChatName id={chat.id} title={chat.title} />}
+        </span>
+      }
+      icon={project && <NameTile name={project.name} />}
       actions={
         <>
+          <Button
+            size="sm"
+            variant="outline"
+            startIcon={<IconPlus size={14} />}
+            aria-label={tp("chat.newInProject")}
+            onClick={() => void navigate(`/p/${projectId}`)}
+          >
+            {isMobile ? null : tp("chat.newChat")}
+          </Button>
           {!isMobile && (
-            <CloneButton threadId={threadId} disabled={files.length === 0} />
+            <CloneButton projectId={projectId} disabled={files.length === 0} />
           )}
-          <PublishButton threadId={threadId} disabled={files.length === 0} />
+          <PublishButton projectId={projectId} disabled={files.length === 0} />
         </>
       }
     >

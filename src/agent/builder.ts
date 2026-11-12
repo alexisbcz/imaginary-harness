@@ -82,6 +82,53 @@ export function resultSummary(result: { output?: unknown; isError?: boolean }) {
   return first?.text?.split("\n")[0]?.slice(0, 200);
 }
 
+type StepCall = { id: string; name: string; arguments: Record<string, unknown>; parent?: unknown };
+
+function startedStep(call: StepCall) {
+  return {
+    id: call.id,
+    tool: call.name,
+    args: shownArguments(call.arguments),
+    status: "running",
+  };
+}
+
+async function finishStep(
+  sql: SQL,
+  call: StepCall,
+  result: { output?: unknown; isError?: boolean },
+  api: { conversationId: number },
+) {
+  if (call.parent) return undefined;
+  const reply = await currentReply(sql, api.conversationId);
+  if (reply)
+    await recordStep(sql, reply.id, {
+      id: call.id,
+      status: result.isError ? "error" : "done",
+      // What went wrong is worth showing; a success's first line (often a file's) is not.
+      ...(result.isError ? { summary: resultSummary(result) } : {}),
+    });
+  return undefined;
+}
+
+/** Shows each tool call of a chat outside any project as a step, as the builder does in a project's chats. */
+export function createSteps(sql: SQL) {
+  return defineExtension({
+    name: "steps",
+    hooks: [
+      hook(ToolTask, {
+        async beforeTool(call, api) {
+          if (call.parent) return undefined;
+          const reply = await currentReply(sql, api.conversationId);
+          if (reply) await recordStep(sql, reply.id, startedStep(call));
+          return undefined;
+        },
+        afterTool: (call, result, api) => finishStep(sql, call, result, api),
+      }),
+    ],
+  });
+}
+
 export function createBuilder(
   sql: SQL,
   store: WorkspaceStore,
@@ -102,8 +149,8 @@ export function createBuilder(
           "Previews are off on this server: the app cannot be checked here.",
           true,
         );
-      const thread = await store.threadOfConversation(api.conversationId);
-      const typecheck = await previews.exec(thread.id, [
+      const project = await store.projectOfConversation(api.conversationId);
+      const typecheck = await previews.exec(project.id, [
         "node",
         "node_modules/typescript/bin/tsc",
         "-b",
@@ -112,8 +159,8 @@ export function createBuilder(
         "false",
       ]);
       const typeErrors = (typecheck.stdout + typecheck.stderr).trim();
-      const pageErrors = previews.errors(thread.id);
-      const log = await previews.logs(thread.id, 30);
+      const pageErrors = previews.errors(project.id);
+      const log = await previews.logs(project.id, 30);
       const sections = [
         typecheck.exitCode === 0
           ? "Typecheck: no errors."
@@ -129,7 +176,7 @@ export function createBuilder(
         `Dev server log (latest lines):\n${log || "(empty)"}`,
       ];
       // The errors are now in the agent's hands; the next check shows only new ones.
-      previews.clearErrors(thread.id);
+      previews.clearErrors(project.id);
       return text(
         sections.join("\n\n"),
         typecheck.exitCode !== 0 || pageErrors.length > 0,
@@ -166,9 +213,9 @@ export function createBuilder(
           "Give package names only, like zod or @scope/name@1.2.",
           true,
         );
-      const thread = await store.threadOfConversation(api.conversationId);
+      const project = await store.projectOfConversation(api.conversationId);
       const install = await previews.exec(
-        thread.id,
+        project.id,
         [
           "npm",
           "install",
@@ -184,9 +231,9 @@ export function createBuilder(
           `npm install failed:\n${(install.stdout + install.stderr).trim().slice(-4000)}`,
           true,
         );
-      const manifest = await previews.exec(thread.id, ["cat", "package.json"]);
+      const manifest = await previews.exec(project.id, ["cat", "package.json"]);
       await store.commitFiles(
-        thread,
+        project,
         { "package.json": manifest.stdout },
         `Add ${packages.join(", ")}`,
       );
@@ -203,8 +250,8 @@ export function createBuilder(
     parameters: obj({}),
     execute: async (_args, api) => {
       if (!shipping) return text("Databases are off on this server.", true);
-      const thread = await store.threadOfConversation(api.conversationId);
-      const schema = await shipping.enableDatabase(thread);
+      const project = await store.projectOfConversation(api.conversationId);
+      const schema = await shipping.enableDatabase(project);
       return text(
         `The database is ready: schema ${schema}. Import { supabase } from "@/lib/supabase"; queries reach this ` +
           'schema\'s tables by name (supabase.from("todos")). Create tables with run_sql.',
@@ -227,9 +274,9 @@ export function createBuilder(
     }),
     execute: async (args, api) => {
       if (!shipping) return text("Databases are off on this server.", true);
-      const thread = await store.threadOfConversation(api.conversationId);
+      const project = await store.projectOfConversation(api.conversationId);
       try {
-        const rows = await shipping.runSql(thread.id, args.sql);
+        const rows = await shipping.runSql(project.id, args.sql);
         return text(
           rows.length
             ? JSON.stringify(rows, null, 1).slice(0, 8000)
@@ -260,26 +307,10 @@ export function createBuilder(
                 "to build mode when they want the change made.",
             };
           }
-          await recordStep(sql, reply.id, {
-            id: call.id,
-            tool: call.name,
-            args: shownArguments(call.arguments),
-            status: "running",
-          });
+          await recordStep(sql, reply.id, startedStep(call));
           return undefined;
         },
-        async afterTool(call, result, api) {
-          if (call.parent) return undefined;
-          const reply = await currentReply(sql, api.conversationId);
-          if (reply)
-            await recordStep(sql, reply.id, {
-              id: call.id,
-              status: result.isError ? "error" : "done",
-              // What went wrong is worth showing; a success's first line (often a file's) is not.
-              ...(result.isError ? { summary: resultSummary(result) } : {}),
-            });
-          return undefined;
-        },
+        afterTool: (call, result, api) => finishStep(sql, call, result, api),
       }),
     ],
     sections: [

@@ -28,7 +28,11 @@ const STREAM_INTERVAL_MS = 150;
 /** Pending messages are swept this often too, should a Realtime event be missed. */
 const SWEEP_INTERVAL_MS = 30_000;
 
+/** A chat of a project: the app builder. */
 const INSTRUCTIONS = `You are Richelieu, an AI app builder: you turn what the user describes into a working web app, and change it as they ask. Answer in the user's language. Use Markdown when it helps.`;
+
+/** A chat outside any project: a plain conversation, which builds nothing. */
+export const CHAT_INSTRUCTIONS = `You are Richelieu, a helpful assistant. You think things through with the user, answer their questions, research the web when it helps, and read and write their mail when they ask. This chat is not part of a project, so you cannot build or change an app here: when the user wants one built, tell them to start a project (the "New project" button in the sidebar). Answer in the user's language. Use Markdown when it helps.`;
 
 /** A brand's social copilot: its own instructions and only the social tools. */
 export const SOCIAL_INSTRUCTIONS = `You are Richelieu, a social media manager working for one brand with its team: you plan its calendar, write its posts in its voice, read its numbers, and keep an eye on its competitors. Answer in the user's language. Use Markdown when it helps.`;
@@ -36,7 +40,7 @@ export const SOCIAL_INSTRUCTIONS = `You are Richelieu, a social media manager wo
 /** A newsletter's copilot: its own instructions and only the newsletter tools. */
 export const NEWSLETTER_INSTRUCTIONS = `You are Richelieu, the editor and co-writer of one Substack newsletter, working with its author: you plan its issues, write and revise its drafts in the author's voice, read what readers open and share, and draft its Notes. Answer in the user's language. Use Markdown when it helps.`;
 
-/** The conversations of a thread kind other than a project: their instructions and their only extensions. */
+/** The conversations of a chat outside any project, or of a copilot: their instructions and their only extensions. */
 export type Copilot = { instructions: string; extensions: Extension[] };
 
 /** The text parts of an assistant message as pi-ai represents it. */
@@ -63,7 +67,7 @@ export class Agent {
     private readonly harness: Harness,
     private readonly context: Context,
     private readonly store?: WorkspaceStore,
-    /** By thread kind ('social', 'newsletter'): a project's conversations take the Harness's defaults. */
+    /** By thread kind ('chat' outside a project, 'social', 'newsletter'): a project's chats take the Harness's defaults. */
     private readonly copilots: Record<string, Copilot> = {},
   ) {
     this.supabase = createClient(config.supabaseUrl, config.serviceRoleKey, {
@@ -143,11 +147,12 @@ export class Agent {
       .sql`SELECT status FROM public.messages WHERE id = ${message.id}`;
     if (current?.status !== "pending") return;
 
-    const [thread] = await this.sql<{ kind: string }[]>`
-      SELECT kind FROM public.threads WHERE id = ${message.thread_id}`;
-    // A new project starts from the app template, before the agent sees it; a copilot has no files.
-    if ((thread?.kind ?? "project") === "project")
-      await this.store?.seed({ id: message.thread_id, user_id: message.user_id });
+    const [thread] = await this.sql<{ project_id: string | null; user_id: string }[]>`
+      SELECT t.project_id, p.user_id FROM public.threads t LEFT JOIN public.projects p ON p.id = t.project_id
+      WHERE t.id = ${message.thread_id}`;
+    // A new project starts from the app template, before the agent sees it; a plain chat or a copilot has no files.
+    if (thread?.project_id)
+      await this.store?.seed({ id: thread.project_id, user_id: thread.user_id });
     const conversation = await this.conversationOf(message.thread_id);
     const [reply] = await this.sql<{ id: string }[]>`
       INSERT INTO public.messages (thread_id, user_id, role, status, reply_to)
@@ -209,8 +214,8 @@ export class Agent {
   /** The thread's Pi conversation, created with the thread's first message. */
   private async conversationOf(threadId: string): Promise<Conversation> {
     const [thread] = await this.sql<
-      { conversation_id: string | null; kind: string }[]
-    >`SELECT conversation_id, kind FROM public.threads WHERE id = ${threadId}`;
+      { conversation_id: string | null; kind: string; project_id: string | null }[]
+    >`SELECT conversation_id, kind, project_id FROM public.threads WHERE id = ${threadId}`;
     if (thread === undefined) throw new Error(`Unknown thread ${threadId}`);
     if (thread.conversation_id !== null) {
       const existing = await this.harness.conversation(
@@ -219,7 +224,7 @@ export class Agent {
       );
       if (existing !== undefined) return existing;
     }
-    const copilot = this.copilots[thread.kind];
+    const copilot = thread.project_id ? undefined : this.copilots[thread.kind];
     const conversation = await this.harness.createConversation(
       {
         ownership: { kind: "ownerless" },

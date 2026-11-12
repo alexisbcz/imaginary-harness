@@ -91,7 +91,7 @@ export class Previews {
   constructor(
     /** Every file of a project's head. */
     private readonly files: (
-      threadId: string,
+      projectId: string,
     ) => Promise<Record<string, string>>,
   ) {}
 
@@ -142,23 +142,23 @@ export class Previews {
     return this.image;
   }
 
-  private entry(threadId: string) {
-    let preview = this.previews.get(threadId);
+  private entry(projectId: string) {
+    let preview = this.previews.get(projectId);
     if (!preview) {
       preview = {
-        name: PREFIX + threadId,
+        name: PREFIX + projectId,
         status: { state: "stopped" },
         lastUsed: Date.now(),
         errors: [],
       };
-      this.previews.set(threadId, preview);
+      this.previews.set(projectId, preview);
     }
     return preview;
   }
 
   /** The preview's state, after checking its container still runs: Docker or a person may have removed it. */
-  async status(threadId: string): Promise<PreviewState> {
-    const preview = this.previews.get(threadId);
+  async status(projectId: string): Promise<PreviewState> {
+    const preview = this.previews.get(projectId);
     if (!preview) return { state: "stopped" };
     if (preview.status.state === "running" && !(await this.alive(preview)))
       preview.status = { state: "stopped" };
@@ -177,20 +177,20 @@ export class Previews {
   }
 
   /** Starts the project's preview unless it runs, and resolves with its URL once the dev server answers. */
-  ensure(threadId: string): Promise<string> {
-    const preview = this.entry(threadId);
+  ensure(projectId: string): Promise<string> {
+    const preview = this.entry(projectId);
     preview.lastUsed = Date.now();
     preview.starting ??= (async () => {
       if (preview.status.state === "running" && (await this.alive(preview)))
         return preview.status.url;
-      return this.boot(threadId, preview);
+      return this.boot(projectId, preview);
     })().finally(() => {
       preview.starting = undefined;
     });
     return preview.starting;
   }
 
-  private async boot(threadId: string, preview: Preview) {
+  private async boot(projectId: string, preview: Preview) {
     preview.status = { state: "starting" };
     try {
       const image = await this.ensureImage();
@@ -217,12 +217,12 @@ export class Previews {
         image,
       ]);
       if (create.exitCode !== 0) throw new Error(create.stderr.trim());
-      await this.copyIn(preview.name, await this.files(threadId));
+      await this.copyIn(preview.name, await this.files(projectId));
       const started = await run(["docker", "start", preview.name]);
       if (started.exitCode !== 0) throw new Error(started.stderr.trim());
       const url = await this.waitReady(preview.name);
       preview.status = { state: "running", url };
-      await this.flushPending(threadId, preview);
+      await this.flushPending(projectId, preview);
       return url;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -275,15 +275,15 @@ export class Previews {
       throw new Error(`Could not copy the files in: ${copy.stderr.trim()}`);
   }
 
-  private async flushPending(threadId: string, preview: Preview) {
+  private async flushPending(projectId: string, preview: Preview) {
     const pending = preview.pending;
     preview.pending = undefined;
-    if (pending) await this.apply(threadId, pending);
+    if (pending) await this.apply(projectId, pending);
   }
 
   /** Applies committed changes to a running preview; a changed package.json reinstalls and restarts it. */
-  async apply(threadId: string, changes: FileChanges) {
-    const preview = this.previews.get(threadId);
+  async apply(projectId: string, changes: FileChanges) {
+    const preview = this.previews.get(projectId);
     if (!preview) return;
     if (preview.status.state === "starting") {
       preview.pending = { ...preview.pending, ...changes };
@@ -316,20 +316,20 @@ export class Previews {
         "--",
         ...deleted.map((p) => `/app/${p}`),
       ]);
-    if ("package.json" in changes) await this.restart(threadId);
+    if ("package.json" in changes) await this.restart(projectId);
   }
 
   /** Restarts the dev server, which installs packages first when package.json changed. */
-  async restart(threadId: string) {
-    const preview = this.previews.get(threadId);
+  async restart(projectId: string) {
+    const preview = this.previews.get(projectId);
     if (!preview || preview.status.state !== "running")
-      return this.ensure(threadId);
+      return this.ensure(projectId);
     preview.status = { state: "starting" };
     preview.starting = (async () => {
       await run(["docker", "restart", "-t", "2", preview.name]);
       const url = await this.waitReady(preview.name);
       preview.status = { state: "running", url };
-      await this.flushPending(threadId, preview);
+      await this.flushPending(projectId, preview);
       return url;
     })()
       .catch((error) => {
@@ -346,9 +346,9 @@ export class Previews {
   }
 
   /** Runs a command in the project's preview (started if needed), as its user, in /app. */
-  async exec(threadId: string, argv: string[], timeoutMs = 120_000) {
-    await this.ensure(threadId);
-    const preview = this.entry(threadId);
+  async exec(projectId: string, argv: string[], timeoutMs = 120_000) {
+    await this.ensure(projectId);
+    const preview = this.entry(projectId);
     preview.lastUsed = Date.now();
     // `ensure` checked the container runs, so a failure here is the command's own.
     return run(["docker", "exec", "-w", "/app", preview.name, ...argv], {
@@ -357,9 +357,9 @@ export class Previews {
   }
 
   /** A directory of the project's preview, as a tar archive. */
-  async copyOut(threadId: string, path: string) {
-    await this.ensure(threadId);
-    const preview = this.entry(threadId);
+  async copyOut(projectId: string, path: string) {
+    await this.ensure(projectId);
+    const preview = this.entry(projectId);
     const child = Bun.spawn(["docker", "cp", `${preview.name}:${path}`, "-"], {
       stdout: "pipe",
       stderr: "pipe",
@@ -375,8 +375,8 @@ export class Previews {
   }
 
   /** The dev server's latest output. */
-  async logs(threadId: string, lines = 80) {
-    const preview = this.previews.get(threadId);
+  async logs(projectId: string, lines = 80) {
+    const preview = this.previews.get(projectId);
     if (!preview || preview.status.state === "stopped") return "";
     const { stdout, stderr } = await run([
       "docker",
@@ -389,35 +389,35 @@ export class Previews {
   }
 
   /** Errors the preview's page reported, newest last. */
-  reportError(threadId: string, error: Omit<PreviewError, "at">) {
-    const preview = this.entry(threadId);
+  reportError(projectId: string, error: Omit<PreviewError, "at">) {
+    const preview = this.entry(projectId);
     preview.errors.push({ ...error, at: new Date().toISOString() });
     if (preview.errors.length > MAX_ERRORS)
       preview.errors.splice(0, preview.errors.length - MAX_ERRORS);
   }
 
-  errors(threadId: string) {
-    return this.previews.get(threadId)?.errors ?? [];
+  errors(projectId: string) {
+    return this.previews.get(projectId)?.errors ?? [];
   }
 
-  clearErrors(threadId: string) {
-    const preview = this.previews.get(threadId);
+  clearErrors(projectId: string) {
+    const preview = this.previews.get(projectId);
     if (preview) preview.errors = [];
   }
 
-  private async remove(threadId: string) {
-    const preview = this.previews.get(threadId);
+  private async remove(projectId: string) {
+    const preview = this.previews.get(projectId);
     if (!preview) return;
-    this.previews.delete(threadId);
+    this.previews.delete(projectId);
     await run(["docker", "rm", "-f", preview.name]);
   }
 
   private async reap() {
-    for (const [threadId, preview] of this.previews)
+    for (const [projectId, preview] of this.previews)
       if (
         preview.status.state !== "starting" &&
         Date.now() - preview.lastUsed > IDLE_MS
       )
-        await this.remove(threadId);
+        await this.remove(projectId);
   }
 }

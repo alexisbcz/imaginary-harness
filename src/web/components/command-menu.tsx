@@ -8,6 +8,8 @@ import {
   IconLayoutSidebarLeftExpandFilled,
   IconMoonFilled,
   IconPaletteFilled,
+  IconMessageCircleFilled,
+  IconMessageCirclePlus,
   IconNews,
   IconSpeakerphone,
   IconSquareRoundedPlusFilled,
@@ -34,7 +36,8 @@ import {
   useThemePreference,
   type ThemePreference,
 } from "@/hooks/use-color-scheme";
-import type { Thread } from "@/lib/chat";
+import { chatPath, type Thread } from "@/lib/chat";
+import type { Project } from "@/lib/projects";
 import { currentLanguage, setLanguage } from "@/lib/i18n";
 import { LANGUAGES } from "@/locales";
 import { createClient } from "@/lib/supabase/client";
@@ -92,25 +95,30 @@ const themes: {
   { value: "dark", icon: <IconMoonFilled />, color: "iris" },
 ];
 
-/** Projects shown before anything is typed; typing searches all of them. */
+/** Projects and chats shown before anything is typed; typing searches all of them. */
 const RECENT_PROJECTS = 5;
+const RECENT_CHATS = 5;
 
 /**
- * The command menu: search projects, start a new one, and change settings from anywhere in the app with the
- * keyboard.
+ * The command menu: search projects and chats, start new ones, and change settings from anywhere in the app with
+ * the keyboard.
  */
 export function CommandMenu({
   open,
   onOpenChange,
-  threads,
+  projects,
+  chats,
+  onCreateProject,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  threads: Thread[] | null;
+  projects: Project[] | null;
+  chats: Thread[] | null;
+  onCreateProject: () => void;
 }) {
   const navigate = useNavigate();
   const { t, i18n } = useTranslation("layout");
-  const { threadId } = useParams();
+  const { projectId, chatId } = useParams();
   const drawer = useDrawer();
   const theme = useThemePreference();
   const [view, setView] = useState<View>("root");
@@ -179,12 +187,20 @@ export function CommandMenu({
         label: t("commands.actions"),
         items: [
           {
+            value: "new-chat",
+            label: t("commands.newChat"),
+            keywords: t("commands.newChatKeywords"),
+            icon: <IconMessageCirclePlus />,
+            color: "pink",
+            run: close(() => void navigate("/")),
+          },
+          {
             value: "new-project",
             label: t("commands.newProject"),
             keywords: t("commands.newProjectKeywords"),
             icon: <IconSquareRoundedPlusFilled />,
-            color: "pink",
-            run: close(() => void navigate("/")),
+            color: "iris",
+            run: close(onCreateProject),
           },
           {
             value: "social",
@@ -218,16 +234,34 @@ export function CommandMenu({
       {
         value: "projects",
         label: t("commands.projects"),
-        items: (threads ?? [])
-          .filter((thread) => thread.id !== threadId)
-          .map((thread) => ({
-            value: `project-${thread.id}`,
-            label: thread.title,
-            keywords: t("commands.projectKeywords"),
-            icon: <NameTile name={thread.title} />,
+        items: (projects ?? [])
+          .filter((project) => project.id !== projectId || chatId !== undefined)
+          .map((project) => ({
+            value: `project-${project.id}`,
+            label: project.name,
+            keywords: `${t("commands.projectKeywords")} ${project.description}`,
+            icon: <NameTile name={project.name} />,
             bare: true,
-            run: close(() => void navigate(`/t/${thread.id}`)),
+            run: close(() => void navigate(`/p/${project.id}`)),
           })),
+      },
+      {
+        value: "chats",
+        label: t("commands.chats"),
+        items: (chats ?? [])
+          .filter((chat) => chat.id !== chatId)
+          .map((chat) => {
+            const project = projects?.find((item) => item.id === chat.project_id);
+            return {
+              value: `chat-${chat.id}`,
+              label: chat.title,
+              keywords: `${t("commands.chatKeywords")} ${project?.name ?? ""}`,
+              icon: <IconMessageCircleFilled />,
+              color: "jade" as ThemeColor,
+              description: project?.name,
+              run: close(() => void navigate(chatPath(chat))),
+            };
+          }),
       },
       {
         value: "settings",
@@ -277,6 +311,9 @@ export function CommandMenu({
           : group.items;
         if (!search && group.value === "projects") {
           items = items.slice(0, RECENT_PROJECTS);
+        }
+        if (!search && group.value === "chats") {
+          items = items.slice(0, RECENT_CHATS);
         }
         return { ...group, items };
       })

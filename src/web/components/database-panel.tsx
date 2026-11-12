@@ -119,10 +119,10 @@ function Structure({ table }: { table: Table }) {
  * creates and changes the tables; the user can too, from the editor.
  */
 export function DatabasePanel({
-  threadId,
+  projectId,
   revision,
 }: {
-  threadId: string;
+  projectId: string;
   revision: string;
 }) {
   const { t } = useTranslation("builder");
@@ -141,20 +141,20 @@ export function DatabasePanel({
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(() => {
-    api<{ database: Database | null }>(`/api/projects/${threadId}/database`)
+    api<{ database: Database | null }>(`/api/projects/${projectId}/database`)
       .then((result) => setDatabase(result.database))
       .catch((error) => {
         setError(error.message);
         setDatabase(null);
       });
-  }, [threadId]);
+  }, [projectId]);
   useEffect(load, [load, revision]);
 
   async function enable() {
     setEnabling(true);
     setError(null);
     try {
-      await api(`/api/projects/${threadId}/database`, { method: "POST" });
+      await api(`/api/projects/${projectId}/database`, { method: "POST" });
       load();
     } catch (error) {
       setError(
@@ -303,7 +303,7 @@ export function DatabasePanel({
         {view.kind === "sql" ? (
           <SqlEditor
             key={view.key}
-            threadId={threadId}
+            projectId={projectId}
             tables={database.tables}
             initialText={view.initialText}
             onChanged={load}
@@ -364,7 +364,7 @@ export function DatabasePanel({
             <div className={view.tab === "data" ? "min-h-0 flex-1" : "hidden"}>
               <TableBrowser
                 key={`${table.name}:${view.key ?? 0}`}
-                threadId={threadId}
+                projectId={projectId}
                 table={table.name}
                 columns={table.columns}
                 total={table.count}

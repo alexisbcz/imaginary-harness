@@ -46,19 +46,19 @@ type QueryResult =
       durationMs: number;
     };
 
-const draftKey = (threadId: string) => `richelieu.sql.${threadId}`;
+const draftKey = (projectId: string) => `richelieu.sql.${projectId}`;
 
-function readDraft(threadId: string) {
+function readDraft(projectId: string) {
   try {
-    return localStorage.getItem(draftKey(threadId));
+    return localStorage.getItem(draftKey(projectId));
   } catch {
     return null;
   }
 }
 
-function saveDraft(threadId: string, text: string) {
+function saveDraft(projectId: string, text: string) {
   try {
-    localStorage.setItem(draftKey(threadId), text);
+    localStorage.setItem(draftKey(projectId), text);
   } catch {
     // The draft only lives as long as the tab then.
   }
@@ -104,12 +104,12 @@ function Summary({ result }: { result: Extract<QueryResult, { ok: true }> }) {
  * rows or Postgres's error below. Completes the app's table and column names.
  */
 export function SqlEditor({
-  threadId,
+  projectId,
   tables,
   initialText,
   onChanged,
 }: {
-  threadId: string;
+  projectId: string;
   tables: { name: string; columns: { name: string }[] }[];
   /** Text to start from instead of the saved draft, such as a query on the table the user came from. */
   initialText?: string;
@@ -121,7 +121,7 @@ export function SqlEditor({
   const [text, setText] = useState(
     () =>
       initialText ??
-      readDraft(threadId) ??
+      readDraft(projectId) ??
       (tables[0]
         ? `select * from ${tables[0].name} limit 100;`
         : "select now();"),
@@ -150,7 +150,7 @@ export function SqlEditor({
     setFailure(null);
     try {
       const next = await api<QueryResult>(
-        `/api/projects/${threadId}/database/query`,
+        `/api/projects/${projectId}/database/query`,
         { method: "POST", body: { sql: query } },
       );
       setResult(next);
@@ -232,7 +232,7 @@ export function SqlEditor({
             value={text}
             onChange={(value) => {
               setText(value);
-              saveDraft(threadId, value);
+              saveDraft(projectId, value);
             }}
             extensions={extensions}
             height="100%"

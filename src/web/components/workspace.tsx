@@ -12,7 +12,7 @@ export type WorkspaceFile = {
 };
 
 /** A project's files, kept current through Realtime as the agent (or the user) changes them. */
-export function useWorkspaceFiles(threadId: string) {
+export function useWorkspaceFiles(projectId: string) {
   const [files, setFiles] = useState<WorkspaceFile[]>([]);
 
   useEffect(() => {
@@ -22,19 +22,19 @@ export function useWorkspaceFiles(threadId: string) {
       const { data } = await supabase
         .from("files")
         .select("path, contents, previous, updated_at")
-        .eq("thread_id", threadId)
+        .eq("project_id", projectId)
         .order("path");
       if (active && data) setFiles(data);
     };
     const channel = supabase
-      .channel(`files:${threadId}`)
+      .channel(`files:${projectId}`)
       .on(
         "postgres_changes",
         {
           event: "*",
           schema: "public",
           table: "files",
-          filter: `thread_id=eq.${threadId}`,
+          filter: `project_id=eq.${projectId}`,
         },
         () => void load(),
       )
@@ -46,7 +46,7 @@ export function useWorkspaceFiles(threadId: string) {
       active = false;
       void supabase.removeChannel(channel);
     };
-  }, [threadId]);
+  }, [projectId]);
 
   return files;
 }
