@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useNavigate, useOutletContext, useParams } from "react-router";
 import { AssistantAvatar } from "twenty-ui/components/data-display";
@@ -22,9 +22,10 @@ import {
   IconMessageCircleFilled,
 } from "@tabler/icons-react";
 
+import { BrowserPanel } from "@/components/browser-panel";
 import { CodePanel } from "@/components/code-panel";
 import { IconTile, NameTile } from "@/components/icon-tile";
-import { IconMessageCircleFilled as IconChatTile } from "@tabler/icons-react";
+import { IconMessageCircleFilled as IconChatTile, IconWorldWww } from "@tabler/icons-react";
 import { DatabasePanel } from "@/components/database-panel";
 import { CloneButton, PublishButton } from "@/components/ship-menu";
 import { Composer, type PickedElement } from "@/components/composer";
@@ -386,6 +387,14 @@ export function ProjectChat() {
 
   useEffect(() => setPicked(null), [chatId]);
 
+  // The agent opens the browser: show it, once per answer, so the user can still look elsewhere after.
+  const shownBrowserFor = useRef<string | null>(null);
+  const usesBrowser = last?.role === "assistant" && last.steps.some((step) => step.tool.startsWith("browser_"));
+  useEffect(() => {
+    if (!usesBrowser || !last || shownBrowserFor.current === last.id) return;
+    shownBrowserFor.current = last.id;
+    setTab("browser");
+  }, [usesBrowser, last]);
 
   const onPicked = useCallback((element: PickedElement) => {
     setPicked(element);
@@ -430,6 +439,12 @@ export function ProjectChat() {
       label: t("chat.tabs.database"),
       icon: IconDatabaseFilled,
       color: "green" as const,
+    },
+    {
+      value: "browser",
+      label: t("chat.tabs.browser"),
+      icon: IconWorldWww,
+      color: "sky" as const,
     },
   ];
 
@@ -500,6 +515,14 @@ export function ProjectChat() {
           projectId={projectId}
           revision={`${revision}:${last?.id}:${last?.status}:${last?.steps?.length ?? 0}`}
         />
+      </Tabs.Panel>
+      <Tabs.Panel value="browser" className="min-h-0 flex-1">
+        {activeTab === "browser" && (
+          <BrowserPanel
+            projectId={projectId}
+            onDone={() => void sendMessage(chatId, { content: t("browser.doneMessage") })}
+          />
+        )}
       </Tabs.Panel>
     </Tabs.Root>
   );

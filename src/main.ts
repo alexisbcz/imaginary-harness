@@ -14,6 +14,7 @@ import { startMail, type MailRuntime } from "./mail/runtime.ts";
 import { MailService } from "./mail/service.ts";
 import { MailStore } from "./mail/store.ts";
 import { challengeResponse } from "./mail/tls/acme.ts";
+import { createBrowserApi, type BrowserSocket } from "./server/browser-api.ts";
 import { createBuilderApi } from "./server/builder-api.ts";
 import { createMailApi } from "./server/mail-api.ts";
 import { NewsletterService } from "./newsletter/service.ts";
@@ -83,6 +84,7 @@ async function boot() {
     };
 
   const opened = await openAgent(sql, storage, { previews, mailService });
+  await opened.browser?.start();
   opened.agent.start();
   opened.assistant.start();
 
@@ -130,6 +132,7 @@ async function boot() {
   if (sites) console.log(`[sites] ${config.sitesUrl}`);
 
   return {
+    browser: opened.browser,
     sql,
     forge,
     storage,
@@ -173,6 +176,7 @@ if (config.https && !tls)
 
 // Its WebSocket handler only runs for upgrades its routes start, which exist only with SUPABASE_PROXY.
 const proxy = createSupabaseProxy(config.supabaseUrl);
+const browserApi = createBrowserApi({ sql, sessions: booted.browser });
 
 const server = Bun.serve({
   port: tls ? config.httpsPort : config.port,
@@ -182,6 +186,7 @@ const server = Bun.serve({
     // The deployed app pings its agent function after sending; here the agent already follows Realtime.
     "/api/agent": () => new Response(null, { status: 202 }),
     ...createBuilderApi({ sql, store, previews, shipping }),
+    ...browserApi.routes,
     ...mailApi.api,
     ...socialApi,
     ...newsletterApi,
@@ -189,7 +194,15 @@ const server = Bun.serve({
     ...(config.supabaseProxy ? proxy.routes : {}),
     "/*": index,
   },
-  websocket: proxy.websocket,
+  // One WebSocket handler for both: the agent's browser live view, and Supabase Realtime through the proxy.
+  websocket: {
+    open: (ws: Bun.ServerWebSocket<any>) =>
+      ws.data?.kind === "browser" ? browserApi.websocket.open?.(ws) : proxy.websocket.open?.(ws),
+    message: (ws: Bun.ServerWebSocket<any>, message: string | Buffer<ArrayBuffer>) =>
+      ws.data?.kind === "browser" ? browserApi.websocket.message?.(ws, message) : proxy.websocket.message?.(ws, message),
+    close: (ws: Bun.ServerWebSocket<any>, code: number, reason: string) =>
+      ws.data?.kind === "browser" ? browserApi.websocket.close?.(ws, code, reason) : proxy.websocket.close?.(ws, code, reason),
+  } satisfies Bun.WebSocketHandler<BrowserSocket | any>,
   development: Bun.env.NODE_ENV !== "production" && {
     hmr: true,
     console: true,

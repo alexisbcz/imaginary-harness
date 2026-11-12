@@ -29,6 +29,16 @@ import {
   IconEyeSearch,
   IconId,
   IconWorldSearch,
+  IconWorldWww,
+  IconPointer,
+  IconKeyboard,
+  IconForms,
+  IconCamera,
+  IconTerminal2,
+  IconNetwork,
+  IconHandStop,
+  IconArrowBackUp,
+  IconBrowser,
   IconBulb,
   IconClockCancel,
   IconFilePlus,
@@ -161,6 +171,58 @@ function describe(step: Step, t: TFunction<"builder">): { icon: Icon; running: s
       const url = arg(step, "url").replace(/^https?:\/\//, "");
       return { icon: IconWorldSearch, running: t("steps.readWebsite.running", { url }), done: t("steps.readWebsite.done", { url }) };
     }
+    case "browser_navigate": {
+      const url = arg(step, "url").replace(/^https?:\/\//, "").slice(0, 60);
+      return { icon: IconWorldWww, running: t("steps.browserNavigate.running", { url }), done: t("steps.browserNavigate.done", { url }) };
+    }
+    case "browser_navigate_back":
+      return { icon: IconArrowBackUp, running: t("steps.browserBack.running"), done: t("steps.browserBack.done") };
+    case "browser_snapshot":
+      return { icon: IconBrowser, running: t("steps.browserSnapshot.running"), done: t("steps.browserSnapshot.done") };
+    case "browser_click":
+    case "browser_hover":
+    case "browser_drag":
+    case "browser_type": {
+      const element = arg(step, "element").slice(0, 50) || t("steps.theElement");
+      const key = { browser_click: "browserClick", browser_hover: "browserHover", browser_drag: "browserDrag", browser_type: "browserType" }[step.tool] as "browserClick";
+      return { icon: step.tool === "browser_type" ? IconKeyboard : IconPointer, running: t(`steps.${key}.running`, { element }), done: t(`steps.${key}.done`, { element }) };
+    }
+    case "browser_fill_form":
+      return { icon: IconForms, running: t("steps.browserFillForm.running"), done: t("steps.browserFillForm.done") };
+    case "browser_select_option": {
+      const values = arg(step, "values").slice(0, 50);
+      return { icon: IconForms, running: t("steps.browserSelect.running", { values }), done: t("steps.browserSelect.done", { values }) };
+    }
+    case "browser_press_key": {
+      const key = arg(step, "key");
+      return { icon: IconKeyboard, running: t("steps.browserKey.running", { key }), done: t("steps.browserKey.done", { key }) };
+    }
+    case "browser_scroll":
+      return { icon: IconBrowser, running: t("steps.browserScroll.running"), done: t("steps.browserScroll.done") };
+    case "browser_wait_for":
+      return { icon: IconBrowser, running: t("steps.browserWait.running"), done: t("steps.browserWait.done") };
+    case "browser_screenshot":
+      return { icon: IconCamera, running: t("steps.browserScreenshot.running"), done: t("steps.browserScreenshot.done") };
+    case "browser_tabs":
+      return { icon: IconBrowser, running: t("steps.browserTabs.running"), done: t("steps.browserTabs.done") };
+    case "browser_console_messages":
+      return { icon: IconTerminal2, running: t("steps.browserConsole.running"), done: t("steps.browserConsole.done") };
+    case "browser_network_requests":
+      return { icon: IconNetwork, running: t("steps.browserNetwork.running"), done: t("steps.browserNetwork.done") };
+    case "browser_handle_dialog":
+      return { icon: IconBrowser, running: t("steps.browserDialog.running"), done: t("steps.browserDialog.done") };
+    case "browser_file_upload": {
+      const paths = arg(step, "paths").slice(0, 60);
+      return { icon: IconForms, running: t("steps.browserUpload.running", { paths }), done: t("steps.browserUpload.done", { paths }) };
+    }
+    case "browser_evaluate":
+      return { icon: IconTerminal2, running: t("steps.browserEvaluate.running"), done: t("steps.browserEvaluate.done") };
+    case "browser_open_app":
+      return { icon: IconWorldWww, running: t("steps.browserOpenApp.running"), done: t("steps.browserOpenApp.done") };
+    case "browser_ask_user":
+      return { icon: IconHandStop, running: t("steps.browserAskUser.running"), done: t("steps.browserAskUser.done") };
+    case "browser_close":
+      return { icon: IconBrowser, running: t("steps.browserClose.running"), done: t("steps.browserClose.done") };
     case "read_web_page": {
       const url = arg(step, "url").replace(/^https?:\/\//, "");
       return { icon: IconWorldSearch, running: t("steps.readWebPage.running", { url }), done: t("steps.readWebPage.done", { url }) };

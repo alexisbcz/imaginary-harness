@@ -23,6 +23,8 @@ import { createShipping, type Shipping } from "../builder/shipping.ts";
 import { PostgresStorage } from "../pi/postgres-storage.ts";
 import { createNewsletterExtension } from "../newsletter/agent.ts";
 import { createResearchExtension } from "../research/agent.ts";
+import { createBrowserExtension } from "../browser/agent.ts";
+import { BrowserSessions } from "../browser/sessions.ts";
 import { NewsletterService } from "../newsletter/service.ts";
 import { createSocialExtension } from "../social/agent.ts";
 import { SocialService } from "../social/service.ts";
@@ -74,6 +76,9 @@ export async function openAgent(
     );
   // Containers need Docker, which only the local server has; the run_command sandbox shares it with previews.
   if (previews) install(createSandbox(sql));
+  // A real browser for each project, in Docker too: the agent browses, tests the app, and the user watches live.
+  const browser = previews ? new BrowserSessions(sql) : undefined;
+  if (browser) install(createBrowserExtension(sql, browser, { previews, store }).extension);
   // Mail: the agent reads and writes the user's mail, and the assistant reads new mail as it arrives. Sending
   // only queues; the mail server's queue delivers (`MAIL_ENABLED`, or `bun run mail serve`).
   const mailService =
@@ -138,8 +143,10 @@ export async function openAgent(
     mailService,
     socialService,
     newsletterService,
+    browser,
     async close() {
       await agent.stop();
+      await browser?.stop();
       newsletterService.close();
       await assistant.stop();
       await harness.close(context);

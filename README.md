@@ -141,6 +141,15 @@ or pick an element of the preview, and the agent changes the code.
 Previews, `check_app`, `add_dependencies`, `run_command`, publishing and databases need Docker, so they work on
 the local server, not in the Vercel functions.
 
+## The browser
+
+Each project's agent has a real browser: Chromium in a Docker container, driven with Playwright. The agent reads
+pages as accessibility snapshots with element refs, the way Playwright MCP does, and clicks, types, fills forms,
+manages tabs, reads the console and the network, and tests the project's own app. You watch it live in the
+project's **Browser** tab and can take the controls, for example to sign in. The agent hands over for passwords,
+codes and CAPTCHAs, and sign-ins are kept, encrypted, per project. It needs Docker, like previews. See
+[docs/browser.md](docs/browser.md).
+
 ## The forge
 
 `src/forge` is a git forge whose API matches [code.storage](https://code.storage)'s, so the official
